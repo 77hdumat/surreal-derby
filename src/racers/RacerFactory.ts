@@ -489,39 +489,71 @@ class LongbodyVisual extends PlaceholderVisual {
     const R = 0.5;
     const y = 1.45;
     // 중간 몸통 — x 스케일로 늘어남
-    this.mid = capsule(R, 1.0, hide, 'x');
+    {
+      const g = new THREE.CylinderGeometry(R, R, 2.0, 18, 1, true);
+      g.rotateZ(Math.PI / 2);
+      g.scale(1, 1.02, 1.0);
+      this.mid = new THREE.Mesh(g, hide);
+      this.mid.castShadow = true;
+    }
     this.mid.position.set(0, y, 0);
     this.body.add(this.mid);
-    // 앞부분: 가슴 + 목 + 머리 + 앞다리 + 앞기수
+    // 앞부분: 가슴 로프트(뒤쪽은 중간 몸통 속에 묻힘) + 목 + 머리 + 앞다리 + 앞기수
     const parts = buildHorse(this.front, { hide, mane, bodyLen: 0.6, bodyR: R });
-    // buildHorse 가 만든 barrel 은 앞 그룹 안에서 앞쪽에 붙어있게 옮김
-    parts.barrel.position.x = 0.1;
+    parts.barrel.visible = false;
+    parts.tail.visible = false;
+    const chestLoft = new THREE.Mesh(
+      loft([
+        { p: [-1.0, y, 0], r: R * 1.0, s: [1.0, 1.02] },
+        { p: [-0.2, y, 0], r: R * 1.0, s: [1.0, 1.02] },
+        { p: [0.45, y + 0.02, 0], r: R * 0.85, s: [0.9, 1.0] },
+        { p: [0.85, y - 0.05, 0], r: R * 0.45, s: [0.85, 0.9] },
+      ]),
+      hide,
+    );
+    chestLoft.castShadow = true;
+    this.front.add(chestLoft);
+    parts.neck.position.set(0.55, y + R * 0.5, 0);
     this.neckBob = parts.neck;
     this.neckBase = -0.85;
-    parts.rump.visible = false;
-    parts.tail.visible = false;
     this.front.position.x = LB_HALF;
-    // 뒷부분: 엉덩이 + 꼬리 + 뒷다리 + 뒷기수
-    const rump = sphere(R * 1.1, hide, 1.15, 1.05, 1);
-    rump.position.set(-0.15, y + 0.05, 0);
-    this.rear.add(rump);
-    const tail = capsule(0.07, 0.7, mane);
-    tail.position.set(-0.6, y + 0.05, 0);
-    tail.rotation.z = 0.55;
+    // 뒷부분: 엉덩이 로프트(앞쪽은 중간 몸통 속에 묻힘) + 꼬리 + 뒷다리 + 뒷기수
+    const rumpLoft = new THREE.Mesh(
+      loft([
+        { p: [-0.95, y + 0.12, 0], r: R * 0.5, s: [0.9, 1.0] },
+        { p: [-0.45, y + 0.1, 0], r: R * 0.98, s: [0.95, 1.08] },
+        { p: [0.2, y, 0], r: R * 1.0, s: [1.0, 1.02] },
+        { p: [1.0, y, 0], r: R * 1.0, s: [1.0, 1.02] },
+      ]),
+      hide,
+    );
+    rumpLoft.castShadow = true;
+    this.rear.add(rumpLoft);
+    const tail = new THREE.Mesh(
+      loft([
+        { p: [0, 0, 0], r: 0.06 },
+        { p: [-0.25, -0.25, 0], r: 0.09 },
+        { p: [-0.45, -0.6, 0], r: 0.08 },
+        { p: [-0.55, -0.95, 0], r: 0.035 },
+      ]),
+      mane,
+    );
+    tail.position.set(-0.85, y + 0.25, 0);
+    tail.castShadow = true;
     this.rear.add(tail);
     this.rear.position.x = -LB_HALF;
     this.body.add(this.front, this.rear);
     this.addLegs(
       [
-        { x: 0.25, z: -0.3, w: 0.2, len: 1.02, mat: hide, y: 1.02 },
-        { x: 0.25, z: 0.3, w: 0.2, len: 1.02, mat: hide, y: 1.02 },
+        { x: 0.15, z: -0.28, w: 0.2, len: 1.2, mat: hide, y: 1.22 },
+        { x: 0.15, z: 0.28, w: 0.2, len: 1.2, mat: hide, y: 1.22 },
       ],
       this.front,
     );
     this.addLegs(
       [
-        { x: -0.15, z: -0.3, w: 0.2, len: 1.02, mat: hide, y: 1.02 },
-        { x: -0.15, z: 0.3, w: 0.2, len: 1.02, mat: hide, y: 1.02 },
+        { x: -0.25, z: -0.28, w: 0.2, len: 1.2, mat: hide, y: 1.22 },
+        { x: -0.25, z: 0.28, w: 0.2, len: 1.2, mat: hide, y: 1.22 },
       ],
       this.rear,
     );
@@ -768,10 +800,10 @@ class CowVisual extends PlaceholderVisual {
     cloth.position.set(-0.25, 1.4, 0);
     this.body.add(cloth);
     this.addLegs([
-      { x: 0.85, z: -0.35, w: 0.2, len: 0.98, mat: hide, y: 0.98 },
-      { x: 0.85, z: 0.35, w: 0.2, len: 0.98, mat: hide, y: 0.98 },
-      { x: -0.85, z: -0.35, w: 0.2, len: 0.98, mat: hide, y: 0.98 },
-      { x: -0.85, z: 0.35, w: 0.2, len: 0.98, mat: hide, y: 0.98 },
+      { x: 0.85, z: -0.35, w: 0.2, len: 1.16, mat: hide, y: 1.16 },
+      { x: 0.85, z: 0.35, w: 0.2, len: 1.16, mat: hide, y: 1.16 },
+      { x: -0.85, z: -0.35, w: 0.2, len: 1.16, mat: hide, y: 1.16 },
+      { x: -0.85, z: 0.35, w: 0.2, len: 1.16, mat: hide, y: 1.16 },
     ]);
     this.addRider(new THREE.Vector3(-0.2, 2.2, 0));
     this.attachReins(this.head, new THREE.Vector3(0.7, -0.05, 0.2));
@@ -915,10 +947,10 @@ class MotorcycleVisual extends PlaceholderVisual {
     this.frame.add(seat);
     this.body.add(this.frame);
     this.addLegs([
-      { x: 0.85, z: -0.3, w: 0.18, len: 1.02, mat: black, y: 1.02, hoof: 0x111111 },
-      { x: 0.85, z: 0.3, w: 0.18, len: 1.02, mat: black, y: 1.02, hoof: 0x111111 },
-      { x: -0.85, z: -0.3, w: 0.18, len: 1.02, mat: black, y: 1.02, hoof: 0x111111 },
-      { x: -0.85, z: 0.3, w: 0.18, len: 1.02, mat: black, y: 1.02, hoof: 0x111111 },
+      { x: 0.85, z: -0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
+      { x: 0.85, z: 0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
+      { x: -0.85, z: -0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
+      { x: -0.85, z: 0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
     ]);
     // 기수: 뒤로 젖혀 앉아 에이프행어를 잡는 초퍼 자세
     this.addRider(new THREE.Vector3(-0.45, 2.1, 0));
@@ -1155,10 +1187,10 @@ class GiraffeVisual extends PlaceholderVisual {
     tail.rotation.z = 0.6;
     this.body.add(tail);
     this.addLegs([
-      { x: 0.65, z: -0.3, w: 0.18, len: 1.85, mat: hide, y: 1.85 },
-      { x: 0.65, z: 0.3, w: 0.18, len: 1.85, mat: hide, y: 1.85 },
-      { x: -0.7, z: -0.3, w: 0.18, len: 1.85, mat: hide, y: 1.85 },
-      { x: -0.7, z: 0.3, w: 0.18, len: 1.85, mat: hide, y: 1.85 },
+      { x: 0.65, z: -0.3, w: 0.18, len: 2.02, mat: hide, y: 2.02 },
+      { x: 0.65, z: 0.3, w: 0.18, len: 2.02, mat: hide, y: 2.02 },
+      { x: -0.7, z: -0.3, w: 0.18, len: 2.02, mat: hide, y: 2.02 },
+      { x: -0.7, z: 0.3, w: 0.18, len: 2.02, mat: hide, y: 2.02 },
     ]);
     this.addRider(new THREE.Vector3(-0.2, 3.05, 0));
     this.attachReins(this.head, new THREE.Vector3(0.6, -0.05, 0.15));
@@ -1218,10 +1250,10 @@ class ClassicVisual extends PlaceholderVisual {
     cloth.position.set(-0.2, 1.4, 0);
     this.body.add(cloth);
     this.addLegs([
-      { x: 0.85, z: -0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02 },
-      { x: 0.85, z: 0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02 },
-      { x: -0.85, z: -0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02 },
-      { x: -0.85, z: 0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02 },
+      { x: 0.85, z: -0.3, w: 0.17, len: 1.2, mat: hide, y: 1.2 },
+      { x: 0.85, z: 0.3, w: 0.17, len: 1.2, mat: hide, y: 1.2 },
+      { x: -0.85, z: -0.3, w: 0.17, len: 1.2, mat: hide, y: 1.2 },
+      { x: -0.85, z: 0.3, w: 0.17, len: 1.2, mat: hide, y: 1.2 },
     ]);
     this.addRider(new THREE.Vector3(-0.15, 2.15, 0));
     this.attachReins(parts.head, new THREE.Vector3(0.62, -0.05, 0.16));
@@ -1290,10 +1322,10 @@ class CircusVisual extends PlaceholderVisual {
     this.body.add(cloth);
     // 다리 장식 밴드
     this.addLegs([
-      { x: 0.85, z: -0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02, hoof: 0xffd700 },
-      { x: 0.85, z: 0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02, hoof: 0xffd700 },
-      { x: -0.85, z: -0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02, hoof: 0xffd700 },
-      { x: -0.85, z: 0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02, hoof: 0xffd700 },
+      { x: 0.85, z: -0.3, w: 0.17, len: 1.2, mat: hide, y: 1.2, hoof: 0xffd700 },
+      { x: 0.85, z: 0.3, w: 0.17, len: 1.2, mat: hide, y: 1.2, hoof: 0xffd700 },
+      { x: -0.85, z: -0.3, w: 0.17, len: 1.2, mat: hide, y: 1.2, hoof: 0xffd700 },
+      { x: -0.85, z: 0.3, w: 0.17, len: 1.2, mat: hide, y: 1.2, hoof: 0xffd700 },
     ]);
     for (const l of this.legs) {
       const band = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.03, 6, 12), toon(0xc41e3a));

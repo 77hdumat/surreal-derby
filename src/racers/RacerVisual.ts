@@ -157,8 +157,10 @@ export function makeLeg(w: number, len: number, mat: THREE.Material, name: strin
   const upper = new THREE.Mesh(geo, mat);
   upper.name = name;
   upper.castShadow = true;
-  const hipCap = new THREE.Mesh(new THREE.SphereGeometry(w * 0.62, 12, 8), mat);
-  hipCap.scale.set(1, 0.7, 1);
+  // 엉덩이/어깨 관절: 몸통 속에 파묻히도록 크게
+  const hipCap = new THREE.Mesh(new THREE.SphereGeometry(w * 0.95, 12, 8), mat);
+  hipCap.scale.set(1.1, 0.8, 1.1);
+  hipCap.position.y = 0.04;
   upper.add(hipCap);
   const knee = new THREE.Group();
   knee.name = name + '_lower';
