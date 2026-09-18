@@ -338,6 +338,8 @@ export abstract class PlaceholderVisual implements RacerVisual {
   protected stridePhase = 0;
   /** 바퀴 달린 선수: 몸통 바운스/피치 없음, 바퀴만 회전 */
   protected wheeled = false;
+  /** 갤럽식 몸통 바운스/피치를 쓸지 (사람이 뛰는 캐릭터는 자체 처리) */
+  protected gaitBounce = true;
   protected reins: ReinRig | null = null;
   /** 넘어짐/잠듦 자세 0..1 */
   protected downPose = 0;
@@ -527,7 +529,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
       this.stridePhase = (this.stridePhase + strideHz * dt) % 1;
     }
     const ph = this.stridePhase;
-    const gait = this.wheeled ? 0 : 1;
+    const gait = this.wheeled || !this.gaitBounce ? 0 : 1;
     // 뒷다리가 차고(ph≈0.1) 공중(ph≈0.3) → 앞다리 착지(ph≈0.5): 바운스 1회/보폭
     const air = Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.05))) * gait;
     const bounce = air * this.bounceAmp * (0.5 + animSpeed * 0.9);

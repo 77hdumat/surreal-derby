@@ -150,6 +150,8 @@ class CostumeVisual extends PlaceholderVisual {
   }
   private declare shell: THREE.Group;
   private declare heads: THREE.Group[];
+  private declare persons: THREE.Group[];
+  private declare arms: THREE.Group[];
   private declare parts: HorseParts;
 
   protected buildBody(): void {
@@ -194,6 +196,39 @@ class CostumeVisual extends PlaceholderVisual {
       this.heads.push(hg);
     }
     this.body.add(this.shell);
+    // 탈 속 두 사람의 상체 (탈을 들어올릴 때만 보임): 티셔츠 몸통 + 머리 + 위로 뻗은 팔
+    this.persons = [];
+    this.arms = [];
+    [0.6, -0.65].forEach((x, i) => {
+      const p = new THREE.Group();
+      const shirt = toon(i === 0 ? 0xe84c3d : 0x3d7be8);
+      const torso = capsule(0.2, 0.32, shirt);
+      torso.position.y = 1.32;
+      p.add(torso);
+      const head = sphere(0.19, toon(0xf0caad));
+      head.position.y = 1.85;
+      p.add(head);
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(i === 0 ? 0x222222 : 0x6b3a1e));
+      hair.position.y = 1.88;
+      p.add(hair);
+      for (const s of [-1, 1]) {
+        const arm = new THREE.Group();
+        arm.position.set(0, 1.55, s * 0.27);
+        const a = capsule(0.06, 0.5, toon(0xf0caad));
+        a.position.y = 0.32;
+        arm.add(a);
+        const hand = sphere(0.075, toon(0xf0caad));
+        hand.position.y = 0.66;
+        arm.add(hand);
+        arm.rotation.x = s * 0.25;
+        p.add(arm);
+        this.arms.push(arm);
+      }
+      p.position.set(x, 0, 0);
+      p.visible = false;
+      this.body.add(p);
+      this.persons.push(p);
+    });
     // 사람 다리: 청바지 + 운동화
     const jeans = toon(0x3b5ba5);
     this.addLegs([
@@ -211,9 +246,9 @@ class CostumeVisual extends PlaceholderVisual {
     });
     this.addRider(new THREE.Vector3(-0.2, 2.15, 0), 0.95);
     this.attachReins(this.parts.head, new THREE.Vector3(0.66, -0.05, 0.18), 0, this.shell);
-    this.neckBob = this.parts.neck;
     this.neckBase = -0.85;
-    this.bounceAmp = 0.2;
+    this.gaitBounce = false; // 말 갤럽이 아니라 사람 두 명의 발걸음으로 흔들림
+    this.bounceAmp = 0;
     this.legAmp = 0.55;
     this.kneeFold = 1.2;
     this.height = 2.6;
@@ -227,30 +262,43 @@ class CostumeVisual extends PlaceholderVisual {
     const c = this.collapse;
     const k = this.carry;
     if (k > 0.02) {
-      // 탈을 머리 위로 들고 뜀: 탈은 위로 올라가 기울고, 두 사람 머리 노출, 다리는 전력질주
-      this.shell.position.y = k * 1.1;
-      this.shell.rotation.z = k * 0.35;
-      this.shell.rotation.x = Math.sin(time * 14) * 0.12 * k;
+      // 탈을 두 팔로 번쩍 들어올리고(머리 위) 두 사람이 상체 드러낸 채 전력질주
+      this.shell.position.y = k * 1.55;
+      this.shell.rotation.z = k * 0.12 + Math.sin(time * 9) * 0.03 * k;
+      this.shell.rotation.x = Math.sin(time * 14) * 0.08 * k;
       this.shell.rotation.y = 0;
       this.shell.scale.set(1, 1, 1);
-      this.heads.forEach((h, i) => {
-        h.visible = true;
-        h.position.y = 1.55 - k * 0.2 + Math.abs(Math.sin(time * 12 + i)) * 0.1;
-        h.rotation.y = 0;
-        h.scale.setScalar(1);
+      this.heads.forEach((h) => (h.visible = false));
+      this.persons.forEach((p, i) => {
+        p.visible = true;
+        p.position.y = Math.abs(Math.sin(time * 11 + i * 1.3)) * 0.08 * k;
+        p.rotation.z = 0.12 * k; // 살짝 앞으로 숙이고 달림
+        p.scale.setScalar(THREE.MathUtils.lerp(0.001, 1, Math.min(1, k * 1.5)));
+      });
+      this.arms.forEach((a, i) => {
+        const s = i % 2 ? 1 : -1;
+        a.rotation.z = -0.15 + Math.sin(time * 11 + i) * 0.06; // 위로 쭉
+        a.rotation.x = s * 0.22;
       });
       this.parts.head.rotation.z = 0.95 + k * 0.6;
       return;
     }
+    this.persons.forEach((p) => (p.visible = false));
     const wob = speedNorm * (1 - c);
-    // 탈 특유의 흐물거림
-    this.shell.rotation.z = Math.sin(time * 9.5 + this.seed) * 0.08 * wob - c * 0.9;
-    this.shell.rotation.x = Math.sin(time * 6.2 + this.seed) * 0.12 * wob + c * 0.35;
-    this.shell.rotation.y = Math.sin(time * 4.1) * 0.06 * wob;
-    this.shell.scale.set(1 + c * 0.1, 1 - c * 0.7 + Math.sin(time * 14) * 0.02 * wob, 1 + c * 0.1);
-    this.shell.position.y = -c * 0.95;
-    // 머리가 축 늘어짐(탈이라 목이 힘이 없음)
-    this.parts.head.rotation.z = 0.95 + Math.sin(time * 7 + this.seed) * 0.12 * wob + c * 0.8;
+    // 사람 두 명이 탈을 쓰고 뛰는 흔들림: 앞사람/뒷사람 발걸음(보폭당 2보)이 어긋나 탈이 위아래·앞뒤로 출렁
+    const step = this.stridePhase * 2;
+    const frontBob = Math.abs(Math.sin(Math.PI * step)) * 0.1 * wob;
+    const rearBob = Math.abs(Math.sin(Math.PI * (step + 0.3))) * 0.1 * wob;
+    this.shell.position.y = (frontBob + rearBob) * 0.5 - c * 0.95;
+    // 앞뒤 높이 차 → 탈이 시소처럼 피치, 발 디딜 때마다 좌우로 살짝 흔들
+    this.shell.rotation.z = (rearBob - frontBob) * 0.55 + Math.sin(time * 2.1 + this.seed) * 0.02 * wob - c * 0.9;
+    this.shell.rotation.x = Math.sin(Math.PI * 2 * step) * 0.045 * wob + Math.sin(time * 1.7) * 0.015 * wob + c * 0.35;
+    this.shell.rotation.y = Math.sin(Math.PI * 2 * step + 0.6) * 0.02 * wob;
+    // 천이라 살짝 출렁 (딱딱하지 않게)
+    this.shell.scale.set(1 + c * 0.1, 1 - c * 0.7 + Math.sin(Math.PI * 2 * step) * 0.012 * wob, 1 + c * 0.1);
+    // 머리는 천이라 힘없이 뒤늦게 따라오며 까딱거림
+    this.parts.head.rotation.z = 0.95 + Math.sin(Math.PI * 2 * step - 0.9) * 0.14 * wob + c * 0.8;
+    this.parts.neck.rotation.z = -0.85 + Math.sin(Math.PI * 2 * step - 1.2) * 0.06 * wob;
     // 쓰러지면 두 사람이 탈 아래 누운 모양: 다리는 바닥에 눕고 무릎은 펴짐
     this.legs.forEach((l, i) => {
       if (c > 0.05) {
