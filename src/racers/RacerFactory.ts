@@ -90,7 +90,7 @@ function buildHorse(parent: THREE.Object3D, o: HorseOpts): HorseParts {
   );
   neckM.castShadow = true;
   neck.add(neckM);
-  neck.add(makeMane(neckLen, o.mane, -R * 0.4));
+  neck.add(makeMane(neckLen, o.mane, -R * 0.5, 7, 0.55));
   // 머리: 이마 → 콧등 → 주둥이로 가늘어지는 쐐기형
   const head = new THREE.Group();
   head.position.set(0.05, neckLen + 0.35, 0);
@@ -1151,7 +1151,7 @@ class GiraffeVisual extends PlaceholderVisual {
     const neckM = new THREE.Mesh(neckGeo, hide);
     neckM.castShadow = true;
     this.neck.add(neckM);
-    this.neck.add(makeMane(neckLen - 0.4, toon(0x6b3a1e), -0.27, 12));
+    this.neck.add(makeMane(neckLen - 0.4, toon(0x6b3a1e), -0.21, 12, 0.85));
     this.head = new THREE.Group();
     this.head.position.set(0, neckLen + 0.1, 0);
     const skull = capsule(0.2, 0.45, hide, 'x');

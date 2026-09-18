@@ -311,13 +311,14 @@ export function makeRider(silks: number, helmet: number, scale = 1): THREE.Group
 }
 
 /** 갈기: 목을 따라 겹치는 부드러운 술 — 속도에 따라 흩날림 */
-export function makeMane(neckLen: number, mat: THREE.Material, xOff: number, count = 7): THREE.Group {
+export function makeMane(neckLen: number, mat: THREE.Material, xOff: number, count = 7, taper = 0.55): THREE.Group {
   const g = new THREE.Group();
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
     const tuft = new THREE.Mesh(new THREE.CapsuleGeometry(0.06 - t * 0.015, 0.2, 3, 8), mat);
     tuft.castShadow = true;
-    tuft.position.set(xOff - 0.02 * i, 0.15 + t * (neckLen + 0.15), 0);
+    // 목이 위로 갈수록 가늘어지므로 갈기도 목 표면을 따라 안쪽으로 붙임
+    tuft.position.set(THREE.MathUtils.lerp(xOff, xOff * taper, t), 0.15 + t * (neckLen + 0.15), 0);
     tuft.rotation.z = 0.55 + Math.sin(i * 1.7) * 0.15;
     tuft.userData.baseRot = tuft.rotation.z;
     g.add(tuft);
