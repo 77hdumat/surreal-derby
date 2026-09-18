@@ -887,9 +887,9 @@ class MotorcycleVisual extends PlaceholderVisual {
         loft(
           [
             { p: [0.55, 2.0, sgn * 0.12], r: 0.035 },
-            { p: [0.72, 2.35, sgn * 0.26], r: 0.032 },
-            { p: [0.78, 2.75, sgn * 0.34], r: 0.03 },
-            { p: [0.62, 2.95, sgn * 0.36], r: 0.03 },
+            { p: [0.6, 2.4, sgn * 0.22], r: 0.032 },
+            { p: [0.35, 2.7, sgn * 0.24], r: 0.03 },
+            { p: [-0.05, 2.76, sgn * 0.22], r: 0.03 },
           ],
           16,
           10,
@@ -898,8 +898,9 @@ class MotorcycleVisual extends PlaceholderVisual {
       );
       bar.castShadow = true;
       this.frame.add(bar);
-      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.2, 10), toon(0x1a1a1a));
-      grip.position.set(0.58, 2.97, sgn * 0.36);
+      // 그립은 기수 손 위치(약 x -0.18, y 2.72)에 맞춤
+      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.22, 10), toon(0x1a1a1a));
+      grip.position.set(-0.16, 2.74, sgn * 0.21);
       grip.rotation.z = Math.PI / 2;
       this.frame.add(grip);
       // 배기관: 옆구리 아래 크롬 파이프
@@ -953,8 +954,8 @@ class MotorcycleVisual extends PlaceholderVisual {
       { x: -0.85, z: 0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
     ]);
     // 기수: 뒤로 젖혀 앉아 에이프행어를 잡는 초퍼 자세
-    this.addRider(new THREE.Vector3(-0.45, 2.1, 0));
-    this.reparentRider(0, this.frame, 0.95);
+    this.addRider(new THREE.Vector3(-0.35, 2.1, 0));
+    this.reparentRider(0, this.frame, 0.75);
     this.bounceAmp = 0.12;
     this.height = 2.9;
   }
