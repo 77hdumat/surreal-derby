@@ -239,28 +239,31 @@ export class RaceEngine {
     const boostTarget = s.state === 'BOOSTING' ? 1 : boosting ? 0.45 : 0;
     s.boostIntensity = THREE.MathUtils.lerp(s.boostIntensity, boostTarget, Math.min(1, dt * (boosting ? 4 : 2)));
 
-    // 기린: 결승선 근처에서 목 뻗기 → 판정 보너스 (피날레: 목이 화면 밖까지)
-    if (d.specialAbility === 'GIRAFFE') {
-      const toFinish = this.track.raceDistance - s.distance;
-      if (s.extensionMax === 0) s.extensionMax = 2.2;
-      const want = s.state === 'STRETCHED' || toFinish < 45 ? 1 : 0;
-      s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / (s.extensionMax > 5 ? 1.4 : 0.8) : -dt / 1.2), 0, 1);
-      s.finishBonus = s.extension * s.extensionMax;
-    }
+    // 결승선 판정은 코끝 기준: 몸통 원점 + noseOffset + (늘어난 코/목/몸통)
+    let reach = 0;
     // 코끼리: 코 늘어남 (붙잡기) — 피날레에선 코가 결승선까지 닿음
     if (d.specialAbility === 'ELEPHANT') {
       const want = s.state === 'GRABBING' ? 1 : 0;
       s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / 0.6 : -dt / 1.0), 0, 1);
       if (s.extensionMax === 0) s.extensionMax = 2.4;
-      s.finishBonus = s.extensionMax > 3 ? s.extension * s.extensionMax : 0;
+      reach = s.extension * s.extensionMax;
     }
     // 롱바디: 몸통 늘어남 → 머리가 먼저 결승선 통과
     if (d.specialAbility === 'LONGBODY') {
       const want = s.state === 'STRETCHED' ? 1 : 0;
       if (s.extensionMax === 0) s.extensionMax = 8.5;
       s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / (s.extensionMax > 20 ? 1.6 : 0.9) : -dt / 1.6), 0, 1);
-      s.finishBonus = s.extension * s.extensionMax;
+      reach = s.extension * s.extensionMax;
     }
+    // 기린: 결승선 근처에서 목을 앞으로 길게 뻗음 → 코끝이 먼저 들어감 (피날레: 목이 화면 밖까지)
+    if (d.specialAbility === 'GIRAFFE') {
+      const toFinish = this.track.raceDistance - s.distance;
+      if (s.extensionMax === 0) s.extensionMax = 6.5;
+      const want = s.state === 'STRETCHED' || toFinish < 55 ? 1 : 0;
+      s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / (s.extensionMax > 10 ? 1.4 : 1.0) : -dt / 1.2), 0, 1);
+      reach = s.extension * s.extensionMax;
+    }
+    s.finishBonus = d.noseOffset + reach;
   }
 
   private leaveState(r: Racer): void {
@@ -682,7 +685,7 @@ export class RaceEngine {
           major: false,
           label: isFirst ? `${r.def.name} 1위 결승선 통과` : undefined,
         });
-        if (r.def.specialAbility === 'GIRAFFE' && s.finishBonus > 0) {
+        if (r.def.specialAbility === 'GIRAFFE' && s.extension > 0.5) {
           const rival = this.racers.find(
             (o) => o !== r && o.state.state !== 'IDLE' && Math.abs(o.state.distance + o.state.finishBonus - eff) < 3,
           );

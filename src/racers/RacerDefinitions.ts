@@ -25,6 +25,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0x7a4a2a,
     clothColor: 0xf2f2f2,
     silksColor: 0xd94b3a,
+    noseOffset: 2.5,
     strideLength: 3.4,
   },
   {
@@ -47,6 +48,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0x6b3f22,
     clothColor: 0x2b56c7,
     silksColor: 0x3ea0e6,
+    noseOffset: 3.0,
     strideLength: 6.4,
   },
   {
@@ -69,6 +71,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0x8b8a90,
     clothColor: 0x3b2fa8,
     silksColor: 0xf5c400,
+    noseOffset: 2.9,
     strideLength: 4.4,
   },
   {
@@ -91,6 +94,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0xf4f0e6,
     clothColor: 0x1d8a3c,
     silksColor: 0xffffff,
+    noseOffset: 2.5,
     strideLength: 5.2,
   },
   {
@@ -113,6 +117,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0x2a2a2e,
     clothColor: 0xff6a00,
     silksColor: 0x101010,
+    noseOffset: 2.1,
     strideLength: 8.0,
   },
   {
@@ -135,6 +140,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0xe8b894,
     clothColor: 0xb02a8f,
     silksColor: 0xffe14d,
+    noseOffset: 1.15,
     strideLength: 2.3,
   },
   {
@@ -157,6 +163,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0xe0a743,
     clothColor: 0xd12d2d,
     silksColor: 0x2fb75e,
+    noseOffset: 1.1,
     strideLength: 6.0,
   },
   {
@@ -179,6 +186,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0x4a2c17,
     clothColor: 0x111111,
     silksColor: 0x8a2be2,
+    noseOffset: 2.4,
     strideLength: 6.6,
   },
   {
@@ -201,6 +209,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0xf3ede2,
     clothColor: 0xc41e3a,
     silksColor: 0xffd700,
+    noseOffset: 2.4,
     strideLength: 6.2,
   },
   {
@@ -223,6 +232,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0x9a6b3c,
     clothColor: 0x6b2d8f,
     silksColor: 0xc9b037,
+    noseOffset: 2.6,
     strideLength: 9.0,
   },
 ];

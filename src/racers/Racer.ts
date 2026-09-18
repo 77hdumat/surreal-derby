@@ -39,6 +39,8 @@ export interface RacerDefinition {
   bodyColor: number;
   clothColor: number;
   silksColor: number;
+  /** 코끝이 몸통 원점보다 얼마나 앞에 있나(m) — 결승선 판정은 코끝 기준 */
+  noseOffset: number;
   /** 보폭 (m) — 말발굽 소리/파티클 주기 */
   strideLength: number;
   /** GLB 경로를 지정하면 placeholder 대신 GLTF 모델을 사용 */

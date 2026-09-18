@@ -953,13 +953,15 @@ class GiraffeVisual extends PlaceholderVisual {
     const a = Math.sin(this.attack * Math.PI);
     const sway = Math.sin(time * 4.2 + this.seed) * 0.3 * speedNorm;
     const side = Math.sin(time * 2.7) * 0.2 * speedNorm;
-    this.neck.rotation.z = -0.35 + sway - this.stretch * 1.1;
-    this.neck.rotation.x = side + a * this.attackSide * 1.1;
-    // 피날레: 목이 수십 m 로 늘어남 (extensionMax > 5)
-    const mega = ctx.extensionMax > 5 ? ctx.extensionMax / 3.4 : 1;
-    this.neck.scale.y = 1 + this.stretch * (mega - 1);
-    if (mega > 1) this.neck.rotation.z = -0.35 + sway - this.stretch * 1.35;
-    this.head.rotation.z = Math.sin(time * 6) * 0.1 * speedNorm - this.stretch * 0.25;
+    // 목 뻗기: 최대 수평보다 살짝 위(약 -1.35rad)까지만 — 그 이상 숙이면 땅에 납작 붙어 보임
+    const st = this.stretch;
+    this.neck.rotation.z = -0.35 + sway * (1 - st) - st * 1.0;
+    this.neck.rotation.x = side * (1 - st * 0.7) + a * this.attackSide * 1.1;
+    // 목 길이: 결승 스트레치 때 extensionMax(m) 만큼 (기본 6.5m, 피날레 34m)
+    const mega = ctx.extensionMax > 0 ? Math.max(1, ctx.extensionMax / 3.4) : 1;
+    this.neck.scale.y = 1 + st * (mega - 1);
+    // 머리는 항상 앞을 보도록 목 기울기를 상쇄
+    this.head.rotation.z = Math.sin(time * 6) * 0.1 * speedNorm + st * 0.9;
   }
 }
 
