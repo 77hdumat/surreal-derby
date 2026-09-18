@@ -25,7 +25,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     bodyColor: 0x7a4a2a,
     clothColor: 0xf2f2f2,
     silksColor: 0xd94b3a,
-    strideLength: 2.6,
+    strideLength: 3.4,
   },
   {
     id: 'longbody',

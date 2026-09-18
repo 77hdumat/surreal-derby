@@ -337,6 +337,14 @@ export abstract class PlaceholderVisual implements RacerVisual {
     });
   }
 
+  /** 다리별 위상 (보폭 내 최대 앞뻗기 시점). 기본: 횡단 갤럽 — 앞다리(FL, FR)는 뒷다리보다 반 보폭 뒤 */
+  protected gaitPhases(): number[] {
+    return [0.45, 0.58, 0.0, 0.12, 0.45, 0.58, 0.0, 0.12];
+  }
+  protected gaitAmps(): number[] {
+    return [1.0, 1.0, 0.85, 0.85, 1.0, 1.0, 0.85, 0.85];
+  }
+
   /**
    * 갤럽 클립(1초 = 한 보폭)을 AnimationMixer 로 재생.
    * timeScale = 속도 / 보폭 (Hz) 이므로 빠를수록 다리가 빨리 움직이고, 바운스도 같은 위상을 쓴다.
@@ -345,9 +353,8 @@ export abstract class PlaceholderVisual implements RacerVisual {
   protected setupMixer(): void {
     if (this.legs.length === 0) return;
     const tracks: THREE.KeyframeTrack[] = [];
-    // 앞다리(FL, FR) 는 뒷다리(BL, BR) 보다 반 보폭 뒤에 닿는다
-    const phases = [0.45, 0.58, 0.0, 0.12, 0.45, 0.58, 0.0, 0.12];
-    const amps = [1.0, 1.0, 0.85, 0.85, 1.0, 1.0, 0.85, 0.85];
+    const phases = this.gaitPhases();
+    const amps = this.gaitAmps();
     const N = 24;
     this.legs.forEach((leg, i) => {
       const ph = phases[i % phases.length];

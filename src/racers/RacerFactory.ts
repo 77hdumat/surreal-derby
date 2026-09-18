@@ -125,6 +125,14 @@ function addSaddle(parent: THREE.Object3D, x: number, y: number, width: number, 
 class CostumeVisual extends PlaceholderVisual {
   private collapse = 0;
   private carry = 0;
+
+  /** 두 사람 달리기: 앞사람 좌/우 반대 위상, 뒷사람은 앞사람과 어긋나게 */
+  protected gaitPhases(): number[] {
+    return [0.0, 0.5, 0.3, 0.8];
+  }
+  protected gaitAmps(): number[] {
+    return [1, 1, 1, 1];
+  }
   private declare shell: THREE.Group;
   private declare heads: THREE.Group[];
   private declare parts: HorseParts;
@@ -227,8 +235,15 @@ class CostumeVisual extends PlaceholderVisual {
     this.shell.position.y = -c * 0.95;
     // 머리가 축 늘어짐(탈이라 목이 힘이 없음)
     this.parts.head.rotation.z = 0.95 + Math.sin(time * 7 + this.seed) * 0.12 * wob + c * 0.8;
+    // 쓰러지면 두 사람이 탈 아래 누운 모양: 다리는 바닥에 눕고 무릎은 펴짐
     this.legs.forEach((l, i) => {
-      if (c > 0.3) l.rotation.z = Math.sin(time * 12 + i) * 0.8 * c + (i < 2 ? 1.2 : -1.2) * c;
+      if (c > 0.05) {
+        const lie = (i < 2 ? 1.5 : -1.5) * c;
+        l.rotation.z = THREE.MathUtils.lerp(l.rotation.z, lie + Math.sin(time * 3 + i) * 0.08 * c, Math.min(1, c * 1.5));
+        l.position.y = 0.98 - c * 0.62;
+        const knee = l.children.find((ch) => ch.name.endsWith('_lower'));
+        if (knee) knee.rotation.z = THREE.MathUtils.lerp(knee.rotation.z, 0, Math.min(1, c * 1.5));
+      } else l.position.y = 0.98;
     });
     this.riders.forEach((r, i) => {
       if (r.parent === this.riderParent[i]) r.position.y += -c * 1.1;
@@ -713,6 +728,13 @@ class MotorcycleVisual extends PlaceholderVisual {
 
 // ================================================================ 6. 인간 말
 class HumanVisual extends PlaceholderVisual {
+  /** 네발 기기: 대각선 교차 (왼팔+오른다리, 오른팔+왼다리) */
+  protected gaitPhases(): number[] {
+    return [0.0, 0.5, 0.5, 0.0];
+  }
+  protected gaitAmps(): number[] {
+    return [1, 1, 1, 1];
+  }
   private declare torso: THREE.Group;
   private declare headMesh: THREE.Mesh;
   private upright = 0;
