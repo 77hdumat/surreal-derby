@@ -1442,9 +1442,13 @@ class TrojanVisual extends PlaceholderVisual {
     this.parts = buildHorse(this.body, { hide: wood, mane: woodDark, bodyLen: 1.2, bodyR: 0.55, neckLen: 1.2, headScale: 0.9 });
     this.parts.barrel.visible = false;
     this.parts.rump.visible = false;
-    this.parts.chest.position.set(1.5, 2.0, 0);
-    this.parts.neck.position.set(1.55, 2.75, 0);
+    // 목 밑동은 몸통 상자 안에 파묻고, 상자에서 목으로 이어지는 나무 블록을 덧댄다
+    this.parts.neck.position.set(1.1, 2.55, 0);
     this.parts.neck.rotation.z = -0.55;
+    const neckBlock = box(0.9, 1.0, 0.9, wood);
+    neckBlock.position.set(1.3, 2.75, 0);
+    neckBlock.rotation.z = -0.55;
+    this.body.add(neckBlock);
     this.parts.tail.position.set(-1.6, 2.2, 0);
     // 배 쪽 해치 (이벤트 때 열림)
     this.hatch = box(1.2, 0.08, 0.9, woodDark);
