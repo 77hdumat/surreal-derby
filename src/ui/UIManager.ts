@@ -363,6 +363,7 @@ export class UIManager {
     else if (st === 'BROKEN') s = '바퀴빠짐';
     else if (st === 'SLEEPING') s = 'Zzz';
     else if (st === 'STUBBORN') s = '풀뜯는중';
+    else if (st === 'DANCING') s = '목댄스!';
     else if (st === 'SHOELACE') s = '신발끈';
     else if (st === 'SPRAYING') s = '물대포!';
     else if (st === 'STRETCHED') s = '쭈욱!';

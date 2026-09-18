@@ -1101,6 +1101,8 @@ class HumanVisual extends PlaceholderVisual {
 // ================================================================ 7. 기린
 class GiraffeVisual extends PlaceholderVisual {
   private declare neck: THREE.Group;
+  private declare neckSegs: THREE.Group[];
+  private dance = 0;
   private declare head: THREE.Group;
   private attack = 0;
   private attackSide = 1;
@@ -1146,14 +1148,35 @@ class GiraffeVisual extends PlaceholderVisual {
     this.neck = new THREE.Group();
     this.neck.position.set(0.95, 2.85, 0);
     const neckLen = 3.4;
-    const neckGeo = new THREE.CapsuleGeometry(0.24, neckLen, 4, 12);
-    neckGeo.translate(0, neckLen / 2, 0);
-    const neckM = new THREE.Mesh(neckGeo, hide);
-    neckM.castShadow = true;
-    this.neck.add(neckM);
-    this.neck.add(makeMane(neckLen - 0.4, toon(0x6b3a1e), -0.21, 12, 0.85));
+    // 목은 8마디 체인: 평소엔 일직선, 목 댄스 때 ~~~ 물결로 흔들림
+    this.neckSegs = [];
+    const segN = 8;
+    const segLen = neckLen / segN;
+    let parentSeg: THREE.Object3D = this.neck;
+    const maneMat = toon(0x6b3a1e);
+    for (let i = 0; i < segN; i++) {
+      const g = new THREE.Group();
+      g.position.y = i === 0 ? 0 : segLen;
+      const r0 = 0.26 - (i / segN) * 0.08;
+      const r1 = 0.26 - ((i + 1) / segN) * 0.08;
+      const geo = new THREE.CylinderGeometry(r1, r0, segLen * 1.06, 12);
+      geo.translate(0, segLen / 2, 0);
+      const m = new THREE.Mesh(geo, hide);
+      m.castShadow = true;
+      g.add(m);
+      const joint = new THREE.Mesh(new THREE.SphereGeometry(r0, 12, 8), hide);
+      g.add(joint);
+      // 마디마다 갈기 술
+      const tuft = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.16, 3, 8), maneMat);
+      tuft.position.set(-r0 * 0.85, segLen * 0.5, 0);
+      tuft.rotation.z = 0.5;
+      g.add(tuft);
+      parentSeg.add(g);
+      this.neckSegs.push(g);
+      parentSeg = g;
+    }
     this.head = new THREE.Group();
-    this.head.position.set(0, neckLen + 0.1, 0);
+    this.head.position.set(0, segLen + 0.1, 0);
     const skull = capsule(0.2, 0.45, hide, 'x');
     skull.position.x = 0.32;
     this.head.add(skull);
@@ -1175,7 +1198,7 @@ class GiraffeVisual extends PlaceholderVisual {
       ear.rotation.x = s * 1.1;
       this.head.add(ear);
     }
-    this.neck.add(this.head);
+    parentSeg.add(this.head);
     this.neck.rotation.z = -0.35;
     this.body.add(this.neck);
     addSaddle(this.body, -0.2, 2.8, 0.95, d.clothColor);
@@ -1225,6 +1248,18 @@ class GiraffeVisual extends PlaceholderVisual {
     this.neck.scale.y = 1 + st * (mega - 1);
     // 머리는 항상 앞을 보도록 목 기울기를 상쇄
     this.head.rotation.z = Math.sin(time * 6) * 0.1 * speedNorm + st * 0.9;
+    // 목 댄스: 멈춰 서서 목이 ~~~ 물결치듯 좌우로 (마디마다 위상 차)
+    this.dance = damp(this.dance, ctx.state === 'DANCING' ? 1 : 0, 5, dt);
+    const dn = this.dance;
+    this.neckSegs.forEach((seg, i) => {
+      seg.rotation.x = Math.sin(time * 7 - i * 0.85) * 0.42 * dn;
+      seg.rotation.z = Math.sin(time * 3.5 - i * 0.6) * 0.08 * dn;
+    });
+    if (dn > 0.05) {
+      this.neck.rotation.z = -0.35 - dn * 0.15;
+      this.body.position.y += Math.abs(Math.sin(time * 7)) * 0.08 * dn; // 리듬 타기
+      this.head.rotation.z += Math.sin(time * 7 - 6.8) * 0.3 * dn;
+    }
   }
 }
 

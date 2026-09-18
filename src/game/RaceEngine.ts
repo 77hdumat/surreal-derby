@@ -171,6 +171,7 @@ export class RaceEngine {
       case 'SLEEPING':
       case 'STUBBORN':
       case 'SHOELACE':
+      case 'DANCING':
         stateFactor = 0;
         break;
     }
@@ -252,7 +253,7 @@ export class RaceEngine {
     // targetLane 은 interactions 에서 추월 오프셋을 더할 수 있으므로 서서히 복귀
     s.targetLane += (baseTarget - s.targetLane) * Math.min(1, dt * 1.5);
     s.targetLane = THREE.MathUtils.clamp(s.targetLane, -half + 0.9, half - 0.9);
-    const stopped = s.state === 'COLLAPSED' || s.state === 'FALLEN' || s.state === 'BROKEN' || s.state === 'SLEEPING' || s.state === 'STUBBORN' || s.state === 'SHOELACE' || s.state === 'PLANTED';
+    const stopped = s.state === 'COLLAPSED' || s.state === 'FALLEN' || s.state === 'BROKEN' || s.state === 'SLEEPING' || s.state === 'STUBBORN' || s.state === 'SHOELACE' || s.state === 'PLANTED' || s.state === 'DANCING';
     const lateralSpeed = stopped ? 0 : (d.specialAbility === 'MOTORCYCLE' ? 9 : 1.6) + Math.abs(s.currentSpeed) * 0.04;
     const diff = s.targetLane - s.lane;
     s.lane += THREE.MathUtils.clamp(diff, -lateralSpeed * dt, lateralSpeed * dt);
@@ -575,6 +576,10 @@ export class RaceEngine {
         this.setState(r, 'SHOELACE', dur ?? 4);
         label = `${r.def.name} 결승 직전 신발끈 묶기`;
         break;
+      case 'TWIST_NECK_DANCE':
+        this.setState(r, 'DANCING', dur ?? 5);
+        label = `${r.def.name} 결승 직전 멈춰서 목 댄스`;
+        break;
       case 'TWIST_STUBBORN':
         this.setState(r, 'STUBBORN', dur ?? 4.5);
         label = `${r.def.name} 결승 직전 멈춰서 풀 뜯기`;
@@ -760,7 +765,7 @@ export class RaceEngine {
         COW: ['TWIST_STUBBORN', 'TWIST_REVERSE'],
         ELEPHANT: ['TWIST_STUBBORN', 'TWIST_SLEEP'],
         LONGBODY: ['TWIST_REVERSE', 'TWIST_FALL'],
-        GIRAFFE: ['TWIST_FALL', 'TWIST_SLEEP'],
+        GIRAFFE: ['TWIST_NECK_DANCE'],
         CLASSIC: ['TWIST_FALL', 'TWIST_REVERSE'],
       };
       const pool = byType[victim.def.specialAbility] ?? ['TWIST_FALL', 'TWIST_REVERSE'];

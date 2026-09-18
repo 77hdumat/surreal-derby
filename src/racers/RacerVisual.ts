@@ -569,7 +569,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
     const { dt, time, speedNorm } = ctx;
     const st = ctx.state;
     const grounded =
-      st === 'COLLAPSED' || st === 'ENGINE_FAILURE' || st === 'FALLEN' || st === 'SLEEPING' || st === 'STUBBORN' || st === 'SHOELACE' || st === 'BROKEN' || st === 'PLANTED';
+      st === 'COLLAPSED' || st === 'ENGINE_FAILURE' || st === 'FALLEN' || st === 'SLEEPING' || st === 'STUBBORN' || st === 'SHOELACE' || st === 'BROKEN' || st === 'PLANTED' || st === 'DANCING';
     const animSpeed = grounded ? 0 : speedNorm;
     const stride = Math.max(1, this.def.strideLength);
     // 보폭 주파수(Hz) — 실제 말은 16m/s 에서 약 2.3~2.5 보폭/초

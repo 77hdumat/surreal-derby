@@ -267,6 +267,11 @@ export class Game {
         a.crowdRoar(1.0);
         this.effects.flashScreen(0.4);
         break;
+      case 'TWIST_NECK_DANCE':
+        a.play('tada', { pos, minGain: 0.5, gain: 0.7 });
+        a.play('neigh', { pos, minGain: 0.3, gain: 0.5, rate: 1.3 });
+        a.crowdRoar(0.6);
+        break;
       case 'TWIST_SHOELACE':
       case 'TWIST_STUBBORN':
         a.play('scream', { pos, minGain: 0.4, gain: 0.6, rate: 0.9 });
