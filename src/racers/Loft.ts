@@ -47,7 +47,8 @@ export function loft(points: LoftPoint[], segments = 28, sides = 16, closeStart 
       const a = (j / sides) * Math.PI * 2;
       // N/B 는 경로 기준 프레임이라 y/z 축에 딱 맞지 않을 수 있어 월드 up 기준으로 재정렬
       const T = frames.tangents[i];
-      const up = new THREE.Vector3(0, 1, 0);
+      // 경로가 거의 수직이면 up 과 평행해져 프레임이 무너지므로 기준축을 바꿈
+      const up = Math.abs(T.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
       const side = new THREE.Vector3().crossVectors(T, up).normalize();
       const vUp = new THREE.Vector3().crossVectors(side, T).normalize();
       void N;
@@ -88,6 +89,28 @@ export function loft(points: LoftPoint[], segments = 28, sides = 16, closeStart 
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
+  // 감김 방향 검사: 법선이 안쪽을 향하면 뒷면 컬링으로 구멍처럼 보이므로 인덱스를 뒤집는다
+  {
+    const nrm = geo.attributes.normal as THREE.BufferAttribute;
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const mid = Math.floor(segments / 2) * ring;
+    const center = curve.getPointAt(0.5);
+    let dot = 0;
+    for (let j = 0; j < sides; j++) {
+      const k = mid + j;
+      dot += (pos.getX(k) - center.x) * nrm.getX(k) + (pos.getY(k) - center.y) * nrm.getY(k) + (pos.getZ(k) - center.z) * nrm.getZ(k);
+    }
+    if (dot < 0) {
+      const idx = geo.getIndex()!;
+      for (let i = 0; i < idx.count; i += 3) {
+        const a = idx.getX(i + 1);
+        idx.setX(i + 1, idx.getX(i + 2));
+        idx.setX(i + 2, a);
+      }
+      idx.needsUpdate = true;
+      geo.computeVertexNormals();
+    }
+  }
   return geo;
 }
 
