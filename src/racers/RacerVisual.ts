@@ -330,8 +330,8 @@ export abstract class PlaceholderVisual implements RacerVisual {
   protected worldForward = new THREE.Vector3(1, 0, 0);
   protected stumble = 0;
   protected seed = Math.random() * 100;
-  protected legAmp = 0.62;
-  protected kneeFold = 0.9;
+  protected legAmp = 0.72;
+  protected kneeFold = 1.05;
   /** 목/머리 끄덕임 콜백용 — 서브클래스가 neck 을 두면 갤럽에 맞춰 흔든다 */
   protected neckBob: THREE.Object3D | null = null;
   protected neckBase = 0;
@@ -392,7 +392,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
     return [0.45, 0.58, 0.0, 0.12, 0.45, 0.58, 0.0, 0.12];
   }
   protected gaitAmps(): number[] {
-    return [1.0, 1.0, 0.85, 0.85, 1.0, 1.0, 0.85, 0.85];
+    return [1.0, 1.0, 0.95, 0.95, 1.0, 1.0, 0.95, 0.95];
   }
 
   /**
@@ -415,13 +415,16 @@ export abstract class PlaceholderVisual implements RacerVisual {
       for (let k = 0; k <= N; k++) {
         const t = k / N;
         times.push(t);
-        const a = Math.PI * 2 * (t - ph);
-        // 앞으로 뻗음(+) ↔ 뒤로 참(-). 뒤로 찰 때 살짝 빠르게 (비대칭)
+        // 실제 갤럽: 지면을 딛는 구간(stance)은 길고 느리게 뒤로, 공중 스윙은 짧고 빠르게 앞으로
+        const u = (t - ph + 10) % 1;
+        const warped = u < 0.42 ? (u / 0.42) * 0.5 : 0.5 + ((u - 0.42) / 0.58) * 0.5;
+        const a = Math.PI * 2 * warped;
         const pos = Math.cos(a);
-        upper.push(amp * (pos >= 0 ? pos : pos * 0.9));
-        // 앞으로 나가는 동안(속도>0) 무릎을 접음
+        upper.push(amp * (pos >= 0 ? pos * 1.05 : pos * 0.85));
+        // 스윙 구간에서 무릎(앞다리)·비절(뒷다리)이 크게 접혔다가 착지 직전에 펴짐
         const vel = -Math.sin(a);
-        lower.push(-Math.max(0, vel) * this.kneeFold - 0.08);
+        const swing = Math.max(0, vel);
+        lower.push(-Math.pow(swing, 0.7) * this.kneeFold - 0.06);
       }
       tracks.push(new THREE.NumberKeyframeTrack(`${leg.name}.rotation[z]`, times, upper));
       tracks.push(new THREE.NumberKeyframeTrack(`${leg.name}_lower.rotation[z]`, times, lower));
@@ -518,13 +521,13 @@ export abstract class PlaceholderVisual implements RacerVisual {
     const gait = this.wheeled ? 0 : 1;
     // 뒷다리가 차고(ph≈0.1) 공중(ph≈0.3) → 앞다리 착지(ph≈0.5): 바운스 1회/보폭
     const air = Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.05))) * gait;
-    const bounce = air * this.bounceAmp * (0.5 + animSpeed * 0.7);
+    const bounce = air * this.bounceAmp * (0.5 + animSpeed * 0.9);
     const jitter = (Math.sin(time * 13.1 + this.seed) * 0.5 + Math.sin(time * 7.3 + this.seed * 2)) * 0.01 * animSpeed * gait;
     this.body.position.set(0, this.baseY + bounce + jitter, 0);
     const lean = -ctx.cornerWeight * Math.atan((ctx.speed * ctx.speed) / (60 * 9.8)) * 1.25;
     const roll = lean + Math.sin(time * 9 + this.seed) * 0.02 * animSpeed * gait + ctx.bump * ctx.bumpDir * 0.35 * Math.sin(ctx.bump * 20);
     // 차고 나갈 때 코가 들리고, 앞다리 착지 때 코가 내려감
-    const gallopPitch = Math.cos(Math.PI * 2 * (ph - 0.15)) * 0.07 * (0.3 + animSpeed) * gait;
+    const gallopPitch = Math.cos(Math.PI * 2 * (ph - 0.15)) * 0.085 * (0.3 + animSpeed) * gait;
     const pitch = gallopPitch - ctx.accel * 0.012 - this.stumble * 0.6;
     this.body.rotation.set(roll, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed * gait, pitch);
     if (this.neckBob) this.neckBob.rotation.z = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.12 * (0.3 + animSpeed);

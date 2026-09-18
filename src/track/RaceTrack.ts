@@ -43,7 +43,7 @@ export class RaceTrack {
   private clouds: THREE.Group[] = [];
   sky!: Sky;
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
-  static readonly SUN_DIR = new THREE.Vector3(0.55, 0.62, 0.42).normalize();
+  static readonly SUN_DIR = new THREE.Vector3(0.45, 0.9, 0.35).normalize();
 
   private tmpFrame: TrackFrame = {
     pos: new THREE.Vector3(),
@@ -330,20 +330,21 @@ export class RaceTrack {
 
     // 결승 게이트(현수막)
     const postMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.95, metalness: 0 });
-    for (const side of [-1, 1]) {
+    // 안쪽 기둥은 결승 사이드 카메라 뒤로 빼서 시야를 가리지 않게 (카메라: lat -halfW-11)
+    for (const lat of [-(this.width / 2 + 14), this.width / 2 + 1.2]) {
       const p = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 7, 8), postMat);
-      p.position.copy(f.pos).addScaledVector(f.right, side * (this.width / 2 + 1.2));
+      p.position.copy(f.pos).addScaledVector(f.right, lat);
       p.position.y = 3.5;
       this.group.add(p);
     }
     const banner = new THREE.Mesh(
-      new THREE.PlaneGeometry(this.width + 2.4, 1.6),
+      new THREE.PlaneGeometry(this.width + 15.2, 1.6),
       new THREE.MeshBasicMaterial({
         map: this.makeTextTexture('GOAL  결승선  GOAL', 1024, 128, '#d81e1e', '#ffffff', 'bold 80px sans-serif'),
         side: THREE.DoubleSide,
       }),
     );
-    banner.position.copy(f.pos);
+    banner.position.copy(f.pos).addScaledVector(f.right, -6.4);
     banner.position.y = 6.2;
     banner.rotation.y = Math.atan2(f.tan.x, f.tan.z);
     this.group.add(banner);
@@ -654,6 +655,8 @@ export class RaceTrack {
     pond.userData.noShadow = true;
     this.group.add(pond);
     const inPond = (x: number, z: number) => Math.hypot(x + 40, (z + 8) / 1.6) < 24;
+    const finishCam = this.getPoint(this.finishS + 1.5, -this.width / 2 - 11);
+    const nearFinishCam = (x: number, z: number) => Math.hypot(x - finishCam.x, z - finishCam.z) < 18;
     const nearScreen = (x: number, z: number) => Math.abs(x - (this.finishS - this.straight / 2 - 30)) < 22 && z > 0 && z < 24;
     // 인필드 나무
     const trees = new THREE.Group();
@@ -681,18 +684,18 @@ export class RaceTrack {
 
     // 바람에 흔들리는 잔디: 인필드 + 트랙 바깥 띠
     const halfW = this.width / 2;
-    const infield = makeGrassField(14000, () => {
+    const infield = makeGrassField(9000, () => {
       const x = (Math.random() - 0.5) * (this.straight + 2 * this.radius - 2 * halfW - 8);
       const z = (Math.random() - 0.5) * (2 * this.radius - 2 * halfW - 8);
       // 타원 내부 판정 (스타디움형)
       const cx = THREE.MathUtils.clamp(x, -this.straight / 2, this.straight / 2);
       const rIn = this.radius - halfW - 3;
       if (Math.hypot(x - cx, z) > rIn) return null;
-      if (inPond(x, z) || nearScreen(x, z)) return null;
+      if (inPond(x, z) || nearScreen(x, z) || nearFinishCam(x, z)) return null;
       return [x, z];
     });
     this.group.add(infield);
-    const outer = makeGrassField(16000, () => {
+    const outer = makeGrassField(11000, () => {
       const s = Math.random() * this.length;
       const f = this.getFrame(s);
       if (f.pos.z > 20 && Math.abs(f.pos.x) < this.straight / 2 + 30) return null; // 관중석 앞 제외
@@ -707,10 +710,10 @@ export class RaceTrack {
     const sky = new Sky();
     sky.scale.setScalar(1800);
     const u = sky.material.uniforms;
-    u.turbidity.value = 3.2;
-    u.rayleigh.value = 2.4;
-    u.mieCoefficient.value = 0.003;
-    u.mieDirectionalG.value = 0.8;
+    u.turbidity.value = 2.2;
+    u.rayleigh.value = 1.1;
+    u.mieCoefficient.value = 0.0025;
+    u.mieDirectionalG.value = 0.75;
     u.sunPosition.value.copy(RaceTrack.SUN_DIR);
     sky.userData.noShadow = true;
     this.sky = sky;

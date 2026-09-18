@@ -38,7 +38,7 @@ export class EffectsManager {
     this.ao.configuration.intensity = 2.2;
     this.ao.configuration.halfRes = true;
     this.ao.configuration.gammaCorrection = false;
-    this.ao.setQualityMode('Low');
+    this.ao.setQualityMode('Performance');
     this.composer.addPass(this.ao);
     // 컬러 그레이딩 (거리 안개는 재질 셰이더의 HSV 안개가 담당)
     this.grade = makeGradePass();

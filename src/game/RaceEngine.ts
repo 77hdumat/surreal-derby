@@ -751,6 +751,9 @@ export class RaceEngine {
     if (toFinish > 40 || toFinish < 0) return 0;
     const second = this.ranking[1] ? this.byId(this.ranking[1].id)! : null;
     if (!second) return 0;
+    // 시나리오 역전 순간: 운명 보정 선수가 선두를 잡고 결승선을 향할 때 슬로모션
+    const destinyLead = this.racers.find((r) => r.state.destiny && r.state.state !== 'FINISHED');
+    if (destinyLead && toFinish < 32) return 0.85;
     const gap = lead.state.distance + lead.state.finishBonus - (second.state.distance + second.state.finishBonus);
     if (gap > 4.5) return 0;
     return 1 - gap / 4.5;

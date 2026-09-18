@@ -47,6 +47,7 @@ export class CameraManager {
   private lagK = 6;
   private raceTime = 0;
   private finishLocked = false;
+  private finishPending = false;
   private finishSideTimer = 0;
   private lastCamPos = new THREE.Vector3();
   private tmp = new THREE.Vector3();
@@ -85,6 +86,7 @@ export class CameraManager {
   /** 레이스 리셋 */
   reset(): void {
     this.finishLocked = false;
+    this.finishPending = false;
     this.eventTarget = null;
     this.eventTimer = 0;
     this.trauma = 0;
@@ -123,6 +125,9 @@ export class CameraManager {
       case 'EVENT_CAMERA':
         this.lagK = 7;
         break;
+      case 'FINISH_CAMERA':
+        this.lagK = 9;
+        break;
       default:
         this.lagK = 4;
     }
@@ -142,9 +147,8 @@ export class CameraManager {
       this.setMode('LEADER_CAMERA', true);
     }
     if (ev.event === 'FINAL_STRETCH') {
-      this.finishLocked = true;
-      this.setMode('FINISH_CAMERA', true);
-      this.modeDuration = 999;
+      // 결승 카메라는 선두가 결승선 95m 안에 들어올 때 잠금 (그 전까지 역전 장면은 일반 카메라로)
+      this.finishPending = true;
     }
     if (!ev.major) return;
     this.eventTarget = ev.racerId;
@@ -273,18 +277,15 @@ export class CameraManager {
         P(s + 0.5, lat, h, this.desiredLook);
         break;
       }
-      case 'FINISH_CAMERA': {
-        const fs = t.finishS;
-        P(fs + 24, half + 2.5, 2.8, this.desiredPos);
-        const lookS = THREE.MathUtils.clamp(pack.leaderS, fs - 120, fs + 10);
-        P(lookS, pack.leaderLat * 0.4, 1.3, this.desiredLook);
-        break;
-      }
+      case 'FINISH_CAMERA':
       case 'FINISH_SIDE_CAMERA': {
+        // 올림픽 결승선 사이드 카메라: 결승선 옆(인필드)에 고정, 다가오는 선두를 팬으로 따라가다
+        // 결승선 근처에서는 라인을 옆에서 보며 말들이 화면을 가로질러 지나가게 한다.
         const fs = t.finishS;
-        P(fs - 2, -half - 8, 2.6, this.desiredPos);
-        const lookS = THREE.MathUtils.clamp(pack.leaderS, fs - 30, fs + 60);
-        P(lookS, pack.leaderLat, 1.3, this.desiredLook);
+        P(fs + 1.5, -half - 11, 2.4, this.desiredPos);
+        const approach = THREE.MathUtils.clamp((fs - pack.leaderS) / 90, 0, 1); // 1 = 멀리, 0 = 결승선
+        const lookS = fs - approach * 70 - 2 + (1 - approach) * 1.5;
+        P(lookS, THREE.MathUtils.lerp(pack.leaderLat, 0, 0.5), 1.35, this.desiredLook);
         break;
       }
       case 'RESULT_CAMERA': {
@@ -311,24 +312,28 @@ export class CameraManager {
   update(dt: number, raceTime: number, racing: boolean): void {
     this.raceTime = raceTime;
     this.modeTimer += dt;
+    if (racing && this.finishPending && !this.finishLocked && this.engine.ranking.length) {
+      const lead = this.engine.ranking.find((e) => !e.finished) ?? this.engine.ranking[0];
+      if (lead.distance >= this.track.raceDistance - 95 && this.mode !== 'EVENT_CAMERA') {
+        this.finishLocked = true;
+        this.setMode('FINISH_CAMERA', true);
+        this.modeDuration = 999;
+      }
+    }
     if (racing) {
       if (this.mode === 'EVENT_CAMERA') {
         this.eventTimer -= dt;
         if (this.eventTimer <= 0) {
           this.eventTarget = null;
           if (this.finishLocked) {
-            this.setMode(this.finishSideTimer > 1.4 ? 'FINISH_SIDE_CAMERA' : 'FINISH_CAMERA', true);
+            this.setMode('FINISH_CAMERA', true);
             this.modeDuration = 999;
           } else this.autoSwitch();
         }
       } else if (this.modeTimer > this.modeDuration && this.mode !== 'START_CAMERA') {
         this.autoSwitch();
       }
-      if (this.finishSideTimer > 0) {
-        this.finishSideTimer += dt;
-        if (this.finishSideTimer > 1.4 && this.mode === 'FINISH_CAMERA') this.setMode('FINISH_SIDE_CAMERA', true);
-        if (this.finishSideTimer > 4.5 && this.finishSideTimer < 4.6 && this.mode === 'FINISH_SIDE_CAMERA') this.setMode('FINISH_CAMERA', true);
-      }
+      if (this.finishSideTimer > 0) this.finishSideTimer += dt;
     }
     this.computeDesired(dt);
 
@@ -356,7 +361,7 @@ export class CameraManager {
     this.boostNearby = THREE.MathUtils.lerp(this.boostNearby, near, Math.min(1, dt * 4));
     this.fovBoost = Math.max(0, this.fovBoost - dt * 0.35);
     const eventZoom = this.mode === 'EVENT_CAMERA' ? -8 * THREE.MathUtils.clamp(this.eventTimer / 3.2, 0, 1) : 0;
-    const aerial = this.mode === 'AERIAL_CAMERA' ? 8 : 0;
+    const aerial = this.mode === 'AERIAL_CAMERA' ? 8 : this.mode === 'FINISH_CAMERA' ? 10 : 0;
     this.fovTarget = BASE_FOV + this.boostNearby * 22 + this.fovBoost * 10 + eventZoom + aerial;
     this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, this.fovTarget, Math.min(1, dt * 5));
     this.camera.updateProjectionMatrix();

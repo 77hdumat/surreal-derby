@@ -55,7 +55,7 @@ export class Game {
 
   constructor(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -68,11 +68,11 @@ export class Game {
     installHsvFog();
     this.scene.fog = new THREE.Fog(new THREE.Color(0.64, 0.36, 0), 90, 560);
     // 조명: 하늘(물리 Sky)에서 뽑은 환경맵 + 태양 + 약한 반구광
-    this.scene.add(new THREE.HemisphereLight(0x9fbfe0, 0x8c8776, 0.45));
-    this.sun = new THREE.DirectionalLight(0xfff0d8, 2.8);
+    this.scene.add(new THREE.HemisphereLight(0xbcd7f5, 0x8c8776, 0.5));
+    this.sun = new THREE.DirectionalLight(0xfff6e8, 2.6);
     this.sun.position.copy(this.sunOffset);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(3072, 3072);
+    this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.camera.near = 10;
     this.sun.shadow.camera.far = 400;
     const sc = this.sun.shadow.camera;

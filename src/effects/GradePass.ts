@@ -8,7 +8,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 export const GradeShader = {
   uniforms: {
     tDiffuse: { value: null as THREE.Texture | null },
-    uOverlay: { value: new THREE.Color('#fff4e2') },
+    uOverlay: { value: new THREE.Color('#fff9ee') },
     uOverlayAmount: { value: 0.12 },
     uVibrance: { value: 0.22 },
     uContrast: { value: 0.2 },
