@@ -185,7 +185,6 @@ class CostumeVisual extends PlaceholderVisual {
     skirt.position.set(0, 1.15, 0);
     skirt.scale.set(1, 0.35, 1);
     this.shell.add(skirt);
-    addSaddle(this.shell, -0.2, 2.0, 1.0, d.clothColor);
     const cloth = makeNumberCloths(d.number, d.clothColor, 0.6, 0.58);
     cloth.position.set(-0.25, 1.45, 0);
     this.shell.add(cloth);
@@ -250,8 +249,7 @@ class CostumeVisual extends PlaceholderVisual {
       shoe.position.set(0.08, -0.46, 0);
       knee.add(shoe);
     });
-    this.addRider(new THREE.Vector3(-0.2, 2.15, 0), 0.95);
-    this.attachReins(this.parts.head, new THREE.Vector3(0.66, -0.05, 0.18), 0, this.shell);
+    // 말탈 브라더스는 기수 없음 — 탈 속 두 사람이 곧 선수. 안장 대신 번호천만.
     this.neckBase = -0.85;
     this.gaitBounce = false; // 말 갤럽이 아니라 사람 두 명의 발걸음으로 흔들림
     this.bounceAmp = 0;
