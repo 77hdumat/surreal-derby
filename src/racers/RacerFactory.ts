@@ -758,57 +758,149 @@ class CowVisual extends PlaceholderVisual {
     this.nostrils = [];
     const d = this.def;
     const hide = toon(0xffffff, { map: this.spotTexture() });
-    const parts = buildHorse(this.body, { hide, mane: toon(0x1a1a1a), bodyLen: 1.3, bodyR: 0.55, neckLen: 0.35, headScale: 1.15, ears: false });
-    parts.neck.rotation.z = -0.35; // 소는 목이 낮음
-    parts.head.rotation.z = 0.5;
-    this.head = parts.head;
-    this.neckBob = parts.neck;
-    this.neckBase = -0.35;
-    // 소 특징: 뿔, 분홍 코, 귀, 방울, 젖
     const pink = toon(0xf0a6a6);
-    const muzzle = sphere(0.22, pink, 1.1, 0.8, 1.1);
-    muzzle.position.set(0.8, -0.06, 0);
-    this.head.add(muzzle);
-    for (const s of [-1, 1]) {
-      const horn = capsule(0.05, 0.4, toon(0xeae2c8));
-      horn.position.set(-0.05, 0.32, s * 0.3);
-      horn.rotation.x = s * 1.1;
-      horn.rotation.z = 0.3;
-      this.head.add(horn);
-      const ear = box(0.1, 0.16, 0.34, hide);
-      ear.position.set(-0.05, 0.12, s * 0.42);
-      ear.rotation.x = s * 0.3;
-      this.head.add(ear);
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), new THREE.MeshBasicMaterial({ color: 0x111111 }));
-      eye.position.set(0.3, 0.13, s * 0.25);
-      this.head.add(eye);
+    const y = 1.35;
+    // 소 몸통: 등이 평평하고 넓적하며 배가 깊게 처진 각진 통 — 말보다 낮고 굵다
+    const barrel = new THREE.Mesh(
+      loft([
+        { p: [-1.35, y + 0.15, 0], r: 0.42, s: [1.15, 0.95] },
+        { p: [-0.9, y + 0.08, 0], r: 0.62, s: [1.2, 1.05] },
+        { p: [-0.2, y - 0.05, 0], r: 0.66, s: [1.22, 1.08] },
+        { p: [0.55, y, 0], r: 0.62, s: [1.18, 1.02] },
+        { p: [1.05, y + 0.05, 0], r: 0.55, s: [1.1, 0.95] },
+        { p: [1.35, y + 0.05, 0], r: 0.38, s: [1.0, 0.85] },
+      ]),
+      hide,
+    );
+    barrel.castShadow = true;
+    this.body.add(barrel);
+    // 어깨 위 융기(혹)와 골반 뼈가 살짝 튀어나온 느낌
+    const hump = sphere(0.36, hide, 1.2, 0.55, 1.0);
+    hump.position.set(0.85, y + 0.5, 0);
+    this.body.add(hump);
+    // 목: 짧고 굵으며 아래로 처짐, 턱밑 늘어진 살(듀랩)
+    const neck = new THREE.Group();
+    neck.position.set(1.35, y + 0.15, 0);
+    neck.rotation.z = -1.25;
+    const neckM = new THREE.Mesh(
+      loft([
+        { p: [0, -0.1, 0], r: 0.38, s: [1.05, 1.15] },
+        { p: [0.02, 0.25, 0], r: 0.33, s: [1.0, 1.15] },
+        { p: [0.04, 0.5, 0], r: 0.29, s: [0.95, 1.05] },
+      ]),
+      hide,
+    );
+    neckM.castShadow = true;
+    neck.add(neckM);
+    const dewlap = new THREE.Mesh(
+      loft([
+        { p: [0.2, -0.15, 0], r: 0.14, s: [0.6, 1] },
+        { p: [0.3, 0.2, 0], r: 0.16, s: [0.6, 1] },
+        { p: [0.35, 0.5, 0], r: 0.1, s: [0.6, 1] },
+      ]),
+      hide,
+    );
+    dewlap.castShadow = true;
+    neck.add(dewlap);
+    // 머리: 넓적한 이마, 큰 주둥이, 분홍 코, 큰 처진 귀, 뿔
+    const head = new THREE.Group();
+    head.position.set(0.05, 0.55, 0);
+    head.rotation.z = 1.05;
+    const skull = new THREE.Mesh(
+      loft([
+        { p: [-0.1, 0.05, 0], r: 0.27, s: [1.1, 1.0] },
+        { p: [0.25, 0.05, 0], r: 0.26, s: [1.1, 0.95] },
+        { p: [0.55, 0.0, 0], r: 0.22, s: [1.05, 0.9] },
+        { p: [0.8, -0.03, 0], r: 0.2, s: [1.05, 0.85] },
+      ]),
+      hide,
+    );
+    skull.castShadow = true;
+    head.add(skull);
+    const muzzle = sphere(0.22, pink, 1.05, 0.75, 1.15);
+    muzzle.position.set(0.9, -0.06, 0);
+    head.add(muzzle);
+    for (const sgn of [-1, 1]) {
+      const horn = new THREE.Mesh(
+        loft([
+          { p: [0, 0, 0], r: 0.06 },
+          { p: [0.05, 0.22, 0], r: 0.05 },
+          { p: [0.15, 0.4, 0], r: 0.02 },
+        ]),
+        toon(0xe8dcc0),
+      );
+      horn.position.set(-0.05, 0.2, sgn * 0.22);
+      horn.rotation.x = sgn * 0.9;
+      horn.castShadow = true;
+      head.add(horn);
+      const ear = new THREE.Mesh(
+        loft([
+          { p: [0, 0, 0], r: 0.06, s: [1, 0.5] },
+          { p: [0, 0.02, sgn * 0.18], r: 0.09, s: [1, 0.45] },
+          { p: [0, -0.04, sgn * 0.34], r: 0.05, s: [1, 0.4] },
+        ]),
+        hide,
+      );
+      ear.position.set(-0.02, 0.08, sgn * 0.24);
+      ear.castShadow = true;
+      head.add(ear);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+      eye.position.set(0.3, 0.12, sgn * 0.27);
+      head.add(eye);
       this.eyes.push(eye);
-      this.nostrils.push(new THREE.Vector3(0.95, -0.05, s * 0.1));
+      this.nostrils.push(new THREE.Vector3(1.05, -0.06, sgn * 0.09));
     }
+    neck.add(head);
+    this.body.add(neck);
+    this.head = head;
+    this.neckBob = neck;
+    this.neckBase = -1.25;
+    // 방울 + 목걸이
     this.bell = sphere(0.1, toon(0xf5c400));
-    this.bell.position.set(0.95, 1.55, 0);
+    this.bell.position.set(1.55, 1.05, 0);
     this.body.add(this.bell);
-    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 6, 16), toon(0x8a1a1a));
-    strap.position.set(0.95, 1.8, 0);
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.03, 6, 16), toon(0x8a1a1a));
+    strap.position.set(1.5, 1.35, 0);
     strap.rotation.y = Math.PI / 2;
     this.body.add(strap);
-    const udder = sphere(0.28, pink, 1.1, 0.8, 1);
-    udder.position.set(-0.55, 0.95, 0);
+    // 젖통 + 젖꼭지
+    const udder = sphere(0.3, pink, 1.15, 0.8, 1.05);
+    udder.position.set(-0.55, 0.85, 0);
     this.body.add(udder);
-    addSaddle(this.body, -0.2, 1.98, 1.0, d.clothColor);
-    const cloth = makeNumberCloths(d.number, d.clothColor, 0.62, 0.58);
-    cloth.position.set(-0.25, 1.4, 0);
+    for (const [ox, oz] of [
+      [-0.1, -0.1],
+      [-0.1, 0.1],
+      [0.12, -0.1],
+      [0.12, 0.1],
+    ]) {
+      const teat = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.12, 6), pink);
+      teat.position.set(-0.55 + ox, 0.62, oz);
+      this.body.add(teat);
+    }
+    // 꼬리: 가늘고 끝에 털 뭉치
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.9, 6), hide);
+    tail.position.set(-1.45, y - 0.2, 0);
+    tail.rotation.z = -0.15;
+    this.body.add(tail);
+    const tuft = sphere(0.08, toon(0x1a1a1a), 0.8, 1.3, 0.8);
+    tuft.position.set(-1.5, y - 0.7, 0);
+    this.body.add(tuft);
+    addSaddle(this.body, -0.15, y + 0.62, 1.15, d.clothColor);
+    const cloth = makeNumberCloths(d.number, d.clothColor, 0.62, 0.72);
+    cloth.position.set(-0.2, y - 0.05, 0);
     this.body.add(cloth);
+    // 다리: 짧고 굵음
     this.addLegs([
-      { x: 0.85, z: -0.35, w: 0.2, len: 1.16, mat: hide, y: 1.16 },
-      { x: 0.85, z: 0.35, w: 0.2, len: 1.16, mat: hide, y: 1.16 },
-      { x: -0.85, z: -0.35, w: 0.2, len: 1.16, mat: hide, y: 1.16 },
-      { x: -0.85, z: 0.35, w: 0.2, len: 1.16, mat: hide, y: 1.16 },
+      { x: 0.85, z: -0.36, w: 0.22, len: 1.0, mat: hide, y: 1.0 },
+      { x: 0.85, z: 0.36, w: 0.22, len: 1.0, mat: hide, y: 1.0 },
+      { x: -0.85, z: -0.36, w: 0.22, len: 1.0, mat: hide, y: 1.0 },
+      { x: -0.85, z: 0.36, w: 0.22, len: 1.0, mat: hide, y: 1.0 },
     ]);
-    this.addRider(new THREE.Vector3(-0.2, 2.2, 0));
-    this.attachReins(this.head, new THREE.Vector3(0.7, -0.05, 0.2));
-    this.bounceAmp = 0.12;
+    this.addRider(new THREE.Vector3(-0.15, y + 0.8, 0));
+    this.attachReins(this.head, new THREE.Vector3(0.85, -0.05, 0.2));
+    this.bounceAmp = 0.1;
     this.wobbleFreq = 1.0;
+    this.legAmp = 0.55;
     this.height = 2.4;
   }
 
@@ -817,10 +909,10 @@ class CowVisual extends PlaceholderVisual {
     this.rage = damp(this.rage, ctx.state === 'RAGING' ? 1 : 0, 5, dt);
     const r = this.rage;
     this.head.rotation.y = Math.sin(time * 26) * 0.45 * r + Math.sin(time * 3 + this.seed) * 0.06 * speedNorm;
-    this.head.rotation.z = 0.5 - r * 0.55 + Math.sin(time * 7) * 0.05 * speedNorm;
+    this.head.rotation.z = 1.05 - r * 0.55 + Math.sin(time * 7) * 0.05 * speedNorm;
     const eyeColor = r > 0.5 ? 0xff2020 : 0x111111;
     this.eyes.forEach((e) => (e.material as THREE.MeshBasicMaterial).color.setHex(eyeColor));
-    this.bell.position.x = 0.95 + Math.sin(time * 12) * 0.05 * speedNorm;
+    this.bell.position.x = 1.55 + Math.sin(time * 12) * 0.05 * speedNorm;
     this.bounceAmp = 0.12 + r * 0.14;
   }
 }
