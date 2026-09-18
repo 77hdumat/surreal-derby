@@ -160,35 +160,132 @@ class CostumeVisual extends PlaceholderVisual {
   private declare arms: THREE.Group[];
   private declare parts: HorseParts;
 
+  /** 꼬질꼬질한 골판지 텍스처: 골 무늬 + 얼룩 + 테이프 + 낙서 */
+  private cardboardTex(label: string): THREE.CanvasTexture {
+    return canvasTex(256, 256, (ctx) => {
+      ctx.fillStyle = '#b8894f';
+      ctx.fillRect(0, 0, 256, 256);
+      let seed = 5;
+      const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+      // 골판지 골
+      ctx.strokeStyle = 'rgba(80,50,20,0.28)';
+      ctx.lineWidth = 2;
+      for (let y = 2; y < 256; y += 6) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(256, y);
+        ctx.stroke();
+      }
+      // 얼룩·때
+      for (let i = 0; i < 26; i++) {
+        ctx.fillStyle = `rgba(${40 + rnd() * 40},${25 + rnd() * 25},${10},${0.08 + rnd() * 0.18})`;
+        ctx.beginPath();
+        ctx.ellipse(rnd() * 256, rnd() * 256, 8 + rnd() * 30, 6 + rnd() * 18, rnd() * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 눌린 자국
+      ctx.strokeStyle = 'rgba(60,35,10,0.5)';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(rnd() * 256, rnd() * 256);
+        ctx.lineTo(rnd() * 256, rnd() * 256);
+        ctx.stroke();
+      }
+      // 박스테이프
+      ctx.fillStyle = 'rgba(214,196,150,0.85)';
+      ctx.fillRect(96, 0, 34, 256);
+      ctx.fillRect(0, 150, 256, 26);
+      // 낙서
+      ctx.fillStyle = '#2b1a0a';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, 128, 70);
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillText('↑ 이쪽이 위 ↑', 128, 225);
+    });
+  }
+
   protected buildBody(): void {
     this.heads = [];
     const d = this.def;
-    // 천으로 만든 탈: 살짝 광택 없는 플러시 느낌
-    const plush = toon(d.bodyColor);
-    (plush as THREE.MeshStandardMaterial).roughness = 0.95;
+    // 꼬질꼬질한 골판지 박스로 만든 말: 각진 상자만으로 조립
+    const mkCard = (label: string) => {
+      const m = new THREE.MeshStandardMaterial({ map: this.cardboardTex(label), roughness: 1, metalness: 0 });
+      return m;
+    };
+    const cardBody = mkCard('취급주의');
+    const cardHead = mkCard('말');
+    const cardPlain = mkCard('');
+    const sharp = (w: number, h: number, dp: number, mat: THREE.Material) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, dp), mat);
+      m.castShadow = true;
+      return m;
+    };
     this.shell = new THREE.Group();
-    this.parts = buildHorse(this.shell, { hide: plush, mane: toon(0x2a170c), bodyLen: 1.4, bodyR: 0.55, neckLen: 0.75, headScale: 1.1 });
-    // 탈 티: 봉제선, 왕눈이 눈, 늘어진 귀
-    const seam = box(2.6, 0.04, 0.05, toon(0x3a2416));
-    seam.position.set(0, 2.0, 0);
-    this.shell.add(seam);
-    for (const s of [-1, 1]) {
-      const eyeWhite = sphere(0.1, toon(0xffffff));
-      eyeWhite.position.set(0.3, 0.16, s * 0.23);
-      this.parts.head.add(eyeWhite);
-      const pupil = sphere(0.045, toon(0x111111));
-      pupil.position.set(0.38, 0.17, s * 0.25);
-      this.parts.head.add(pupil);
+    // 몸통 상자 (살짝 찌그러짐)
+    const torso = sharp(2.5, 1.15, 1.0, cardBody);
+    torso.position.set(0, 1.5, 0);
+    torso.rotation.z = 0.03;
+    this.shell.add(torso);
+    // 열린 뚜껑 날개 (덜 붙은 덮개)
+    for (const sgn of [-1, 1]) {
+      const flap = sharp(1.1, 0.04, 0.5, cardPlain);
+      flap.position.set(sgn * 0.6, 2.1, sgn * 0.25);
+      flap.rotation.x = sgn * 0.5;
+      this.shell.add(flap);
     }
-    // 아래쪽이 열려있는 탈 — 안에서 두 사람의 다리(바지)가 나옴
-    const skirt = capsule(0.58, 1.3, plush, 'x');
-    skirt.position.set(0, 1.15, 0);
-    skirt.scale.set(1, 0.35, 1);
+    // 목 상자 (작은 상자를 비스듬히)
+    const neck = new THREE.Group();
+    neck.position.set(1.1, 1.85, 0);
+    neck.rotation.z = -0.75;
+    const neckBox = sharp(0.6, 1.0, 0.55, cardPlain);
+    neckBox.position.y = 0.45;
+    neck.add(neckBox);
+    // 머리 상자 (작은 택배 상자) + 종이 귀 + 그린 눈
+    const head = new THREE.Group();
+    head.position.set(0.05, 0.95, 0);
+    head.rotation.z = 0.95;
+    const headBox = sharp(1.0, 0.55, 0.6, cardHead);
+    headBox.position.x = 0.35;
+    head.add(headBox);
+    const snout = sharp(0.35, 0.4, 0.45, cardPlain);
+    snout.position.set(0.95, -0.05, 0);
+    head.add(snout);
+    for (const sgn of [-1, 1]) {
+      const ear = sharp(0.05, 0.4, 0.18, cardPlain);
+      ear.position.set(0.05, 0.45, sgn * 0.22);
+      ear.rotation.x = sgn * 0.3;
+      head.add(ear);
+      const eye = new THREE.Mesh(new THREE.CircleGeometry(0.09, 12), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      eye.position.set(0.55, 0.12, sgn * 0.301);
+      eye.rotation.y = sgn > 0 ? 0 : Math.PI;
+      eye.userData.noOutline = true;
+      head.add(eye);
+      const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.045, 10), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+      pupil.position.set(0.58, 0.1, sgn * 0.302);
+      pupil.rotation.y = sgn > 0 ? 0 : Math.PI;
+      pupil.userData.noOutline = true;
+      head.add(pupil);
+    }
+    neck.add(head);
+    this.shell.add(neck);
+    // 꼬리: 찢은 종이 끈
+    const tail = sharp(0.05, 0.7, 0.12, cardPlain);
+    tail.position.set(-1.35, 1.5, 0);
+    tail.rotation.z = 0.5;
+    this.shell.add(tail);
+    // 아래 열린 상자 테두리 (사람 다리가 나오는 곳)
+    const skirt = sharp(2.3, 0.25, 1.0, cardPlain);
+    skirt.position.set(0, 0.98, 0);
     this.shell.add(skirt);
-    const cloth = makeNumberCloths(d.number, d.clothColor, 0.6, 0.58);
-    cloth.position.set(-0.25, 1.45, 0);
+    // 부품 참조 (기존 코드 호환: head/neck 만 실제 사용)
+    this.parts = { chest: torso, rump: torso, barrel: torso, tail, neck, head };
+    const cloth = makeNumberCloths(d.number, d.clothColor, 0.6, 0.51);
+    cloth.position.set(-0.4, 1.45, 0);
     this.shell.add(cloth);
-    // 안의 두 사람 머리 (붕괴 시 노출)
+    this.body.add(this.shell);
+    // 안의 두 사람 머리 (붕괴 시 상자 위로 튀어나옴)
     for (const x of [0.55, -0.6]) {
       const hg = new THREE.Group();
       hg.add(sphere(0.19, toon(0xf0caad)));
@@ -200,8 +297,7 @@ class CostumeVisual extends PlaceholderVisual {
       this.shell.add(hg);
       this.heads.push(hg);
     }
-    this.body.add(this.shell);
-    // 탈 속 두 사람의 상체 (탈을 들어올릴 때만 보임): 티셔츠 몸통 + 머리 + 위로 뻗은 팔
+    // 상자를 들어올릴 때 보이는 두 사람의 상체 + 팔
     this.persons = [];
     this.arms = [];
     [0.6, -0.65].forEach((x, i) => {
@@ -216,16 +312,16 @@ class CostumeVisual extends PlaceholderVisual {
       const hair = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(i === 0 ? 0x222222 : 0x6b3a1e));
       hair.position.y = 1.88;
       p.add(hair);
-      for (const s of [-1, 1]) {
+      for (const sgn of [-1, 1]) {
         const arm = new THREE.Group();
-        arm.position.set(0, 1.55, s * 0.27);
+        arm.position.set(0, 1.55, sgn * 0.27);
         const a = capsule(0.06, 0.5, toon(0xf0caad));
         a.position.y = 0.32;
         arm.add(a);
         const hand = sphere(0.075, toon(0xf0caad));
         hand.position.y = 0.66;
         arm.add(hand);
-        arm.rotation.x = s * 0.25;
+        arm.rotation.x = sgn * 0.25;
         p.add(arm);
         this.arms.push(arm);
       }
@@ -249,8 +345,8 @@ class CostumeVisual extends PlaceholderVisual {
       shoe.position.set(0.08, -0.46, 0);
       knee.add(shoe);
     });
-    // 말탈 브라더스는 기수 없음 — 탈 속 두 사람이 곧 선수. 안장 대신 번호천만.
-    this.neckBase = -0.85;
+    // 말탈 브라더스는 기수 없음 — 탈 속 두 사람이 곧 선수.
+    this.neckBase = -0.75;
     this.gaitBounce = false; // 말 갤럽이 아니라 사람 두 명의 발걸음으로 흔들림
     this.bounceAmp = 0;
     this.legAmp = 0.55;
@@ -307,7 +403,7 @@ class CostumeVisual extends PlaceholderVisual {
     this.shell.scale.set(1 + c * 0.1, 1 - c * 0.7 + Math.sin(Math.PI * 2 * step) * 0.012 * wob, 1 + c * 0.1);
     // 머리는 천이라 힘없이 뒤늦게 따라오며 까딱거림
     this.parts.head.rotation.z = 0.95 + Math.sin(Math.PI * 2 * step - 0.9) * 0.14 * wob + c * 0.8;
-    this.parts.neck.rotation.z = -0.85 + Math.sin(Math.PI * 2 * step - 1.2) * 0.06 * wob;
+    this.parts.neck.rotation.z = -0.75 + Math.sin(Math.PI * 2 * step - 1.2) * 0.06 * wob;
     // 쓰러지면 두 사람이 탈 아래 누운 모양: 다리는 바닥에 눕고 무릎은 펴짐
     this.legs.forEach((l, i) => {
       if (c > 0.05) {
