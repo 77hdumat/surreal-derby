@@ -124,6 +124,7 @@ function addSaddle(parent: THREE.Object3D, x: number, y: number, width: number, 
 // ================================================================ 1. 말탈 브라더스 (말 탈을 쓴 두 사람)
 class CostumeVisual extends PlaceholderVisual {
   private collapse = 0;
+  private carry = 0;
   private declare shell: THREE.Group;
   private declare heads: THREE.Group[];
   private declare parts: HorseParts;
@@ -198,7 +199,25 @@ class CostumeVisual extends PlaceholderVisual {
     const { time, speedNorm, dt } = ctx;
     const target = ctx.state === 'COLLAPSED' ? 1 : ctx.state === 'RECOVERING' ? 0.35 : 0;
     this.collapse = damp(this.collapse, target, ctx.state === 'COLLAPSED' ? 9 : 3, dt);
+    this.carry = damp(this.carry, ctx.state === 'CARRYING' ? 1 : 0, 6, dt);
     const c = this.collapse;
+    const k = this.carry;
+    if (k > 0.02) {
+      // 탈을 머리 위로 들고 뜀: 탈은 위로 올라가 기울고, 두 사람 머리 노출, 다리는 전력질주
+      this.shell.position.y = k * 1.1;
+      this.shell.rotation.z = k * 0.35;
+      this.shell.rotation.x = Math.sin(time * 14) * 0.12 * k;
+      this.shell.rotation.y = 0;
+      this.shell.scale.set(1, 1, 1);
+      this.heads.forEach((h, i) => {
+        h.visible = true;
+        h.position.y = 1.55 - k * 0.2 + Math.abs(Math.sin(time * 12 + i)) * 0.1;
+        h.rotation.y = 0;
+        h.scale.setScalar(1);
+      });
+      this.parts.head.rotation.z = 0.95 + k * 0.6;
+      return;
+    }
     const wob = speedNorm * (1 - c);
     // 탈 특유의 흐물거림
     this.shell.rotation.z = Math.sin(time * 9.5 + this.seed) * 0.08 * wob - c * 0.9;
@@ -299,7 +318,7 @@ class LongbodyVisual extends PlaceholderVisual {
   protected updateSpecial(ctx: VisualContext): void {
     const { time, dt, speedNorm } = ctx;
     this.ext = damp(this.ext, ctx.extension, 12, dt);
-    const L = this.ext * LB_MAX_EXT;
+    const L = this.ext * (ctx.extensionMax > 0 ? ctx.extensionMax : LB_MAX_EXT);
     // 앞부분이 앞으로 쭉, 중간 몸통이 늘어남
     this.front.position.x = LB_HALF + L;
     const midLen = LB_HALF * 2 + L;
@@ -424,9 +443,10 @@ class ElephantVisual extends PlaceholderVisual {
       // 늘어남: 각 마디를 길게, 수평(전방)으로 펴짐 / 물대포: 코를 위로 치켜듦
       seg.rotation.z = 0.28 + sway - c * (0.8 + i * 0.45) + g * (i === 0 ? 1.25 : 0.05) - sp * (i === 0 ? 1.4 : 0.35);
       seg.rotation.x = Math.sin(time * 3 + i) * 0.1 * speedNorm * (1 - g);
-      seg.scale.y = 1 + g * 3.2;
+      const trunkScale = ctx.extensionMax > 3 ? ctx.extensionMax / 2.4 : 3.2;
+      seg.scale.y = 1 + g * trunkScale;
       // 늘어난 마디 끝에 다음 마디가 붙도록 위치 보정
-      if (i > 0) seg.position.y = -0.58 * (1 + g * 3.2);
+      if (i > 0) seg.position.y = -0.58 * (1 + g * trunkScale);
     });
     this.ears.forEach((e, i) => {
       const s = i === 0 ? -1 : 1;
@@ -896,6 +916,10 @@ class GiraffeVisual extends PlaceholderVisual {
     const side = Math.sin(time * 2.7) * 0.2 * speedNorm;
     this.neck.rotation.z = -0.35 + sway - this.stretch * 1.1;
     this.neck.rotation.x = side + a * this.attackSide * 1.1;
+    // 피날레: 목이 수십 m 로 늘어남 (extensionMax > 5)
+    const mega = ctx.extensionMax > 5 ? ctx.extensionMax / 3.4 : 1;
+    this.neck.scale.y = 1 + this.stretch * (mega - 1);
+    if (mega > 1) this.neck.rotation.z = -0.35 + sway - this.stretch * 1.35;
     this.head.rotation.z = Math.sin(time * 6) * 0.1 * speedNorm - this.stretch * 0.25;
   }
 }
@@ -1110,9 +1134,9 @@ class TrojanVisual extends PlaceholderVisual {
       this.hoofPoints.push(new THREE.Vector3(x, 0, z));
     }
     // 병사들 (숨어 있다가 이벤트 때 뒤에서 밀기)
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 12; i++) {
       const g = new THREE.Group();
-      const bodyM = capsule(0.13, 0.35, toon(0xb03030));
+      const bodyM = capsule(0.13, 0.35, toon(i < 3 ? 0xb03030 : [0xb03030, 0x2a4a9a, 0x8a6a1a][i % 3]));
       bodyM.position.y = 0.45;
       g.add(bodyM);
       const head = sphere(0.13, toon(0xf0caad));
@@ -1133,7 +1157,8 @@ class TrojanVisual extends PlaceholderVisual {
         arm.rotation.z = -1.3;
         g.add(arm);
       }
-      g.position.set(-1.9, 0, (i - 1) * 0.42);
+      const row = Math.floor(i / 3);
+      g.position.set(-1.9 - row * 0.55, 0, ((i % 3) - 1) * 0.42 + (row % 2) * 0.2);
       g.visible = false;
       this.body.add(g);
       this.soldiers.push(g);
@@ -1156,8 +1181,9 @@ class TrojanVisual extends PlaceholderVisual {
     const a = this.ambush;
     this.hatch.rotation.x = a * 1.4;
     this.hatch.position.y = 1.3 - a * 0.3;
+    const army = ctx.extension > 0.5 ? 12 : 3;
     this.soldiers.forEach((s, i) => {
-      s.visible = a > 0.1;
+      s.visible = a > 0.1 && i < army;
       // 뒤에서 달리며 밀기
       s.position.x = -1.9 - Math.max(0, 1 - a) * 0.8;
       s.position.y = Math.abs(Math.sin(time * 9 + i)) * 0.15 * a;

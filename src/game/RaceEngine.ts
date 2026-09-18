@@ -4,6 +4,7 @@ import type { RaceTrack } from '../track/RaceTrack';
 import type { RaceEventManager } from '../events/RaceEventManager';
 import type { RaceEvent, RaceEventType, ScheduledEvent } from '../events/RaceEvent';
 import type { RankingEntry, RacerState, RacerStatus } from './RaceState';
+import { pickScenario, SCENARIOS, type Scenario } from '../events/Scenarios';
 
 /**
  * 레이스 시뮬레이션. Three.js 와 무관한 순수 계산.
@@ -24,6 +25,10 @@ export class RaceEngine {
   private pairCooldown = new Map<string, number>();
   private lastRankTime = 0;
   private longbodyFinishTried = false;
+  scenario: Scenario | null = null;
+  /** 디버그: 특정 시나리오 강제 */
+  forcedScenarioId: string | null = null;
+  private finaleFired = false;
 
   constructor(racers: Racer[], track: RaceTrack, events: RaceEventManager) {
     this.racers = racers;
@@ -45,6 +50,9 @@ export class RaceEngine {
     this.leadChangeCooldown = 0;
     this.pairCooldown.clear();
     this.longbodyFinishTried = false;
+    this.finaleFired = false;
+    this.scenario = null;
+    this.lastRankTime = -1;
     this.events.clear();
     this.racers.forEach((r) => r.reset(this.track.laneToLat(r.def.number - 1)));
     this.computeRanking();
@@ -52,9 +60,12 @@ export class RaceEngine {
 
   start(): void {
     this.reset();
-    this.events.generateTimeline(this.racers, this.estimatedDuration);
+    this.scenario = (this.forcedScenarioId && SCENARIOS.find((x) => x.id === this.forcedScenarioId)) || pickScenario();
+    this.events.generateTimeline(this.racers, this.estimatedDuration, this.scenario);
     this.racers.forEach((r) => {
       r.state.state = 'RUNNING';
+      // 우승 예정자는 컨디션 최소 보장 (피날레 전까지 너무 뒤처지지 않게)
+      if (this.scenario?.winnerId === r.def.id) r.state.form = Math.max(r.state.form, 1.0);
       // 출발 반응 속도 — 코끼리/소는 굼뜸
       r.state.currentSpeed = 1 + Math.random() * 2 * r.def.acceleration * 0.3;
     });
@@ -74,6 +85,7 @@ export class RaceEngine {
     for (const r of this.racers) this.updateRacer(r, dt);
     this.interactions(dt);
     this.longbodyFinishCheck();
+    this.finaleCheck();
     this.checkFinish();
     if (this.time - this.lastRankTime > 0.05) {
       this.computeRanking();
@@ -102,7 +114,8 @@ export class RaceEngine {
       s.currentSpeed = Math.max(6, s.currentSpeed - 0.7 * dt);
       s.distance += s.currentSpeed * dt;
       s.boostIntensity = Math.max(0, s.boostIntensity - dt);
-      s.extension = Math.max(0, s.extension - dt / 1.5);
+      // 늘어난 몸/목은 몸통(원점)이 결승선을 지난 뒤에 줄어듦
+      if (s.distance >= this.track.raceDistance) s.extension = Math.max(0, s.extension - dt / 1.5);
       s.lane += (s.homeLane - s.lane) * dt * 0.5;
       return;
     }
@@ -150,9 +163,33 @@ export class RaceEngine {
     const gap = Math.max(0, leadDist - s.distance);
     let rubber = 1 + Math.min(gap / 120, 1) * 0.16;
     if (s.rank === 1 && this.ranking[1] && this.ranking[1].gapToLeader > 12) rubber = 0.975;
-    const target = d.speed * s.form * cornerFactor * fatigue * wobble * s.speedMultiplier * stateFactor * straightBonus * riderlessFactor * rubber;
+    const baseTarget0 = d.speed * s.form * cornerFactor * fatigue * wobble * s.speedMultiplier * stateFactor * straightBonus * riderlessFactor * rubber * (s.state === 'CARRYING' ? 1.3 : 1);
 
-    const accel = d.acceleration * s.accelMultiplier;
+    let target2 = baseTarget0;
+    let accel = d.acceleration * s.accelMultiplier;
+    // 시나리오 운명 보정: 결승 전에 선두를 반드시 잡도록 필요한 속도를 계산
+    if (s.destiny) {
+      const D = this.track.raceDistance;
+      let lead: Racer | null = null;
+      for (const o of this.racers) {
+        if (o === r || o.state.state === 'IDLE') continue;
+        if (o.state.finishTime !== null) continue;
+        if (!lead || o.state.distance + o.state.finishBonus > lead.state.distance + lead.state.finishBonus) lead = o;
+      }
+      if (lead) {
+        const leadEff = lead.state.distance + lead.state.finishBonus;
+        const myEff = s.distance + s.finishBonus;
+        const gap = leadEff - myEff;
+        const leadSpeed = Math.max(4, lead.state.currentSpeed);
+        const timeLeft = Math.max(0.6, (D - leadEff) / leadSpeed);
+        const required = leadSpeed + (gap + 4) / timeLeft;
+        if (gap > -3) {
+          target2 = Math.max(target2, Math.min(required * 1.08, 62));
+          accel = Math.max(accel, 14);
+        }
+      }
+    }
+    const target = target2;
     const prev = s.currentSpeed;
     if (target > s.currentSpeed) s.currentSpeed = Math.min(target, s.currentSpeed + accel * dt);
     else {
@@ -202,23 +239,27 @@ export class RaceEngine {
     const boostTarget = s.state === 'BOOSTING' ? 1 : boosting ? 0.45 : 0;
     s.boostIntensity = THREE.MathUtils.lerp(s.boostIntensity, boostTarget, Math.min(1, dt * (boosting ? 4 : 2)));
 
-    // 기린: 결승선 근처에서 목 뻗기 → 판정 보너스
+    // 기린: 결승선 근처에서 목 뻗기 → 판정 보너스 (피날레: 목이 화면 밖까지)
     if (d.specialAbility === 'GIRAFFE') {
       const toFinish = this.track.raceDistance - s.distance;
-      const want = toFinish < 45 ? 1 : 0;
-      s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / 0.8 : -dt / 1.2), 0, 1);
-      s.finishBonus = s.extension * 2.2;
+      if (s.extensionMax === 0) s.extensionMax = 2.2;
+      const want = s.state === 'STRETCHED' || toFinish < 45 ? 1 : 0;
+      s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / (s.extensionMax > 5 ? 1.4 : 0.8) : -dt / 1.2), 0, 1);
+      s.finishBonus = s.extension * s.extensionMax;
     }
-    // 코끼리: 코 늘어남 (붙잡기)
+    // 코끼리: 코 늘어남 (붙잡기) — 피날레에선 코가 결승선까지 닿음
     if (d.specialAbility === 'ELEPHANT') {
       const want = s.state === 'GRABBING' ? 1 : 0;
       s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / 0.6 : -dt / 1.0), 0, 1);
+      if (s.extensionMax === 0) s.extensionMax = 2.4;
+      s.finishBonus = s.extensionMax > 3 ? s.extension * s.extensionMax : 0;
     }
     // 롱바디: 몸통 늘어남 → 머리가 먼저 결승선 통과
     if (d.specialAbility === 'LONGBODY') {
       const want = s.state === 'STRETCHED' ? 1 : 0;
-      s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / 0.9 : -dt / 1.6), 0, 1);
-      s.finishBonus = s.extension * 8.5;
+      if (s.extensionMax === 0) s.extensionMax = 8.5;
+      s.extension = THREE.MathUtils.clamp(s.extension + (want > s.extension ? dt / (s.extensionMax > 20 ? 1.6 : 0.9) : -dt / 1.6), 0, 1);
+      s.finishBonus = s.extension * s.extensionMax;
     }
   }
 
@@ -244,7 +285,10 @@ export class RaceEngine {
         return;
       case 'STRETCHED':
         s.state = 'RUNNING';
-        this.events.emit({ time: this.time, racerId: r.def.id, event: 'LONGBODY_RETRACT', major: false });
+        if (r.def.specialAbility === 'LONGBODY') this.events.emit({ time: this.time, racerId: r.def.id, event: 'LONGBODY_RETRACT', major: false });
+        return;
+      case 'CARRYING':
+        s.state = 'RUNNING';
         return;
       default:
         s.state = 'RUNNING';
@@ -421,17 +465,31 @@ export class RaceEngine {
     const target = ev.targetId ? this.byId(ev.targetId) : undefined;
     const t: RaceEventType = ev.event;
     let label = ev.label;
+    if (ev.extensionMax) s.extensionMax = ev.extensionMax;
+    if (ev.destiny) s.destiny = true;
+    const dur = ev.duration;
     switch (t) {
+      case 'COSTUME_CARRY':
+        // 탈을 벗어 들고 두 사람이 전력질주
+        if (s.state === 'COLLAPSED' || s.state === 'RECOVERING') s.stateTimer = 0;
+        this.setState(r, 'CARRYING', dur ?? 12, 1.0, 3);
+        s.fatigued = false;
+        label = `${r.def.name} 탈을 들고 전력질주`;
+        break;
+      case 'GIRAFFE_MEGA_NECK':
+        this.setState(r, 'STRETCHED', dur ?? 30, 1.0, 1);
+        label = `${r.def.name} 목이 ${Math.round(s.extensionMax)}m 로 늘어남`;
+        break;
       case 'COSTUME_COLLAPSE':
-        this.setState(r, 'COLLAPSED', 3.2);
+        this.setState(r, 'COLLAPSED', this.scenario?.winnerId === r.def.id ? 5.5 : 3.2);
         break;
       case 'ELEPHANT_CHARGE':
-        this.setState(r, 'CHARGING', 8.5, 1.62, 3.2);
+        this.setState(r, 'CHARGING', dur ?? 8.5, 1.62, 3.2);
         s.fatigued = false;
         break;
       case 'ELEPHANT_TRUNK': {
         // 앞 선수를 코로 붙잡아 끌어내리고 자신은 끌려가듯 가속
-        this.setState(r, 'GRABBING', 4.5, 1.35, 3);
+        this.setState(r, 'GRABBING', dur ?? 4.5, 1.35, 3);
         let best: Racer | undefined;
         let bestD = 12;
         for (const o of this.racers) {
@@ -477,10 +535,10 @@ export class RaceEngine {
         break;
       }
       case 'COW_RAGE':
-        this.setState(r, 'RAGING', 10, 1.42, 2.5);
+        this.setState(r, 'RAGING', dur ?? 10, 1.42, 2.5);
         break;
       case 'MOTORCYCLE_BOOST':
-        this.setState(r, 'BOOSTING', 8, 1.75, 8);
+        this.setState(r, 'BOOSTING', dur ?? 8, 1.75, 8);
         break;
       case 'ENGINE_FAILURE':
         this.setState(r, 'ENGINE_FAILURE', 4.5);
@@ -489,7 +547,7 @@ export class RaceEngine {
         this.setState(r, 'EXHAUSTED', 6);
         break;
       case 'HUMAN_BIPEDAL':
-        this.setState(r, 'BIPEDAL', 5, 1.45, 2.5);
+        this.setState(r, 'BIPEDAL', dur ?? 5, 1.45, 2.5);
         s.fatigued = false;
         break;
       case 'GIRAFFE_NECK_ATTACK':
@@ -500,10 +558,11 @@ export class RaceEngine {
         }
         break;
       case 'TROJAN_AMBUSH':
-        this.setState(r, 'AMBUSH', 6, 1.55, 4);
+        this.setState(r, 'AMBUSH', dur ?? 6, 1.55, 4);
+        if (ev.destiny) s.extension = 1; // 전군 출동 표시
         break;
       case 'CIRCUS_ACT':
-        this.setState(r, 'PERFORMING', 6.5, 1.35, 3);
+        this.setState(r, 'PERFORMING', dur ?? 6.5, 1.35, 3);
         s.fatigued = false;
         break;
       case 'LONGBODY_STRETCH':
@@ -521,7 +580,7 @@ export class RaceEngine {
         label = `${r.def.name} 발이 걸림`;
         break;
       case 'SUPER_SPRINT':
-        this.setState(r, 'BOOSTING', 5, 1.38, 2.5);
+        this.setState(r, 'BOOSTING', dur ?? 5, 1.38, 2.5);
         s.fatigued = false;
         label = `${r.def.name} 초강력 스퍼트`;
         break;
@@ -542,9 +601,40 @@ export class RaceEngine {
     this.events.emit({ ...ev, label });
   }
 
+  /** 시나리오 피날레: 우승 예정자가 결승선 N m 앞에 오면 발동 */
+  private finaleCheck(): void {
+    if (this.finaleFired || !this.scenario?.finale || !this.scenario.winnerId) return;
+    const r = this.byId(this.scenario.winnerId);
+    if (!r || r.state.state === 'FINISHED' || r.state.state === 'IDLE') return;
+    const lead = this.ranking[0] ? this.ranking[0].distance : r.state.distance;
+    const toFinishLead = this.track.raceDistance - lead;
+    const f = this.scenario.finale;
+    // 선두 기준으로 발동 (우승자가 많이 뒤처져 있어도 늦지 않게)
+    if (toFinishLead > f.distance) return;
+    this.finaleFired = true;
+    this.applyEvent({
+      time: this.time,
+      racerId: r.def.id,
+      event: f.event,
+      major: true,
+      destiny: true,
+      duration: f.duration,
+      extensionMax: f.extensionMax,
+      label: `[피날레] ${this.scenario.title}`,
+    });
+  }
+
   /** 롱바디: 결승선 앞에서 랜덤하게 쭈우욱 — 선두권일 때만 */
   private longbodyFinishCheck(): void {
     if (this.longbodyFinishTried) return;
+    if (this.scenario?.winnerId && this.scenario.winnerId !== 'longbody') {
+      this.longbodyFinishTried = true;
+      return;
+    }
+    if (this.scenario?.winnerId === 'longbody') {
+      this.longbodyFinishTried = true;
+      return;
+    }
     const r = this.byId('longbody');
     if (!r || r.state.state === 'FINISHED' || r.state.state === 'IDLE') return;
     const toFinish = this.track.raceDistance - r.state.distance;

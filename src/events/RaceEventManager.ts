@@ -1,5 +1,6 @@
 import type { Racer } from '../racers/Racer';
 import { EVENT_LABELS, MAJOR_EVENTS, type RaceEvent, type RaceEventType, type ScheduledEvent } from './RaceEvent';
+import type { Scenario } from './Scenarios';
 
 export type RaceEventListener = (ev: RaceEvent) => void;
 
@@ -56,34 +57,53 @@ export class RaceEventManager {
     this.history = [];
   }
 
-  /** 레이스마다 3~7개의 특수 이벤트를 무작위 선택 */
-  generateTimeline(racers: Racer[], estimatedDuration: number): ScheduledEvent[] {
+  /**
+   * 시나리오의 각본 이벤트 + 랜덤 필러 이벤트로 타임라인 구성.
+   * 우승 예정자에게 불리한 이벤트는 필러에서 제외한다.
+   */
+  generateTimeline(racers: Racer[], estimatedDuration: number, scenario?: Scenario): ScheduledEvent[] {
     const luckOf = (id: string) => racers.find((r) => r.def.id === id)?.def.luck ?? 0.5;
+    const scripted: ScheduledEvent[] = (scenario?.events ?? []).map((e) => ({
+      time: estimatedDuration * e.at,
+      racerId: e.racerId,
+      event: e.event,
+      fired: false,
+    }));
+    const usedTypes = new Set(scripted.map((e) => e.event));
+    if (scenario?.finale) usedTypes.add(scenario.finale.event);
+    const winner = scenario?.winnerId ?? null;
+    const maxFillers = scenario ? scenario.fillers : 7;
     const picked: EventSpec[] = [];
     const rest: EventSpec[] = [];
     for (const spec of EVENT_POOL) {
+      if (usedTypes.has(spec.type)) continue;
+      // 우승 예정자의 불운 이벤트 제외
+      if (winner && spec.bad && spec.racerId === winner) continue;
+      if (winner && spec.racerId === winner && spec.type !== 'SUPER_SPRINT') continue;
       const luck = spec.racerId === 'DYNAMIC' ? 0.5 : luckOf(spec.racerId);
       const p = spec.weight * (spec.bad ? 1.3 - luck * 0.6 : 0.7 + luck * 0.6);
       if (Math.random() < p) picked.push(spec);
       else rest.push(spec);
     }
-    // 최소 3, 최대 7
-    while (picked.length < 3 && rest.length) {
+    const minFillers = scenario ? Math.min(1, maxFillers) : 3;
+    while (picked.length < minFillers && rest.length) {
       const i = Math.floor(Math.random() * rest.length);
       picked.push(rest.splice(i, 1)[0]);
     }
-    while (picked.length > 9) {
-      // 가중치 낮은 것부터 제거 후보
+    while (picked.length > maxFillers) {
       picked.sort((a, b) => a.weight - b.weight);
       picked.splice(Math.floor(Math.random() * Math.min(3, picked.length)), 1);
     }
     // 시간 배정 + 최소 간격 확보
-    const list: ScheduledEvent[] = picked.map((spec) => ({
-      time: estimatedDuration * (spec.window[0] + Math.random() * (spec.window[1] - spec.window[0])),
-      racerId: spec.racerId,
-      event: spec.type,
-      fired: false,
-    }));
+    const list: ScheduledEvent[] = [
+      ...scripted,
+      ...picked.map((spec) => ({
+        time: estimatedDuration * (spec.window[0] + Math.random() * (spec.window[1] - spec.window[0])),
+        racerId: spec.racerId,
+        event: spec.type,
+        fired: false,
+      })),
+    ];
     list.sort((a, b) => a.time - b.time);
     // 최소 3초 간격 — 앞으로 당길 수 있으면 당기고, 아니면 뒤로 민다
     for (let i = 1; i < list.length; i++) {

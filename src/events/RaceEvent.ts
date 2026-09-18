@@ -2,6 +2,8 @@ export type RaceEventType =
   | 'START'
   | 'COSTUME_COLLAPSE'
   | 'COSTUME_RECOVER'
+  | 'COSTUME_CARRY'
+  | 'GIRAFFE_MEGA_NECK'
   | 'ELEPHANT_CHARGE'
   | 'ELEPHANT_TRUNK'
   | 'ELEPHANT_STOMP'
@@ -37,6 +39,9 @@ export interface RaceEvent {
   /** 상호작용 이벤트의 상대 */
   targetId?: string;
   duration?: number;
+  /** 시나리오 피날레 (우승 보정) */
+  destiny?: boolean;
+  extensionMax?: number;
   /** 결과 화면에 표시되는 요약 */
   label?: string;
   /** 카메라가 즉시 전환되는 큰 사건인지 */
@@ -53,6 +58,8 @@ export interface ScheduledEvent {
 
 export const MAJOR_EVENTS = new Set<RaceEventType>([
   'COSTUME_COLLAPSE',
+  'COSTUME_CARRY',
+  'GIRAFFE_MEGA_NECK',
   'ELEPHANT_CHARGE',
   'ELEPHANT_TRUNK',
   'ELEPHANT_STOMP',
@@ -76,6 +83,8 @@ export const EVENT_LABELS: Record<RaceEventType, string> = {
   START: '출발',
   COSTUME_COLLAPSE: '말탈 벗겨짐 (붕괴)',
   COSTUME_RECOVER: '말탈 다시 착용',
+  COSTUME_CARRY: '말탈 들고 전력질주',
+  GIRAFFE_MEGA_NECK: '기린 목 초장거리 연장',
   CIRCUS_ACT: '서커스 퍼포먼스',
   TROJAN_AMBUSH: '트로이 목마 병사 출동',
   ELEPHANT_CHARGE: '코끼리 돌진',

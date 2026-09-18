@@ -202,11 +202,22 @@ export class Game {
     const a = this.audio;
     switch (ev.event) {
       case 'START':
+        if (this.engine.scenario?.teaser) this.commentary.sayRaw(this.engine.scenario.teaser, false);
         break;
       case 'COSTUME_COLLAPSE':
         a.play('cardboardDrop', { pos, minGain: 0.5, gain: 1.2 });
         a.play('scream', { pos, minGain: 0.35, gain: 0.8 });
         a.crowdGasp();
+        break;
+      case 'COSTUME_CARRY':
+        a.play('scream', { pos, minGain: 0.5, gain: 0.8, rate: 1.15 });
+        a.play('whooshEpic', { pos, minGain: 0.4, gain: 0.7 });
+        a.crowdRoar(0.9);
+        break;
+      case 'GIRAFFE_MEGA_NECK':
+        a.play('whooshEpic', { pos, minGain: 0.5, gain: 1.0, rate: 0.8 });
+        a.play('neigh', { pos, minGain: 0.3, gain: 0.5, rate: 0.8 });
+        a.crowdRoar(0.9);
         break;
       case 'COSTUME_RECOVER':
         a.play('cardboardOpen', { pos, minGain: 0.3 });
@@ -368,7 +379,7 @@ export class Game {
           this.ui.setSubtitle(null);
           this.audio.stopRacerLoops();
           this.audio.play('fanfare', { gain: 0.6 });
-          this.ui.showResult(this.engine.ranking, this.racers.racers, this.events.highlights);
+          this.ui.showResult(this.engine.ranking, this.racers.racers, this.events.highlights, this.engine.scenario?.title ?? '');
         }
         break;
       case 'RESULT':

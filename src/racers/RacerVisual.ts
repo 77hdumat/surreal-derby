@@ -30,6 +30,8 @@ export interface VisualContext {
   extension: number;
   /** 횡방향 속도 m/s (+ = 오른쪽) */
   lateralVel: number;
+  /** 늘어남 최대 길이(m) */
+  extensionMax: number;
 }
 
 export interface RacerVisual {

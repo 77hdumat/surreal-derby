@@ -148,8 +148,12 @@ export class CameraManager {
     }
     if (!ev.major) return;
     this.eventTarget = ev.racerId;
-    this.eventTimer = this.finishLocked ? 2.4 : 3.2;
+    this.eventTimer = ev.destiny ? 4.5 : this.finishLocked ? 2.4 : 3.2;
     this.setMode('EVENT_CAMERA', false);
+    if (ev.destiny) {
+      this.shake(0.6);
+      this.fovBoost = 1;
+    }
     switch (ev.event) {
       case 'MOTORCYCLE_BOOST':
         this.shake(0.5);

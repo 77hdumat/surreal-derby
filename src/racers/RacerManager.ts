@@ -52,6 +52,7 @@ export class RacerManager {
         sideHint: 1,
         extension: 0,
         lateralVel: 0,
+        extensionMax: 0,
       });
       r.reset(track.laneToLat(r.def.number - 1));
     }
@@ -184,6 +185,7 @@ export class RacerManager {
       ctx.riderless = s.riderless;
       ctx.distanceToFinish = this.track.raceDistance - s.distance;
       ctx.extension = s.extension;
+      ctx.extensionMax = s.extensionMax;
       const pl = this.prevLane.get(r.def.id) ?? s.lane;
       ctx.lateralVel = dt > 0 ? THREE.MathUtils.lerp(ctx.lateralVel, (s.lane - pl) / dt, 0.25) : 0;
       this.prevLane.set(r.def.id, s.lane);

@@ -82,6 +82,8 @@ export class Racer {
       lastAccel: 0,
       wobbleSeed: Math.random() * 1000,
       extension: 0,
+      extensionMax: 0,
+      destiny: false,
     };
   }
 
@@ -112,5 +114,7 @@ export class Racer {
     s.lastAccel = 0;
     s.wobbleSeed = Math.random() * 1000;
     s.extension = 0;
+    s.extensionMax = 0;
+    s.destiny = false;
   }
 }

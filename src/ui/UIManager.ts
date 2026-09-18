@@ -44,7 +44,7 @@ export class UIManager {
   private previewVisual: RacerVisual | null = null;
   private previewCtx: VisualContext = {
     dt: 0, time: 0, speedNorm: 0.85, speed: 14, accel: 0, state: 'RUNNING', stateTimer: 0, cornerWeight: 0,
-    boost: 0, bump: 0, bumpDir: 0, riderless: false, distanceToFinish: 500, sideHint: 1, extension: 0, lateralVel: 0,
+    boost: 0, bump: 0, bumpDir: 0, riderless: false, distanceToFinish: 500, sideHint: 1, extension: 0, lateralVel: 0, extensionMax: 0,
   };
 
   onStart: (() => void) | null = null;
@@ -225,8 +225,10 @@ export class UIManager {
     this.prevRankMap.clear();
   }
 
-  showResult(ranking: RankingEntry[], racers: Racer[], highlights: RaceEvent[]): void {
+  showResult(ranking: RankingEntry[], racers: Racer[], highlights: RaceEvent[], scenarioTitle = ''): void {
     this.result.classList.remove('hidden');
+    const st = document.getElementById('result-scenario');
+    if (st) st.textContent = scenarioTitle ? `시나리오 · ${scenarioTitle}` : '';
     const list = $('result-list');
     list.innerHTML = '';
     ranking.forEach((e, i) => {
@@ -348,6 +350,7 @@ export class UIManager {
     else if (st === 'PERFORMING') s = '공연중!';
     else if (st === 'AMBUSH') s = '병사출동!';
     else if (st === 'GRABBING') s = '코 공격!';
+    else if (st === 'CARRYING') s = '들고뜀!';
     else if (st === 'SPRAYING') s = '물대포!';
     else if (st === 'STRETCHED') s = '쭈욱!';
     else if (st === 'EXHAUSTED') s = '탈진';

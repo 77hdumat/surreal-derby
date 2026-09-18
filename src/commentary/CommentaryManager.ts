@@ -13,6 +13,8 @@ const BANKS: Record<BankKey, string[]> = {
     '믿을 수 없는 상황입니다! 안에 사람이 두 명!!',
     '잠깐만요! {n}번 선수, 쓰러졌습니다!',
   ],
+  COSTUME_CARRY: ['말탈을 들고 뜁니다!!! 두 사람이 탈을 들고 뜁니다!!', '이게 됩니까?! 탈을 벗어 들고 전력질주!!', '말탈 브라더스, 탈은 손에 들고 발은 전속력!!'],
+  GIRAFFE_MEGA_NECK: ['목이... 목이 화면 밖으로 나갑니다!!!', '롱넥 미라클, 목이 결승선을 먼저 통과합니다!!', '카메라가 목을 따라갈 수 없습니다!!'],
   COSTUME_RECOVER: ['{n}번 선수 다시 일어납니다!', '탈을 다시 뒤집어썼습니다! 대단한 근성!', '안에 계신 두 분 괜찮으신가요? 다시 달립니다!'],
   TROJAN_AMBUSH: ['목마 문이 열립니다!! 병사들이 나옵니다!!', '{n}번 트로이 목마, 안에서 사람이... 밀고 있습니다!', '이건 반칙 아닙니까! 병사 출동!!', '트로이 목마가 굴러갑니다! 엄청난 속도!'],
   CIRCUS_ACT: ['{n}번 서커스 스타, 뒷발로 섰습니다!!', '서커스가 시작됐습니다! 그런데... 더 빨라집니다?!', '관중 여러분 박수!! 공연 중에 속도가 올라갑니다!', '저건 경주가 아니라 공연입니다!'],
@@ -119,6 +121,10 @@ export class CommentaryManager {
       .replace(/\{n2\}/g, second ? String(second.def.number) : '');
   }
 
+  sayRaw(text: string, major: boolean): void {
+    this.push(text, major);
+  }
+
   say(key: BankKey, major: boolean, r?: Racer, t?: Racer, second?: Racer): void {
     const text = this.fill(this.pick(key), r, t, second);
     this.push(text, major);
@@ -159,6 +165,7 @@ export class CommentaryManager {
         return;
       default:
         if (ev.event in BANKS) this.say(ev.event as BankKey, ev.major, r, t);
+        if (ev.destiny) this.push('믿을 수 없는 역전이 시작됩니다!!', true);
     }
   }
 

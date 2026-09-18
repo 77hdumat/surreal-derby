@@ -178,6 +178,7 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 .result-inner { width: min(980px, 94vw); background: linear-gradient(180deg, rgba(20,40,110,0.95), rgba(5,10,40,0.95)); border: 3px solid #fff; border-radius: 12px; padding: 24px 28px; box-shadow: 10px 10px 0 #000; animation: resultIn 0.5s ease-out; }
 @keyframes resultIn { from { transform: translateY(40px) scale(0.95); opacity: 0; } }
 .result-title { font-size: 46px; font-weight: 900; color: var(--yellow); letter-spacing: 6px; -webkit-text-stroke: 2px #000; text-shadow: 5px 5px 0 #000; text-align: center; }
+.result-scenario { text-align: center; color: #ffe14d; font-weight: 800; margin-top: 6px; letter-spacing: 1px; }
 .result-body { display: flex; gap: 26px; margin-top: 16px; }
 #result-list { flex: 1.2; list-style: none; margin: 0; padding: 0; }
 #result-list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.15); font-weight: 700; font-size: 17px; animation: rowIn 0.4s both; }

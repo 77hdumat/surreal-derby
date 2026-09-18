@@ -16,6 +16,7 @@ export type RacerStatus =
   | 'PERFORMING'
   | 'AMBUSH'
   | 'GRABBING'
+  | 'CARRYING'
   | 'SPRAYING'
   | 'FINISHED';
 
@@ -52,6 +53,10 @@ export interface RacerState {
   wobbleSeed: number;
   /** 몸/목 늘어남 0..1 */
   extension: number;
+  /** 늘어남 최대 길이(m) — 시나리오 피날레에서 커짐 */
+  extensionMax: number;
+  /** 시나리오 우승 보정 활성 */
+  destiny: boolean;
 }
 
 export interface RankingEntry {
