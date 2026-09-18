@@ -231,6 +231,36 @@ export class Game {
         a.play('scream', { pos, minGain: 0.35, gain: 0.8 });
         a.crowdGasp();
         break;
+      case 'TWIST_FALL':
+        a.play('impactHeavy', { pos, minGain: 0.6, gain: 1.0 });
+        a.play('screamFall', { pos, minGain: 0.5 });
+        a.crowdGasp();
+        break;
+      case 'TWIST_REVERSE':
+        a.play('whoosh', { pos, minGain: 0.4, rate: 0.6 });
+        a.play('neigh', { pos, minGain: 0.4, rate: 0.9 });
+        a.crowdGasp();
+        break;
+      case 'TWIST_WHEEL_OFF':
+        a.play('crash', { pos, minGain: 0.6, gain: 1.0 });
+        a.play('cardboardDrop', { pos, minGain: 0.4 });
+        a.crowdGasp();
+        break;
+      case 'TWIST_SLEEP':
+        a.play('cow2', { pos, minGain: 0.3, gain: 0.4, rate: 0.5 });
+        a.crowdGasp();
+        break;
+      case 'TWIST_ROCKET':
+        a.play('whooshEpic', { pos, minGain: 0.6, gain: 1.1 });
+        a.play('engineRev2', { pos, minGain: 0.4, gain: 0.6, rate: 1.3 });
+        a.crowdRoar(1.0);
+        this.effects.flashScreen(0.4);
+        break;
+      case 'TWIST_SHOELACE':
+      case 'TWIST_STUBBORN':
+        a.play('scream', { pos, minGain: 0.4, gain: 0.6, rate: 0.9 });
+        a.crowdGasp();
+        break;
       case 'COSTUME_CARRY':
         a.play('scream', { pos, minGain: 0.5, gain: 0.8, rate: 1.15 });
         a.play('whooshEpic', { pos, minGain: 0.4, gain: 0.7 });

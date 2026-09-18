@@ -326,6 +326,23 @@ export class ParticleManager {
     }
   }
 
+  zzz(pos: THREE.Vector3): void {
+    this.emit({
+      pos,
+      count: 1,
+      vel: this.tmp.set(0.3, 1.2, 0.2),
+      spread: 0.3,
+      size: 0.5,
+      sizeVar: 0.3,
+      life: 1.6,
+      colors: [0xffffff, 0xdfe8ff],
+      gravity: -0.8,
+      drag: 0.5,
+      grow: 0.6,
+      alpha: 0.9,
+    });
+  }
+
   sparkle(pos: THREE.Vector3): void {
     this.emit({
       pos,

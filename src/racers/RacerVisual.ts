@@ -339,6 +339,9 @@ export abstract class PlaceholderVisual implements RacerVisual {
   /** 바퀴 달린 선수: 몸통 바운스/피치 없음, 바퀴만 회전 */
   protected wheeled = false;
   protected reins: ReinRig | null = null;
+  /** 넘어짐/잠듦 자세 0..1 */
+  protected downPose = 0;
+  protected grazePose = 0;
   private reinTmpA = new THREE.Vector3();
   private reinTmpB = new THREE.Vector3();
   private reinTmpC = new THREE.Vector3();
@@ -505,13 +508,19 @@ export abstract class PlaceholderVisual implements RacerVisual {
 
   update(ctx: VisualContext): void {
     const { dt, time, speedNorm } = ctx;
-    const grounded = ctx.state === 'COLLAPSED' || ctx.state === 'ENGINE_FAILURE';
+    const st = ctx.state;
+    const grounded =
+      st === 'COLLAPSED' || st === 'ENGINE_FAILURE' || st === 'FALLEN' || st === 'SLEEPING' || st === 'STUBBORN' || st === 'SHOELACE' || st === 'BROKEN';
     const animSpeed = grounded ? 0 : speedNorm;
     const stride = Math.max(1, this.def.strideLength);
     // 보폭 주파수(Hz) — 실제 말은 16m/s 에서 약 2.3~2.5 보폭/초
     const strideHz = grounded ? 0 : (ctx.speed / stride) * this.wobbleFreq;
+    const downTarget = st === 'FALLEN' || st === 'SLEEPING' ? 1 : 0;
+    this.downPose = THREE.MathUtils.lerp(this.downPose, downTarget, 1 - Math.exp(-(downTarget ? 7 : 3) * dt));
+    const grazeTarget = st === 'STUBBORN' ? 1 : 0;
+    this.grazePose = THREE.MathUtils.lerp(this.grazePose, grazeTarget, 1 - Math.exp(-4 * dt));
     if (this.action && this.mixer) {
-      this.action.timeScale = ctx.speed < 0.3 ? 0 : strideHz;
+      this.action.timeScale = Math.abs(ctx.speed) < 0.3 ? 0 : strideHz; // 음수면 뒷걸음질(문워크)
       this.mixer.update(dt);
       this.stridePhase = this.action.time % 1;
     } else {
@@ -530,8 +539,22 @@ export abstract class PlaceholderVisual implements RacerVisual {
     // 차고 나갈 때 코가 들리고, 앞다리 착지 때 코가 내려감
     const gallopPitch = Math.cos(Math.PI * 2 * (ph - 0.15)) * 0.085 * (0.3 + animSpeed) * gait;
     const pitch = gallopPitch - THREE.MathUtils.clamp(ctx.accel, -8, 8) * 0.012 - this.stumble * 0.6;
-    this.body.rotation.set(roll, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed * gait, pitch);
-    if (this.neckBob) this.neckBob.rotation.z = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.12 * (0.3 + animSpeed);
+    // 넘어짐/잠듦: 옆으로 누움 (원점이 발밑이라 몸이 바닥에 눕는다), 뒷걸음질: 몸이 뒤로 젖힘
+    const dp = this.downPose;
+    const reverse = st === 'REVERSING' ? 1 : 0;
+    this.body.rotation.set(roll * (1 - dp) + dp * 1.5, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed * gait, pitch * (1 - dp) + reverse * 0.18 + this.grazePose * 0.12);
+    if (dp > 0.02) this.body.position.y = this.baseY + dp * 0.15 + Math.sin(time * 2.2) * 0.02 * dp;
+    if (this.neckBob) {
+      const bob = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.12 * (0.3 + animSpeed);
+      // 풀 뜯기: 목을 바닥으로
+      this.neckBob.rotation.z = THREE.MathUtils.lerp(bob, this.neckBase + 1.15, this.grazePose);
+    }
+    // 누웠을 때 다리는 축 늘어지고 가끔 움찔
+    if (dp > 0.3) {
+      this.legs.forEach((l, i) => {
+        l.rotation.z = THREE.MathUtils.lerp(l.rotation.z, (i % 2 ? 0.25 : -0.2) + Math.sin(time * 1.7 + i) * 0.08, Math.min(1, dp));
+      });
+    }
     this.stumble = Math.max(0, this.stumble - dt * 1.2);
     this.riders.forEach((r, i) => {
       if (!r.parent || r.parent !== this.riderParent[i]) return;
@@ -596,7 +619,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
   }
 
   onEvent(type: RaceEventType, _ctx: VisualContext): void {
-    if (type === 'RIDER_FALL') this.dropRider(0);
+    if (type === 'RIDER_FALL' || type === 'TWIST_FALL') this.dropRider(0);
     if (type === 'TRIP' || type === 'COLLISION' || type === 'BUMP') this.stumble = type === 'BUMP' ? 0.4 : 1;
   }
 

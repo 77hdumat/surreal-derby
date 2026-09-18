@@ -140,6 +140,14 @@ export class RacerManager {
       case 'TROJAN_AMBUSH':
         this.particles.impact(pos.clone().setY(0.5), 1.0);
         break;
+      case 'TWIST_FALL':
+      case 'TWIST_WHEEL_OFF':
+        this.particles.impact(pos.clone().setY(0.4), 1.6);
+        break;
+      case 'TWIST_ROCKET':
+        this.particles.sparkle(pos.clone().setY(1.5));
+        this.particles.sparkle(pos.clone().setY(0.6));
+        break;
       case 'ELEPHANT_STOMP':
         this.particles.shockwave(pos.clone().setY(0.3));
         break;
@@ -218,6 +226,12 @@ export class RacerManager {
       if (doExhaust && s.state === 'SPRAYING') {
         const tip = RacerFactory.trunkTip(v);
         if (tip) this.particles.water(tip, this.tmpTan);
+      }
+      // 잠: Zzz 거품 / 풀 뜯기: 잔디 조각
+      if (doExhaust && s.state === 'SLEEPING' && Math.random() < 0.35) this.particles.zzz(v.root.position.clone().setY(v.height * 0.6));
+      if (doExhaust && s.state === 'STUBBORN' && Math.random() < 0.5) {
+        this.tmpHoof.set(1.8, 0.3, 0).applyMatrix4(v.root.matrixWorld);
+        this.particles.hoofDust(this.tmpHoof, this.tmpTan, 0.6);
       }
       // 소: 분노 시 콧김 / 인간: 탈진 시 땀
       if (doExhaust && s.state === 'RAGING') {

@@ -356,6 +356,12 @@ export class UIManager {
     else if (st === 'AMBUSH') s = '병사출동!';
     else if (st === 'GRABBING') s = '코 공격!';
     else if (st === 'CARRYING') s = '들고뜀!';
+    else if (st === 'FALLEN') s = '넘어짐!';
+    else if (st === 'REVERSING') s = '뒷걸음!';
+    else if (st === 'BROKEN') s = '바퀴빠짐';
+    else if (st === 'SLEEPING') s = 'Zzz';
+    else if (st === 'STUBBORN') s = '풀뜯는중';
+    else if (st === 'SHOELACE') s = '신발끈';
     else if (st === 'SPRAYING') s = '물대포!';
     else if (st === 'STRETCHED') s = '쭈욱!';
     else if (st === 'EXHAUSTED') s = '탈진';

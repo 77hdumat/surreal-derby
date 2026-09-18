@@ -29,6 +29,8 @@ export class RaceEngine {
   /** 디버그: 특정 시나리오 강제 */
   forcedScenarioId: string | null = null;
   private finaleFired = false;
+  private twistFired = false;
+  private twistDistance = 100;
 
   constructor(racers: Racer[], track: RaceTrack, events: RaceEventManager) {
     this.racers = racers;
@@ -51,6 +53,8 @@ export class RaceEngine {
     this.pairCooldown.clear();
     this.longbodyFinishTried = false;
     this.finaleFired = false;
+    this.twistFired = false;
+    this.twistDistance = 70 + Math.random() * 60;
     this.scenario = null;
     this.lastRankTime = -1;
     this.events.clear();
@@ -86,6 +90,7 @@ export class RaceEngine {
     this.interactions(dt);
     this.longbodyFinishCheck();
     this.finaleCheck();
+    this.twistCheck();
     this.checkFinish();
     if (this.time - this.lastRankTime > 0.05) {
       this.computeRanking();
@@ -156,6 +161,13 @@ export class RaceEngine {
       case 'EXHAUSTED':
         stateFactor = 0.62;
         break;
+      case 'FALLEN':
+      case 'BROKEN':
+      case 'SLEEPING':
+      case 'STUBBORN':
+      case 'SHOELACE':
+        stateFactor = 0;
+        break;
     }
     const riderlessFactor = s.riderless ? 0.9 : 1;
     // 러버밴드: 뒤처진 선수는 조금 더, 독주하는 선두는 조금 덜 (중계 재미용)
@@ -184,16 +196,16 @@ export class RaceEngine {
         const timeLeft = Math.max(0.6, (D - leadEff) / leadSpeed);
         const required = leadSpeed + (gap + 4) / timeLeft;
         if (gap > -3) {
-          target2 = Math.max(target2, Math.min(required * 1.08, 62));
+          target2 = Math.max(target2, Math.min(required * 1.12, 75));
           accel = Math.max(accel, 14);
         }
       }
     }
-    const target = target2;
+    const target = s.state === 'REVERSING' ? -6.5 : target2;
     const prev = s.currentSpeed;
     if (target > s.currentSpeed) s.currentSpeed = Math.min(target, s.currentSpeed + accel * dt);
     else {
-      const decel = stateFactor === 0 ? 14 : Math.max(accel * 2, 6);
+      const decel = stateFactor === 0 || s.state === 'REVERSING' ? 14 : Math.max(accel * 2, 6);
       s.currentSpeed = Math.max(target, s.currentSpeed - decel * dt);
     }
     s.lastAccel = THREE.MathUtils.lerp(s.lastAccel, (s.currentSpeed - prev) / Math.max(dt, 1e-4), 0.2);
@@ -229,7 +241,8 @@ export class RaceEngine {
     // targetLane 은 interactions 에서 추월 오프셋을 더할 수 있으므로 서서히 복귀
     s.targetLane += (baseTarget - s.targetLane) * Math.min(1, dt * 1.5);
     s.targetLane = THREE.MathUtils.clamp(s.targetLane, -half + 0.9, half - 0.9);
-    const lateralSpeed = s.state === 'COLLAPSED' ? 0 : (d.specialAbility === 'MOTORCYCLE' ? 4.5 : 1.6) + s.currentSpeed * 0.04;
+    const stopped = s.state === 'COLLAPSED' || s.state === 'FALLEN' || s.state === 'BROKEN' || s.state === 'SLEEPING' || s.state === 'STUBBORN' || s.state === 'SHOELACE';
+    const lateralSpeed = stopped ? 0 : (d.specialAbility === 'MOTORCYCLE' ? 4.5 : 1.6) + Math.abs(s.currentSpeed) * 0.04;
     const diff = s.targetLane - s.lane;
     s.lane += THREE.MathUtils.clamp(diff, -lateralSpeed * dt, lateralSpeed * dt);
     s.lane = THREE.MathUtils.clamp(s.lane, -half + 0.7, half - 0.7);
@@ -292,6 +305,11 @@ export class RaceEngine {
         return;
       case 'CARRYING':
         s.state = 'RUNNING';
+        return;
+      case 'BROKEN':
+        // 바퀴 빠짐: 레이스 끝까지 못 감
+        s.state = 'BROKEN';
+        s.stateTimer = 999;
         return;
       default:
         s.state = 'RUNNING';
@@ -479,6 +497,36 @@ export class RaceEngine {
         s.fatigued = false;
         label = `${r.def.name} 탈을 들고 전력질주`;
         break;
+      case 'TWIST_FALL':
+        this.setState(r, 'FALLEN', dur ?? 4.5);
+        s.riderless = true;
+        label = `${r.def.name} 결승 직전 대자로 넘어짐`;
+        break;
+      case 'TWIST_REVERSE':
+        this.setState(r, 'REVERSING', dur ?? 3.5);
+        label = `${r.def.name} 결승 직전 뒷걸음질`;
+        break;
+      case 'TWIST_WHEEL_OFF':
+        this.setState(r, 'BROKEN', 999);
+        label = `${r.def.name} 바퀴가 빠져 결승선 앞에서 정지`;
+        break;
+      case 'TWIST_SLEEP':
+        this.setState(r, 'SLEEPING', dur ?? 5);
+        label = `${r.def.name} 결승 직전 갑자기 잠듦`;
+        break;
+      case 'TWIST_SHOELACE':
+        this.setState(r, 'SHOELACE', dur ?? 4);
+        label = `${r.def.name} 결승 직전 신발끈 묶기`;
+        break;
+      case 'TWIST_STUBBORN':
+        this.setState(r, 'STUBBORN', dur ?? 4.5);
+        label = `${r.def.name} 결승 직전 멈춰서 풀 뜯기`;
+        break;
+      case 'TWIST_ROCKET':
+        this.setState(r, 'BOOSTING', dur ?? 6, 2.7, 20);
+        s.fatigued = false;
+        label = `${r.def.name} 후방에서 로켓 역전`;
+        break;
       case 'GIRAFFE_MEGA_NECK':
         this.setState(r, 'STRETCHED', dur ?? 30, 1.0, 1);
         label = `${r.def.name} 목이 ${Math.round(s.extensionMax)}m 로 늘어남`;
@@ -627,6 +675,53 @@ export class RaceEngine {
     });
   }
 
+  /** 결승 직전 반전: 선두(또는 우승 예정자 앞의 선수)에게 황당한 사고, 가끔 후방 로켓 */
+  private twistCheck(): void {
+    if (this.twistFired) return;
+    const lead = this.ranking.find((e) => !e.finished);
+    if (!lead) return;
+    if (lead.distance < this.track.raceDistance - this.twistDistance) return;
+    this.twistFired = true;
+    const winnerId = this.scenario?.winnerId ?? null;
+    const leader = this.byId(lead.id)!;
+    let victim: Racer | null = null;
+    if (!winnerId) victim = Math.random() < 0.85 ? leader : null;
+    else if (lead.id !== winnerId) victim = leader;
+    else {
+      const second = this.ranking.find((e) => !e.finished && e.id !== lead.id);
+      if (second && second.gapToLeader < 18 && Math.random() < 0.6) victim = this.byId(second.id)!;
+    }
+    if (victim && victim.state.state === 'RUNNING') {
+      const byType: Record<string, RaceEventType[]> = {
+        TROJAN: ['TWIST_WHEEL_OFF'],
+        CIRCUS: ['TWIST_SLEEP'],
+        MOTORCYCLE: ['ENGINE_FAILURE'],
+        COSTUME: ['COSTUME_COLLAPSE'],
+        HUMAN: ['TWIST_SHOELACE'],
+        COW: ['TWIST_STUBBORN', 'TWIST_REVERSE'],
+        ELEPHANT: ['TWIST_STUBBORN', 'TWIST_SLEEP'],
+        LONGBODY: ['TWIST_REVERSE', 'TWIST_FALL'],
+        GIRAFFE: ['TWIST_FALL', 'TWIST_SLEEP'],
+        CLASSIC: ['TWIST_FALL', 'TWIST_REVERSE'],
+      };
+      const pool = byType[victim.def.specialAbility] ?? ['TWIST_FALL', 'TWIST_REVERSE'];
+      const ev = pool[Math.floor(Math.random() * pool.length)];
+      this.applyEvent({ time: this.time, racerId: victim.def.id, event: ev, major: true, duration: ev === 'COSTUME_COLLAPSE' ? 5 : undefined });
+    }
+    // 후방 로켓: 우승 예정자가 아니면서 뒤에 있는 선수 하나가 미친 속도로 (30%)
+    // 각본 시나리오에선 우승 예정자가 이미 선두일 때만 (역전을 망치지 않게)
+    const rocketAllowed = !winnerId || lead.id === winnerId;
+    if (rocketAllowed && (Math.random() < 0.3 || (!victim && !winnerId))) {
+      const back = this.racers.filter(
+        (r) => r.state.state === 'RUNNING' && r.state.rank >= 4 && r.def.id !== winnerId && r !== victim,
+      );
+      if (back.length) {
+        const r = back[Math.floor(Math.random() * back.length)];
+        this.applyEvent({ time: this.time, racerId: r.def.id, event: 'TWIST_ROCKET', major: true });
+      }
+    }
+  }
+
   /** 롱바디: 결승선 앞에서 랜덤하게 쭈우욱 — 선두권일 때만 */
   private longbodyFinishCheck(): void {
     if (this.longbodyFinishTried) return;
@@ -754,12 +849,9 @@ export class RaceEngine {
     if (toFinish > 40 || toFinish < 0) return 0;
     const second = this.ranking[1] ? this.byId(this.ranking[1].id)! : null;
     if (!second) return 0;
-    // 시나리오 역전 순간: 운명 보정 선수가 선두를 잡고 결승선을 향할 때 슬로모션
-    const destinyLead = this.racers.find((r) => r.state.destiny && r.state.state !== 'FINISHED');
-    if (destinyLead && toFinish < 32) return 0.85;
     const gap = lead.state.distance + lead.state.finishBonus - (second.state.distance + second.state.finishBonus);
-    if (gap > 4.5) return 0;
-    return 1 - gap / 4.5;
+    if (gap > 2.5) return 0;
+    return 1 - gap / 2.5;
   }
 
   get states(): RacerState[] {

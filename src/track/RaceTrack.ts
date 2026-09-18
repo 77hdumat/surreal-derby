@@ -712,8 +712,8 @@ export class RaceTrack {
     const u = sky.material.uniforms;
     u.turbidity.value = 2.2;
     u.rayleigh.value = 1.1;
-    u.mieCoefficient.value = 0.0025;
-    u.mieDirectionalG.value = 0.75;
+    u.mieCoefficient.value = 0.0012;
+    u.mieDirectionalG.value = 0.7;
     u.sunPosition.value.copy(RaceTrack.SUN_DIR);
     sky.userData.noShadow = true;
     this.sky = sky;

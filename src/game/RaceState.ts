@@ -17,6 +17,12 @@ export type RacerStatus =
   | 'AMBUSH'
   | 'GRABBING'
   | 'CARRYING'
+  | 'FALLEN'
+  | 'REVERSING'
+  | 'BROKEN'
+  | 'SLEEPING'
+  | 'STUBBORN'
+  | 'SHOELACE'
   | 'SPRAYING'
   | 'FINISHED';
 

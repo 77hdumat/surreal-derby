@@ -824,7 +824,13 @@ class HumanVisual extends PlaceholderVisual {
   protected updateSpecial(ctx: VisualContext): void {
     const { dt, time, speedNorm } = ctx;
     const bip = ctx.state === 'BIPEDAL';
-    this.upright = damp(this.upright, bip ? 1 : 0, 5, dt);
+    const shoelace = ctx.state === 'SHOELACE';
+    // 신발끈: 반쯤 일어나 앉아 앞다리(팔)로 발을 만지작
+    this.upright = damp(this.upright, bip ? 1 : shoelace ? 0.55 : 0, 5, dt);
+    if (shoelace) {
+      this.legs[0].rotation.z = -0.9 + Math.sin(time * 6) * 0.25;
+      this.legs[1].rotation.z = -0.8 + Math.cos(time * 6) * 0.25;
+    }
     this.tired = damp(this.tired, ctx.state === 'EXHAUSTED' ? 1 : 0, 3, dt);
     const u = this.upright;
     this.torso.position.set(-0.55 * u, u * 0.6, 0);
@@ -1102,6 +1108,8 @@ class CircusVisual extends PlaceholderVisual {
 // ================================================================ 10. 트로이 목마 (발에 바퀴)
 class TrojanVisual extends PlaceholderVisual {
   private declare wheels: THREE.Mesh[];
+  private looseWheel: { obj: THREE.Object3D; vel: THREE.Vector3; spin: number } | null = null;
+  private broken = 0;
   private declare hatch: THREE.Mesh;
   private declare soldiers: THREE.Group[];
   private declare parts: HorseParts;
@@ -1217,10 +1225,63 @@ class TrojanVisual extends PlaceholderVisual {
     this.height = 3.4;
   }
 
+  onEvent(type: RaceEventType, ctx: VisualContext): void {
+    super.onEvent(type, ctx);
+    if (type === 'TWIST_WHEEL_OFF' && !this.looseWheel) {
+      // 앞바퀴 하나가 빠져 굴러감
+      const w = this.wheels[0];
+      const scene = this.root.parent;
+      if (!scene) return;
+      const pos = new THREE.Vector3();
+      const quat = new THREE.Quaternion();
+      w.getWorldPosition(pos);
+      w.getWorldQuaternion(quat);
+      w.parent?.remove(w);
+      scene.add(w);
+      w.position.copy(pos);
+      w.quaternion.copy(quat);
+      const vel = this.worldForward.clone().multiplyScalar(9);
+      vel.y = 2.5;
+      vel.addScaledVector(new THREE.Vector3(-this.worldForward.z, 0, this.worldForward.x), 3);
+      this.looseWheel = { obj: w, vel, spin: 12 };
+    }
+  }
+
+  reset(): void {
+    super.reset();
+    if (this.looseWheel) {
+      const w = this.looseWheel.obj;
+      w.parent?.remove(w);
+      this.body.add(w);
+      w.position.set(1.0, 0.34, -0.45);
+      w.rotation.set(0, 0, 0);
+      this.looseWheel = null;
+    }
+    this.broken = 0;
+  }
+
   protected updateSpecial(ctx: VisualContext): void {
     const { dt, time, speed } = ctx;
     const rot = (speed * dt) / 0.34;
     this.wheels.forEach((w) => (w.rotation.z -= rot));
+    // 빠진 바퀴는 굴러가다 쓰러짐
+    if (this.looseWheel) {
+      const lw = this.looseWheel;
+      lw.vel.y -= 12 * dt;
+      lw.obj.position.addScaledVector(lw.vel, dt);
+      if (lw.obj.position.y < 0.34) {
+        lw.obj.position.y = 0.34;
+        lw.vel.y = Math.abs(lw.vel.y) * 0.3;
+        lw.vel.x *= 0.96;
+        lw.vel.z *= 0.96;
+      }
+      lw.obj.rotateZ(-lw.spin * dt * Math.min(1, lw.vel.length() / 6));
+      if (lw.vel.length() < 0.8) lw.obj.rotation.x = THREE.MathUtils.lerp(lw.obj.rotation.x, 0, dt * 2);
+    }
+    // 바퀴 빠진 뒤: 몸이 앞으로 기울어 멈춤
+    this.broken = damp(this.broken, ctx.state === 'BROKEN' ? 1 : 0, 4, dt);
+    this.body.rotation.z += this.broken * 0.12;
+    this.body.rotation.x += -this.broken * 0.1;
     this.ambush = damp(this.ambush, ctx.state === 'AMBUSH' ? 1 : 0, 5, dt);
     const a = this.ambush;
     this.hatch.rotation.x = a * 1.4;

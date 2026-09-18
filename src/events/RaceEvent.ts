@@ -25,6 +25,13 @@ export type RaceEventType =
   | 'SUPER_SPRINT'
   | 'COLLISION'
   | 'COMEBACK'
+  | 'TWIST_FALL'
+  | 'TWIST_REVERSE'
+  | 'TWIST_WHEEL_OFF'
+  | 'TWIST_SLEEP'
+  | 'TWIST_ROCKET'
+  | 'TWIST_SHOELACE'
+  | 'TWIST_STUBBORN'
   | 'BUMP'
   | 'LEAD_CHANGE'
   | 'FINAL_STRETCH'
@@ -77,6 +84,13 @@ export const MAJOR_EVENTS = new Set<RaceEventType>([
   'SUPER_SPRINT',
   'COLLISION',
   'COMEBACK',
+  'TWIST_FALL',
+  'TWIST_REVERSE',
+  'TWIST_WHEEL_OFF',
+  'TWIST_SLEEP',
+  'TWIST_ROCKET',
+  'TWIST_SHOELACE',
+  'TWIST_STUBBORN',
 ]);
 
 export const EVENT_LABELS: Record<RaceEventType, string> = {
@@ -106,6 +120,13 @@ export const EVENT_LABELS: Record<RaceEventType, string> = {
   SUPER_SPRINT: '초강력 스퍼트',
   COLLISION: '선수 충돌',
   COMEBACK: '기적의 추격',
+  TWIST_FALL: '결승 직전 대자로 넘어짐',
+  TWIST_REVERSE: '결승 직전 뒷걸음질',
+  TWIST_WHEEL_OFF: '결승 직전 바퀴 빠짐',
+  TWIST_SLEEP: '결승 직전 갑자기 잠듦',
+  TWIST_ROCKET: '후방에서 로켓 역전',
+  TWIST_SHOELACE: '결승 직전 신발끈 묶기',
+  TWIST_STUBBORN: '결승 직전 멈춰서 풀 뜯기',
   BUMP: '접촉',
   LEAD_CHANGE: '선두 교체',
   FINAL_STRETCH: '마지막 직선주로',
