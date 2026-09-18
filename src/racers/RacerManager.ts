@@ -144,6 +144,13 @@ export class RacerManager {
       case 'TWIST_WHEEL_OFF':
         this.particles.impact(pos.clone().setY(0.4), 1.6);
         break;
+      case 'LAUNCHED':
+        this.particles.impact(pos.clone().setY(0.5), 2.0);
+        break;
+      case 'PLANTED':
+        this.particles.impact(pos.clone().setY(0.2), 2.5);
+        this.particles.shockwave(pos.clone().setY(0.3));
+        break;
       case 'TWIST_ROCKET':
         this.particles.sparkle(pos.clone().setY(1.5));
         this.particles.sparkle(pos.clone().setY(0.6));

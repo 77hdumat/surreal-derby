@@ -23,6 +23,8 @@ export type RacerStatus =
   | 'SLEEPING'
   | 'STUBBORN'
   | 'SHOELACE'
+  | 'LAUNCHED'
+  | 'PLANTED'
   | 'SPRAYING'
   | 'FINISHED';
 

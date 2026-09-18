@@ -231,6 +231,17 @@ export class Game {
         a.play('scream', { pos, minGain: 0.35, gain: 0.8 });
         a.crowdGasp();
         break;
+      case 'LAUNCHED':
+        a.play('screamFall', { pos, minGain: 0.6, gain: 1.0 });
+        a.play('impactHeavy', { pos, minGain: 0.5, gain: 0.9 });
+        a.play('whooshEpic', { pos, minGain: 0.3, gain: 0.6 });
+        a.crowdGasp();
+        break;
+      case 'PLANTED':
+        a.play('impactHeavy', { pos, minGain: 0.6, gain: 1.1, rate: 0.7 });
+        a.play('crash', { pos, minGain: 0.4, gain: 0.7 });
+        a.crowdGasp();
+        break;
       case 'TWIST_FALL':
         a.play('impactHeavy', { pos, minGain: 0.6, gain: 1.0 });
         a.play('screamFall', { pos, minGain: 0.5 });

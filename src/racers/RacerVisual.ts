@@ -344,6 +344,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
   /** 넘어짐/잠듦 자세 0..1 */
   protected downPose = 0;
   protected grazePose = 0;
+  protected planted = 0;
   private reinTmpA = new THREE.Vector3();
   private reinTmpB = new THREE.Vector3();
   private reinTmpC = new THREE.Vector3();
@@ -512,7 +513,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
     const { dt, time, speedNorm } = ctx;
     const st = ctx.state;
     const grounded =
-      st === 'COLLAPSED' || st === 'ENGINE_FAILURE' || st === 'FALLEN' || st === 'SLEEPING' || st === 'STUBBORN' || st === 'SHOELACE' || st === 'BROKEN';
+      st === 'COLLAPSED' || st === 'ENGINE_FAILURE' || st === 'FALLEN' || st === 'SLEEPING' || st === 'STUBBORN' || st === 'SHOELACE' || st === 'BROKEN' || st === 'PLANTED';
     const animSpeed = grounded ? 0 : speedNorm;
     const stride = Math.max(1, this.def.strideLength);
     // 보폭 주파수(Hz) — 실제 말은 16m/s 에서 약 2.3~2.5 보폭/초
@@ -546,6 +547,28 @@ export abstract class PlaceholderVisual implements RacerVisual {
     const reverse = st === 'REVERSING' ? 1 : 0;
     this.body.rotation.set(roll * (1 - dp) + dp * 1.5, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed * gait, pitch * (1 - dp) + reverse * 0.18 + this.grazePose * 0.12);
     if (dp > 0.02) this.body.position.y = this.baseY + dp * 0.15 + Math.sin(time * 2.2) * 0.02 * dp;
+    // 코끼리에게 받힘: 포물선으로 날아올라 빙글 돌다 머리부터 땅에 꽂힘
+    if (st === 'LAUNCHED') {
+      const t = THREE.MathUtils.clamp(1 - ctx.stateTimer / 2.6, 0, 1);
+      const h = 4 * t * (1 - t) * 9;
+      this.body.position.y = this.baseY + h;
+      this.body.rotation.z = -t * Math.PI * 2.5 - 0.3; // 앞으로 공중제비
+      this.body.rotation.x = Math.sin(t * Math.PI * 3) * 0.5;
+      this.planted = 0;
+    }
+    const plantTarget = st === 'PLANTED' ? 1 : 0;
+    this.planted = THREE.MathUtils.lerp(this.planted, plantTarget, 1 - Math.exp(-10 * dt));
+    if (this.planted > 0.02) {
+      const p = this.planted;
+      // 머리가 땅속, 다리는 하늘로 허우적
+      // 원점(발밑)을 축으로 코를 아래로 돌리면 머리는 땅속(-0.8m), 엉덩이·다리는 하늘로
+      this.body.rotation.z = THREE.MathUtils.lerp(this.body.rotation.z, -Math.PI / 2 - 0.15, p);
+      this.body.rotation.x = Math.sin(time * 1.3) * 0.05 * p;
+      this.body.position.y = this.baseY + 1.35 * p;
+      this.legs.forEach((l, i) => {
+        l.rotation.z = Math.sin(time * 7 + i * 1.4) * 0.5 * p;
+      });
+    }
     if (this.neckBob) {
       const bob = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.12 * (0.3 + animSpeed);
       // 풀 뜯기: 목을 바닥으로
@@ -621,7 +644,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
   }
 
   onEvent(type: RaceEventType, _ctx: VisualContext): void {
-    if (type === 'RIDER_FALL' || type === 'TWIST_FALL') this.dropRider(0);
+    if (type === 'RIDER_FALL' || type === 'TWIST_FALL' || type === 'LAUNCHED') this.dropRider(0);
     if (type === 'TRIP' || type === 'COLLISION' || type === 'BUMP') this.stumble = type === 'BUMP' ? 0.4 : 1;
   }
 

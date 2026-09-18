@@ -162,6 +162,10 @@ export class RaceEngine {
       case 'EXHAUSTED':
         stateFactor = 0.62;
         break;
+      case 'LAUNCHED':
+        stateFactor = 0.35; // 공중에서 앞으로 날아가는 관성
+        break;
+      case 'PLANTED':
       case 'FALLEN':
       case 'BROKEN':
       case 'SLEEPING':
@@ -245,7 +249,7 @@ export class RaceEngine {
     // targetLane 은 interactions 에서 추월 오프셋을 더할 수 있으므로 서서히 복귀
     s.targetLane += (baseTarget - s.targetLane) * Math.min(1, dt * 1.5);
     s.targetLane = THREE.MathUtils.clamp(s.targetLane, -half + 0.9, half - 0.9);
-    const stopped = s.state === 'COLLAPSED' || s.state === 'FALLEN' || s.state === 'BROKEN' || s.state === 'SLEEPING' || s.state === 'STUBBORN' || s.state === 'SHOELACE';
+    const stopped = s.state === 'COLLAPSED' || s.state === 'FALLEN' || s.state === 'BROKEN' || s.state === 'SLEEPING' || s.state === 'STUBBORN' || s.state === 'SHOELACE' || s.state === 'PLANTED';
     const lateralSpeed = stopped ? 0 : (d.specialAbility === 'MOTORCYCLE' ? 9 : 1.6) + Math.abs(s.currentSpeed) * 0.04;
     const diff = s.targetLane - s.lane;
     s.lane += THREE.MathUtils.clamp(diff, -lateralSpeed * dt, lateralSpeed * dt);
@@ -315,6 +319,17 @@ export class RaceEngine {
         s.state = 'BROKEN';
         s.stateTimer = 999;
         return;
+      case 'LAUNCHED':
+        // 착지: 머리부터 땅에 꽂혀 기권
+        s.state = 'PLANTED';
+        s.stateTimer = 999;
+        s.currentSpeed = 0;
+        this.events.emit({ time: this.time, racerId: r.def.id, event: 'PLANTED', major: false, label: `${r.def.name} 머리부터 땅에 꽂힘 (기권)` });
+        return;
+      case 'PLANTED':
+        s.state = 'PLANTED';
+        s.stateTimer = 999;
+        return;
       default:
         s.state = 'RUNNING';
     }
@@ -370,6 +385,20 @@ export class RaceEngine {
             const victim = aggressorA ? b : a;
             const aggressor = aggressorA ? a : b;
             this.pairCooldown.set(key, 1.5);
+            const protectedWinner = this.scenario?.winnerId === victim.def.id;
+            if (aggressor.def.specialAbility === 'ELEPHANT' && aggressor.state.state === 'CHARGING' && !protectedWinner && victim.state.state !== 'LAUNCHED' && victim.state.state !== 'PLANTED' && victim.state.state !== 'FINISHED') {
+              // 코끼리 돌진에 받히면 하늘로 날아갔다가 머리부터 땅에 꽂힌다 (기권)
+              this.launch(victim, aggressor === a ? -sign : sign);
+              this.events.emit({
+                time: this.time,
+                racerId: victim.def.id,
+                targetId: aggressor.def.id,
+                event: 'LAUNCHED',
+                major: true,
+                label: `${victim.def.name} 코끼리에게 받혀 하늘로`,
+              });
+              continue;
+            }
             this.knock(victim, aggressor === a ? -sign : sign, 0.6, 0.55);
             this.events.emit({
               time: this.time,
@@ -395,6 +424,20 @@ export class RaceEngine {
         }
       }
     }
+  }
+
+  private launch(r: Racer, dir: number): void {
+    const s = r.state;
+    s.state = 'LAUNCHED';
+    s.stateTimer = 2.6;
+    s.speedMultiplier = 1;
+    s.accelMultiplier = 1;
+    s.currentSpeed = Math.max(s.currentSpeed, 8);
+    s.bumpTimer = 0.7;
+    s.bumpDir = dir;
+    s.targetLane += dir * 6;
+    s.riderless = true;
+    s.destiny = false;
   }
 
   private knock(r: Racer, dir: number, stun: number, speedKeep: number): void {

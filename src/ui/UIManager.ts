@@ -357,6 +357,8 @@ export class UIManager {
     else if (st === 'GRABBING') s = '코 공격!';
     else if (st === 'CARRYING') s = '들고뜀!';
     else if (st === 'FALLEN') s = '넘어짐!';
+    else if (st === 'LAUNCHED') s = '비행중!';
+    else if (st === 'PLANTED') s = '땅에꽂힘';
     else if (st === 'REVERSING') s = '뒷걸음!';
     else if (st === 'BROKEN') s = '바퀴빠짐';
     else if (st === 'SLEEPING') s = 'Zzz';

@@ -32,6 +32,8 @@ export type RaceEventType =
   | 'TWIST_ROCKET'
   | 'TWIST_SHOELACE'
   | 'TWIST_STUBBORN'
+  | 'LAUNCHED'
+  | 'PLANTED'
   | 'BUMP'
   | 'LEAD_CHANGE'
   | 'FINAL_STRETCH'
@@ -91,6 +93,7 @@ export const MAJOR_EVENTS = new Set<RaceEventType>([
   'TWIST_ROCKET',
   'TWIST_SHOELACE',
   'TWIST_STUBBORN',
+  'LAUNCHED',
 ]);
 
 export const EVENT_LABELS: Record<RaceEventType, string> = {
@@ -127,6 +130,8 @@ export const EVENT_LABELS: Record<RaceEventType, string> = {
   TWIST_ROCKET: '후방에서 로켓 역전',
   TWIST_SHOELACE: '결승 직전 신발끈 묶기',
   TWIST_STUBBORN: '결승 직전 멈춰서 풀 뜯기',
+  LAUNCHED: '코끼리에게 받혀 하늘로',
+  PLANTED: '머리부터 땅에 꽂힘 (기권)',
   BUMP: '접촉',
   LEAD_CHANGE: '선두 교체',
   FINAL_STRETCH: '마지막 직선주로',

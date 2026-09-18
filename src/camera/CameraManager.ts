@@ -143,6 +143,7 @@ export class CameraManager {
       this.finishSideTimer = 0.01;
       this.shake(0.3);
     }
+    if (ev.event === 'PLANTED') this.shake(0.7);
     if (ev.event === 'LEAD_CHANGE' && !this.finishLocked && this.mode !== 'EVENT_CAMERA' && Math.random() < 0.5) {
       this.setMode('LEADER_CAMERA', true);
     }
@@ -169,6 +170,10 @@ export class CameraManager {
         break;
       case 'ELEPHANT_STOMP':
         this.shake(1.0);
+        break;
+      case 'LAUNCHED':
+        this.shake(0.8);
+        this.eventTimer = 3.4;
         break;
       case 'ELEPHANT_TRUNK':
       case 'ELEPHANT_SPRAY':
