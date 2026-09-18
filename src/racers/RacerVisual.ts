@@ -255,6 +255,51 @@ export function makeRider(silks: number, helmet: number, scale = 1): THREE.Group
   return g;
 }
 
+/** 갈기: 목을 따라 겹치는 부드러운 술 — 속도에 따라 흩날림 */
+export function makeMane(neckLen: number, mat: THREE.Material, xOff: number, count = 7): THREE.Group {
+  const g = new THREE.Group();
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
+    const tuft = new THREE.Mesh(new THREE.CapsuleGeometry(0.06 - t * 0.015, 0.2, 3, 8), mat);
+    tuft.castShadow = true;
+    tuft.position.set(xOff - 0.02 * i, 0.15 + t * (neckLen + 0.15), 0);
+    tuft.rotation.z = 0.55 + Math.sin(i * 1.7) * 0.15;
+    tuft.userData.baseRot = tuft.rotation.z;
+    g.add(tuft);
+  }
+  g.name = 'mane';
+  return g;
+}
+
+/** 굴레(코끈·볼끈)와 고삐 앵커. 고삐는 매 프레임 머리→기수 손을 잇는 곡선으로 갱신 */
+export interface ReinRig {
+  head: THREE.Object3D;
+  /** 재갈(bit) 위치 — head 로컬 */
+  bit: THREE.Vector3;
+  riderIndex: number;
+  segments: THREE.Mesh[][];
+}
+
+export function makeBridle(head: THREE.Object3D, hs: number, mat: THREE.Material): void {
+  // 코끈: 주둥이 둘레
+  const nose = new THREE.Mesh(new THREE.TorusGeometry(0.19 * hs, 0.018, 6, 16), mat);
+  nose.position.set(0.55 * hs, -0.02, 0);
+  nose.rotation.y = Math.PI / 2;
+  head.add(nose);
+  // 이마끈
+  const brow = new THREE.Mesh(new THREE.TorusGeometry(0.24 * hs, 0.016, 6, 16), mat);
+  brow.position.set(0.02 * hs, 0.06, 0);
+  brow.rotation.y = Math.PI / 2;
+  head.add(brow);
+  // 볼끈 (양쪽)
+  for (const s of [-1, 1]) {
+    const cheek = new THREE.Mesh(new THREE.CapsuleGeometry(0.015, 0.5 * hs, 3, 6), mat);
+    cheek.position.set(0.28 * hs, 0.03, s * 0.21 * hs);
+    cheek.rotation.z = Math.PI / 2 - 0.15;
+    head.add(cheek);
+  }
+}
+
 interface FallenRider {
   obj: THREE.Object3D;
   vel: THREE.Vector3;
@@ -293,6 +338,11 @@ export abstract class PlaceholderVisual implements RacerVisual {
   protected stridePhase = 0;
   /** 바퀴 달린 선수: 몸통 바운스/피치 없음, 바퀴만 회전 */
   protected wheeled = false;
+  protected reins: ReinRig | null = null;
+  private reinTmpA = new THREE.Vector3();
+  private reinTmpB = new THREE.Vector3();
+  private reinTmpC = new THREE.Vector3();
+  private reinTmpD = new THREE.Vector3();
 
   constructor(def: RacerDefinition) {
     this.def = def;
@@ -386,6 +436,70 @@ export abstract class PlaceholderVisual implements RacerVisual {
     this.worldForward.copy(tan);
   }
 
+  /** 고삐 부착: head 로컬 bit 위치에서 기수 손까지 양쪽 두 줄 */
+  protected attachReins(head: THREE.Object3D, bit: THREE.Vector3, riderIndex = 0, parent: THREE.Object3D = this.body): void {
+    const mat = toon(0x3a2416);
+    const segments: THREE.Mesh[][] = [];
+    for (let side = 0; side < 2; side++) {
+      const list: THREE.Mesh[] = [];
+      for (let i = 0; i < 8; i++) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 1, 5), mat);
+        m.castShadow = false;
+        parent.add(m);
+        list.push(m);
+      }
+      segments.push(list);
+    }
+    this.reins = { head, bit, riderIndex, segments };
+  }
+
+  private updateReins(): void {
+    const rig = this.reins;
+    if (!rig) return;
+    const rider = this.riders[rig.riderIndex];
+    const parent = rig.segments[0][0].parent!;
+    const riderAttached = rider && rider.parent === this.riderParent[rig.riderIndex];
+    rig.head.updateWorldMatrix(true, false);
+    parent.updateWorldMatrix(true, false);
+    for (let side = 0; side < 2; side++) {
+      const s = side === 0 ? -1 : 1;
+      // 재갈 → parent 로컬
+      const p0 = this.reinTmpA.copy(rig.bit);
+      p0.z = rig.bit.z * s;
+      rig.head.localToWorld(p0);
+      parent.worldToLocal(p0);
+      // 기수 손 → parent 로컬
+      const p2 = this.reinTmpB;
+      if (riderAttached) {
+        p2.set(0.55, 0.35, s * 0.2).multiplyScalar(rider.scale.x);
+        rider.localToWorld(p2);
+        parent.worldToLocal(p2);
+      } else {
+        // 기수가 없으면 고삐가 늘어져 흔들림
+        p2.copy(p0).add(this.reinTmpD.set(-0.6, -0.5, s * 0.15));
+      }
+      const mid = this.reinTmpC.addVectors(p0, p2).multiplyScalar(0.5);
+      mid.y -= 0.16 + (riderAttached ? 0 : 0.2);
+      const list = rig.segments[side];
+      const n = list.length;
+      let prev = p0.clone();
+      for (let i = 0; i < n; i++) {
+        const t = (i + 1) / n;
+        // 2차 베지어
+        const pt = this.reinTmpD.set(0, 0, 0)
+          .addScaledVector(p0, (1 - t) * (1 - t))
+          .addScaledVector(mid, 2 * (1 - t) * t)
+          .addScaledVector(p2, t * t);
+        const seg = list[i];
+        seg.position.addVectors(prev, pt).multiplyScalar(0.5);
+        const len = prev.distanceTo(pt);
+        seg.scale.set(1, Math.max(0.01, len), 1);
+        seg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pt.clone().sub(prev).normalize());
+        prev.copy(pt);
+      }
+    }
+  }
+
   update(ctx: VisualContext): void {
     const { dt, time, speedNorm } = ctx;
     const grounded = ctx.state === 'COLLAPSED' || ctx.state === 'ENGINE_FAILURE';
@@ -425,6 +539,20 @@ export abstract class PlaceholderVisual implements RacerVisual {
     });
     this.updateFallen(dt);
     this.updateSpecial(ctx);
+    this.updateMane(time, animSpeed);
+    this.updateReins();
+  }
+
+  /** 갈기 흩날림 */
+  private updateMane(time: number, speed: number): void {
+    this.body.traverse((o) => {
+      if (o.name !== 'mane') return;
+      o.children.forEach((t, i) => {
+        const base = (t.userData.baseRot as number) ?? 0.55;
+        t.rotation.z = base - speed * 0.35 + Math.sin(time * 11 + i * 0.9) * 0.12 * speed;
+        t.rotation.x = Math.sin(time * 7 + i) * 0.08 * speed;
+      });
+    });
   }
 
   protected updateFallen(dt: number): void {

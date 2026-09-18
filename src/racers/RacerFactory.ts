@@ -10,6 +10,8 @@ import {
   toon,
   makeNumberCloths,
   makeRider,
+  makeMane,
+  makeBridle,
   type RacerVisual,
   type VisualContext,
 } from './RacerVisual';
@@ -46,6 +48,7 @@ interface HorseOpts {
   neckLen?: number;
   headScale?: number;
   ears?: boolean;
+  bridle?: boolean;
 }
 
 /** 말 몸통(캡슐) + 가슴/엉덩이(구) + 목 + 머리 + 꼬리. 다리/기수는 호출자가 배치. */
@@ -69,8 +72,7 @@ function buildHorse(parent: THREE.Object3D, o: HorseOpts): HorseParts {
   const neckM = capsule(R * 0.52, neckLen, o.hide);
   neckM.position.y = neckLen / 2 + 0.1;
   neck.add(neckM);
-  const mane = box(0.16, neckLen + 0.5, 0.12, o.mane);
-  mane.position.set(-R * 0.45, neckLen / 2 + 0.2, 0);
+  const mane = makeMane(neckLen, o.mane, -R * 0.42);
   neck.add(mane);
   const head = new THREE.Group();
   head.position.set(0.05, neckLen + 0.35, 0);
@@ -100,12 +102,25 @@ function buildHorse(parent: THREE.Object3D, o: HorseOpts): HorseParts {
       head.add(ear);
     }
   }
+  // 앞머리 술 + 굴레
+  const forelock = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.16, 3, 8), o.mane);
+  forelock.position.set(0.12 * hs, 0.26, 0);
+  forelock.rotation.z = 1.1;
+  head.add(forelock);
+  if (o.bridle !== false) makeBridle(head, hs, toon(0x3a2416));
   neck.add(head);
   parent.add(neck);
   const tail = capsule(0.07, 0.7, o.mane);
   tail.position.set(-bodyLen / 2 - R * 0.9, y + 0.05, 0);
   tail.rotation.z = 0.55;
   parent.add(tail);
+  for (let i = 0; i < 3; i++) {
+    const t = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.4, 3, 6), o.mane);
+    t.position.set(-bodyLen / 2 - R * 0.9 - 0.25 - i * 0.05, y - 0.25 - i * 0.12, (i - 1) * 0.06);
+    t.rotation.z = 0.35 + i * 0.12;
+    t.castShadow = true;
+    parent.add(t);
+  }
   return { chest, rump, neck, head, barrel, tail };
 }
 
@@ -195,6 +210,7 @@ class CostumeVisual extends PlaceholderVisual {
       knee.add(shoe);
     });
     this.addRider(new THREE.Vector3(-0.2, 2.15, 0), 0.95);
+    this.attachReins(this.parts.head, new THREE.Vector3(0.66, -0.05, 0.18), 0, this.shell);
     this.neckBob = this.parts.neck;
     this.neckBase = -0.85;
     this.bounceAmp = 0.2;
@@ -326,6 +342,7 @@ class LongbodyVisual extends PlaceholderVisual {
     this.addRider(new THREE.Vector3(0.05, 2.1, 0));
     this.reparentRider(0, this.front);
     this.reparentRider(1, this.rear);
+    this.attachReins(parts.head, new THREE.Vector3(0.62, -0.05, 0.16), 0, this.front);
     this.bounceAmp = 0.11;
     this.height = 2.5;
   }
@@ -562,6 +579,7 @@ class CowVisual extends PlaceholderVisual {
       { x: -0.85, z: 0.35, w: 0.2, len: 0.98, mat: hide, y: 0.98 },
     ]);
     this.addRider(new THREE.Vector3(-0.2, 2.2, 0));
+    this.attachReins(this.head, new THREE.Vector3(0.7, -0.05, 0.2));
     this.bounceAmp = 0.12;
     this.wobbleFreq = 1.0;
     this.height = 2.4;
@@ -622,8 +640,8 @@ class MotorcycleVisual extends PlaceholderVisual {
     head.position.set(1.7, 1.85, 0);
     head.rotation.z = -0.15;
     this.frame.add(head);
-    const mane = box(0.7, 0.2, 0.12, orange);
-    mane.position.set(1.15, 1.85, 0);
+    const mane = makeMane(0.5, orange, -0.2, 5);
+    mane.position.set(1.15, 1.35, 0);
     mane.rotation.z = -0.5;
     this.frame.add(mane);
     for (const s of [-1, 1]) {
@@ -870,9 +888,7 @@ class GiraffeVisual extends PlaceholderVisual {
     const neckM = new THREE.Mesh(neckGeo, hide);
     neckM.castShadow = true;
     this.neck.add(neckM);
-    const maneGeo = new THREE.BoxGeometry(0.1, neckLen, 0.14);
-    maneGeo.translate(-0.28, neckLen / 2, 0);
-    this.neck.add(new THREE.Mesh(maneGeo, toon(0x6b3a1e)));
+    this.neck.add(makeMane(neckLen - 0.4, toon(0x6b3a1e), -0.27, 12));
     this.head = new THREE.Group();
     this.head.position.set(0, neckLen + 0.1, 0);
     const skull = capsule(0.2, 0.45, hide, 'x');
@@ -914,6 +930,7 @@ class GiraffeVisual extends PlaceholderVisual {
       { x: -0.7, z: 0.3, w: 0.18, len: 1.85, mat: hide, y: 1.85 },
     ]);
     this.addRider(new THREE.Vector3(-0.2, 3.05, 0));
+    this.attachReins(this.head, new THREE.Vector3(0.6, -0.05, 0.15));
     this.bounceAmp = 0.14;
     this.wobbleFreq = 1.0;
     this.legAmp = 0.5;
@@ -974,6 +991,7 @@ class ClassicVisual extends PlaceholderVisual {
       { x: -0.85, z: 0.3, w: 0.17, len: 1.02, mat: hide, y: 1.02 },
     ]);
     this.addRider(new THREE.Vector3(-0.15, 2.15, 0));
+    this.attachReins(parts.head, new THREE.Vector3(0.62, -0.05, 0.16));
     this.bounceAmp = 0.13;
     this.height = 2.4;
   }
@@ -1051,6 +1069,7 @@ class CircusVisual extends PlaceholderVisual {
       l.add(band);
     }
     this.addRider(new THREE.Vector3(-0.15, 2.2, 0));
+    this.attachReins(this.parts.head, new THREE.Vector3(0.62, -0.05, 0.16));
     this.bounceAmp = 0.13;
     this.height = 2.5;
   }
@@ -1190,6 +1209,7 @@ class TrojanVisual extends PlaceholderVisual {
     cloth.position.set(-0.4, 2.0, 0);
     this.body.add(cloth);
     this.addRider(new THREE.Vector3(-0.3, 2.95, 0));
+    this.attachReins(this.parts.head, new THREE.Vector3(0.56, -0.05, 0.15));
     this.wheeled = true;
     this.bounceAmp = 0;
     this.height = 3.4;
