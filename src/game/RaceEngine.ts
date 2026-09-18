@@ -221,8 +221,9 @@ export class RaceEngine {
     let baseTarget = s.homeLane + cornerDrift;
     // 모터사이클: 좌우로 와리가리 (부스트 중엔 더 크게)
     if (d.specialAbility === 'MOTORCYCLE' && s.currentSpeed > 4) {
-      const amp = s.state === 'BOOSTING' ? 6.5 : 3.5;
-      baseTarget += Math.sin(this.time * 2.6 + s.wobbleSeed) * amp + Math.sin(this.time * 7.1) * 1.2;
+      // 트랙 왼쪽 끝 ↔ 오른쪽 끝을 계속 왕복 (부스트 중엔 더 빠르게)
+      const rate = s.state === 'BOOSTING' ? 1.6 : 0.95;
+      baseTarget = Math.sin(this.time * rate + s.wobbleSeed) * (half - 1.6) + Math.sin(this.time * 6.3) * 0.6;
     }
     // 코끼리: 돌진 중엔 가장 가까운 앞 선수를 향해 들이받으러 감
     if (d.specialAbility === 'ELEPHANT' && s.state === 'CHARGING') {
@@ -242,7 +243,7 @@ export class RaceEngine {
     s.targetLane += (baseTarget - s.targetLane) * Math.min(1, dt * 1.5);
     s.targetLane = THREE.MathUtils.clamp(s.targetLane, -half + 0.9, half - 0.9);
     const stopped = s.state === 'COLLAPSED' || s.state === 'FALLEN' || s.state === 'BROKEN' || s.state === 'SLEEPING' || s.state === 'STUBBORN' || s.state === 'SHOELACE';
-    const lateralSpeed = stopped ? 0 : (d.specialAbility === 'MOTORCYCLE' ? 4.5 : 1.6) + Math.abs(s.currentSpeed) * 0.04;
+    const lateralSpeed = stopped ? 0 : (d.specialAbility === 'MOTORCYCLE' ? 9 : 1.6) + Math.abs(s.currentSpeed) * 0.04;
     const diff = s.targetLane - s.lane;
     s.lane += THREE.MathUtils.clamp(diff, -lateralSpeed * dt, lateralSpeed * dt);
     s.lane = THREE.MathUtils.clamp(s.lane, -half + 0.7, half - 0.7);
