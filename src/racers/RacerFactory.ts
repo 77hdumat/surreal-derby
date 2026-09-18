@@ -140,6 +140,12 @@ function addSaddle(parent: THREE.Object3D, x: number, y: number, width: number, 
 class CostumeVisual extends PlaceholderVisual {
   private collapse = 0;
   private carry = 0;
+  private liftT = 99;
+
+  onEvent(type: RaceEventType, ctx: VisualContext): void {
+    super.onEvent(type, ctx);
+    if (type === 'COSTUME_CARRY') this.liftT = 0;
+  }
 
   /** 두 사람 달리기: 앞사람 좌/우 반대 위상, 뒷사람은 앞사람과 어긋나게 */
   protected gaitPhases(): number[] {
@@ -261,9 +267,11 @@ class CostumeVisual extends PlaceholderVisual {
     this.carry = damp(this.carry, ctx.state === 'CARRYING' ? 1 : 0, 6, dt);
     const c = this.collapse;
     const k = this.carry;
+    this.liftT += dt;
     if (k > 0.02) {
-      // 탈을 두 팔로 번쩍 들어올리고(머리 위) 두 사람이 상체 드러낸 채 전력질주
-      this.shell.position.y = k * 1.55;
+      // 1단계(~0.9초): 멈춰 서서 팔을 번쩍 들어 탈을 머리 위로 → 2단계: 상체 드러낸 채 전력질주
+      const lift = THREE.MathUtils.smoothstep(this.liftT, 0, 0.9);
+      this.shell.position.y = k * lift * 1.55;
       this.shell.rotation.z = k * 0.12 + Math.sin(time * 9) * 0.03 * k;
       this.shell.rotation.x = Math.sin(time * 14) * 0.08 * k;
       this.shell.rotation.y = 0;
@@ -277,9 +285,12 @@ class CostumeVisual extends PlaceholderVisual {
       });
       this.arms.forEach((a, i) => {
         const s = i % 2 ? 1 : -1;
-        a.rotation.z = -0.15 + Math.sin(time * 11 + i) * 0.06; // 위로 쭉
+        // 팔: 내려간 상태(2.6rad) → 번쩍 위로(-0.15rad)
+        a.rotation.z = THREE.MathUtils.lerp(2.6, -0.15, lift) + Math.sin(time * 11 + i) * 0.06 * lift;
         a.rotation.x = s * 0.22;
       });
+      // 들어올리는 동안 몸을 살짝 숙였다 편다
+      this.persons.forEach((p) => (p.rotation.z += (1 - lift) * 0.35));
       this.parts.head.rotation.z = 0.95 + k * 0.6;
       return;
     }

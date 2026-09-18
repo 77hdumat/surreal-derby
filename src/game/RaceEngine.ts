@@ -30,6 +30,7 @@ export class RaceEngine {
   forcedScenarioId: string | null = null;
   private finaleFired = false;
   private twistFired = false;
+  private carryDuration = 12;
   private twistDistance = 100;
 
   constructor(racers: Racer[], track: RaceTrack, events: RaceEventManager) {
@@ -201,7 +202,9 @@ export class RaceEngine {
         }
       }
     }
-    const target = s.state === 'REVERSING' ? -6.5 : target2;
+    // 탈 들어올리기: 처음 1초는 멈춰 서서 팔을 번쩍 든 뒤 폭주
+    const lifting = s.state === 'CARRYING' && s.stateTimer > this.carryDuration - 1.0;
+    const target = s.state === 'REVERSING' ? -6.5 : lifting ? 0.5 : target2;
     const prev = s.currentSpeed;
     if (target > s.currentSpeed) s.currentSpeed = Math.min(target, s.currentSpeed + accel * dt);
     else {
@@ -494,7 +497,8 @@ export class RaceEngine {
       case 'COSTUME_CARRY':
         // 탈을 벗어 들고 두 사람이 전력질주
         if (s.state === 'COLLAPSED' || s.state === 'RECOVERING') s.stateTimer = 0;
-        this.setState(r, 'CARRYING', dur ?? 12, 1.0, 3);
+        this.carryDuration = dur ?? 12;
+        this.setState(r, 'CARRYING', this.carryDuration, 1.0, 3);
         s.fatigued = false;
         label = `${r.def.name} 탈을 들고 전력질주`;
         break;
