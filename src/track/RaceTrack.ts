@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { makeGrassField, makeTree } from './Vegetation';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -38,6 +39,7 @@ export class RaceTrack {
   private crowdBase: Float32Array = new Float32Array(0);
   private crowdPhase: Float32Array = new Float32Array(0);
   private lightTowers: THREE.Mesh[] = [];
+  private clouds: THREE.Group[] = [];
 
   private tmpFrame: TrackFrame = {
     pos: new THREE.Vector3(),
@@ -444,7 +446,7 @@ export class RaceTrack {
     const zBase = this.radius + this.width / 2 + 6; // 트랙 바깥
     const len = this.straight + 40;
     const tiers = 7;
-    const tierMat = new THREE.MeshStandardMaterial({ color: 0xbfc4cc, roughness: 0.95, metalness: 0 });
+    const tierMat = new THREE.MeshStandardMaterial({ color: 0xe9e2d6, roughness: 0.95, metalness: 0 });
     const stand = new THREE.Group();
     for (let t = 0; t < tiers; t++) {
       const box = new THREE.Mesh(new THREE.BoxGeometry(len, 1.4, 3.5), tierMat);
@@ -454,13 +456,13 @@ export class RaceTrack {
     // 뒷벽 + 지붕
     const wall = new THREE.Mesh(
       new THREE.BoxGeometry(len, tiers * 1.4 + 6, 1),
-      new THREE.MeshStandardMaterial({ color: 0x8e96a3, roughness: 0.95, metalness: 0 }),
+      new THREE.MeshStandardMaterial({ color: 0xcfc6b8, roughness: 0.95, metalness: 0 }),
     );
     wall.position.set(0, (tiers * 1.4 + 6) / 2, zBase + tiers * 3.5 + 0.5);
     stand.add(wall);
     const roof = new THREE.Mesh(
       new THREE.BoxGeometry(len + 4, 0.5, tiers * 3.5 + 6),
-      new THREE.MeshStandardMaterial({ color: 0xdfe4ea, roughness: 0.95, metalness: 0 }),
+      new THREE.MeshStandardMaterial({ color: 0xf4efe6, roughness: 0.95, metalness: 0 }),
     );
     roof.position.set(0, tiers * 1.4 + 6, zBase + (tiers * 3.5) / 2 + 0.5);
     roof.rotation.x = 0.08;
@@ -506,6 +508,14 @@ export class RaceTrack {
     stand.add(crowd);
     this.crowdMesh = crowd;
     this.group.add(stand);
+  }
+
+  /** 구름 표류 */
+  updateAmbient(dt: number): void {
+    for (const c of this.clouds) {
+      c.position.x += (c.userData.speed as number) * dt;
+      if (c.position.x > 800) c.position.x = -800;
+    }
   }
 
   /** 관중 응원 강도 0..1 */
@@ -627,49 +637,63 @@ export class RaceTrack {
   }
 
   private buildInfield(): void {
-    // 연못
+    // 연못 (살짝 반사되는 물)
     const pond = new THREE.Mesh(
-      new THREE.CircleGeometry(22, 24),
-      new THREE.MeshStandardMaterial({ color: 0x3f8fd8, roughness: 0.95, metalness: 0 }),
+      new THREE.CircleGeometry(22, 32),
+      new THREE.MeshStandardMaterial({ color: 0x5fb3e6, roughness: 0.15, metalness: 0.1 }),
     );
     pond.rotation.x = -Math.PI / 2;
     pond.position.set(-40, 0.02, -8);
     pond.scale.set(1.6, 1, 1);
+    pond.userData.noShadow = true;
     this.group.add(pond);
-    // 나무
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.95, metalness: 0 });
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.95, metalness: 0 });
+    const inPond = (x: number, z: number) => Math.hypot(x + 40, (z + 8) / 1.6) < 24;
+    const nearScreen = (x: number, z: number) => Math.abs(x - (this.finishS - this.straight / 2 - 30)) < 22 && z > 0 && z < 24;
+    // 인필드 나무
     const trees = new THREE.Group();
-    const spots: [number, number][] = [];
-    for (let i = 0; i < 24; i++) {
-      const x = (Math.random() - 0.5) * (this.straight + 20);
-      const z = (Math.random() - 0.5) * 60;
-      if (Math.hypot(x + 40, (z + 8) / 1.6) < 26) continue;
-      if (Math.abs(x - (this.finishS - this.straight / 2 - 30)) < 20 && z > 0) continue;
-      spots.push([x, z]);
+    for (let i = 0; i < 26; i++) {
+      const x = (Math.random() - 0.5) * (this.straight + 30);
+      const z = (Math.random() - 0.5) * 70;
+      if (inPond(x, z) || nearScreen(x, z)) continue;
+      const t = makeTree(1 + Math.random() * 0.6);
+      t.position.set(x, 0, z);
+      t.rotation.y = Math.random() * Math.PI * 2;
+      trees.add(t);
     }
-    for (const [x, z] of spots) {
-      const h = 3 + Math.random() * 3;
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, h, 6), trunkMat);
-      trunk.position.set(x, h / 2, z);
-      const leaf = new THREE.Mesh(new THREE.ConeGeometry(2 + Math.random() * 1.5, 4 + Math.random() * 3, 7), leafMat);
-      leaf.position.set(x, h + 1.5, z);
-      trees.add(trunk, leaf);
-    }
-    // 트랙 바깥 나무들
-    for (let i = 0; i < 60; i++) {
+    // 트랙 바깥 나무 (관중석 반대편·코너)
+    for (let i = 0; i < 90; i++) {
       const s = Math.random() * this.length;
       const f = this.getFrame(s);
-      if (f.pos.z > 20 && Math.abs(f.pos.x) < this.straight / 2 + 40) continue; // 관중석 쪽 제외
-      const p = f.pos.clone().addScaledVector(f.right, this.width / 2 + 12 + Math.random() * 40);
-      const h = 4 + Math.random() * 4;
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, h, 6), trunkMat);
-      trunk.position.set(p.x, h / 2, p.z);
-      const leaf = new THREE.Mesh(new THREE.ConeGeometry(3, 6, 7), leafMat);
-      leaf.position.set(p.x, h + 2.5, p.z);
-      trees.add(trunk, leaf);
+      if (f.pos.z > 20 && Math.abs(f.pos.x) < this.straight / 2 + 40) continue;
+      const p = f.pos.clone().addScaledVector(f.right, this.width / 2 + 10 + Math.random() * 60);
+      const t = makeTree(1.2 + Math.random() * 1.2);
+      t.position.set(p.x, 0, p.z);
+      t.rotation.y = Math.random() * Math.PI * 2;
+      trees.add(t);
     }
     this.group.add(trees);
+
+    // 바람에 흔들리는 잔디: 인필드 + 트랙 바깥 띠
+    const halfW = this.width / 2;
+    const infield = makeGrassField(14000, () => {
+      const x = (Math.random() - 0.5) * (this.straight + 2 * this.radius - 2 * halfW - 8);
+      const z = (Math.random() - 0.5) * (2 * this.radius - 2 * halfW - 8);
+      // 타원 내부 판정 (스타디움형)
+      const cx = THREE.MathUtils.clamp(x, -this.straight / 2, this.straight / 2);
+      const rIn = this.radius - halfW - 3;
+      if (Math.hypot(x - cx, z) > rIn) return null;
+      if (inPond(x, z) || nearScreen(x, z)) return null;
+      return [x, z];
+    });
+    this.group.add(infield);
+    const outer = makeGrassField(16000, () => {
+      const s = Math.random() * this.length;
+      const f = this.getFrame(s);
+      if (f.pos.z > 20 && Math.abs(f.pos.x) < this.straight / 2 + 30) return null; // 관중석 앞 제외
+      const p = f.pos.clone().addScaledVector(f.right, halfW + 2 + Math.random() * 28);
+      return [p.x, p.z];
+    });
+    this.group.add(outer);
   }
 
   private buildBackground(): void {
@@ -679,9 +703,9 @@ export class RaceTrack {
       side: THREE.BackSide,
       depthWrite: false,
       uniforms: {
-        top: { value: new THREE.Color(0x3a78d6) },
-        mid: { value: new THREE.Color(0x9ccbf5) },
-        bottom: { value: new THREE.Color(0xdfeeff) },
+        top: { value: new THREE.Color(0x5b93d9) },
+        mid: { value: new THREE.Color(0xb7d6f2) },
+        bottom: { value: new THREE.Color(0xf7e3c9) },
       },
       vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
       fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bottom; varying vec3 vP;
@@ -690,9 +714,21 @@ export class RaceTrack {
     const sky = new THREE.Mesh(skyGeo, skyMat);
     sky.userData.noShadow = true;
     this.group.add(sky);
+    // 오후의 태양
+    const sun = new THREE.Mesh(new THREE.SphereGeometry(28, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff1c8 }));
+    sun.position.set(420, 330, 260);
+    sun.userData.noShadow = true;
+    this.group.add(sun);
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(60, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.25, depthWrite: false }),
+    );
+    halo.position.copy(sun.position);
+    halo.userData.noShadow = true;
+    this.group.add(halo);
 
     // 구름 (납작한 스프라이트 느낌의 박스)
-    const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4e6, emissiveIntensity: 0.55, roughness: 1, transparent: true, opacity: 0.92 });
     for (let i = 0; i < 18; i++) {
       const c = new THREE.Group();
       const n = 3 + Math.floor(Math.random() * 3);
@@ -706,11 +742,14 @@ export class RaceTrack {
       const ang = Math.random() * Math.PI * 2;
       const r = 350 + Math.random() * 350;
       c.position.set(Math.cos(ang) * r, 90 + Math.random() * 60, Math.sin(ang) * r);
+      c.userData.cloud = true;
+      c.userData.speed = 0.6 + Math.random() * 0.8;
       this.group.add(c);
+      this.clouds.push(c);
     }
 
     // 먼 산
-    const mtnMat = new THREE.MeshStandardMaterial({ color: 0x7fa3c4, roughness: 0.95, metalness: 0 });
+    const mtnMat = new THREE.MeshStandardMaterial({ color: 0x9db4cf, roughness: 0.95, metalness: 0 });
     for (let i = 0; i < 26; i++) {
       const ang = (i / 26) * Math.PI * 2 + Math.random() * 0.2;
       const r = 620 + Math.random() * 120;
@@ -720,7 +759,7 @@ export class RaceTrack {
       this.group.add(m);
     }
     // 먼 건물 (관중석 뒤)
-    const bMat = new THREE.MeshStandardMaterial({ color: 0xc7ced8, roughness: 0.95, metalness: 0 });
+    const bMat = new THREE.MeshStandardMaterial({ color: 0xd9d3cb, roughness: 0.95, metalness: 0 });
     for (let i = 0; i < 30; i++) {
       const w = 10 + Math.random() * 20;
       const h = 15 + Math.random() * 50;

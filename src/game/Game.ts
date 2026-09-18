@@ -13,6 +13,7 @@ import { CommentaryManager } from '../commentary/CommentaryManager';
 import { UIManager } from '../ui/UIManager';
 import { VoiceManager } from '../audio/VoiceManager';
 import { TEASERS_JA } from '../commentary/CommentaryJa';
+import { updateWind } from '../track/Vegetation';
 import type { RacePhase } from './RaceState';
 import type { RaceEvent } from '../events/RaceEvent';
 
@@ -49,7 +50,7 @@ export class Game {
   private tmp = new THREE.Vector3();
   private firstFinishHandled = false;
   private sun: THREE.DirectionalLight;
-  private sunOffset = new THREE.Vector3(60, 110, 40);
+  private sunOffset = new THREE.Vector3(85, 70, 55);
 
   constructor(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' });
@@ -57,18 +58,19 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    this.scene.fog = new THREE.Fog(0xd6e8f8, 300, 1000);
+    // 여름 오후: 따뜻한 낮은 태양, 긴 그림자, 부드러운 안개
+    this.scene.fog = new THREE.Fog(0xe9dfd0, 260, 950);
     // 실사풍 PBR 조명: 환경맵(간접광) + 태양(그림자) + 하늘/지면 반구광
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.5;
     pmrem.dispose();
-    this.scene.add(new THREE.HemisphereLight(0xdcecff, 0x5f7a4f, 0.55));
-    this.sun = new THREE.DirectionalLight(0xfff2dc, 2.2);
+    this.scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x8a9a62, 0.6));
+    this.sun = new THREE.DirectionalLight(0xffd9a6, 2.4);
     this.sun.position.copy(this.sunOffset);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -400,6 +402,8 @@ export class Game {
         break;
     }
     this.updateSun();
+    updateWind(this.globalTime, 1 + this.camera.boostNearby * 0.5);
+    this.track.updateAmbient(dt);
     this.audio.setCameraPosition(this.camera.camera.position);
     this.audio.update(dt, this.camera.velocity);
     this.effects.update(dt, this.camera.velocity);
