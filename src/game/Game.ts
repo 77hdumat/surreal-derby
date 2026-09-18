@@ -11,6 +11,8 @@ import { ParticleManager } from '../effects/ParticleManager';
 import { AudioManager } from '../audio/AudioManager';
 import { CommentaryManager } from '../commentary/CommentaryManager';
 import { UIManager } from '../ui/UIManager';
+import { VoiceManager } from '../audio/VoiceManager';
+import { TEASERS_JA } from '../commentary/CommentaryJa';
 import type { RacePhase } from './RaceState';
 import type { RaceEvent } from '../events/RaceEvent';
 
@@ -29,6 +31,7 @@ export class Game {
   readonly effects: EffectsManager;
   readonly audio = new AudioManager();
   readonly commentary = new CommentaryManager();
+  readonly voice = new VoiceManager();
   readonly ui: UIManager;
 
   phase: RacePhase = 'INTRO';
@@ -94,6 +97,11 @@ export class Game {
 
     this.events.on((ev) => this.onRaceEvent(ev));
     this.commentary.onLine = (line) => this.ui.setSubtitle(line);
+    this.commentary.onSpeak = (ja, major) => this.voice.speak(ja, major);
+    this.ui.onToggleVoice = () => {
+      this.voice.enabled = !this.voice.enabled;
+      return this.voice.enabled;
+    };
     this.ui.onStart = () => this.beginRace();
     this.ui.onAgain = () => this.beginRace();
     this.ui.onBackToSelect = () => this.backToIntro();
@@ -157,6 +165,7 @@ export class Game {
 
   private backToIntro(): void {
     this.phase = 'INTRO';
+    this.voice.stop();
     this.audio.stopRacerLoops();
     this.engine.reset();
     this.racers.reset();
@@ -202,7 +211,7 @@ export class Game {
     const a = this.audio;
     switch (ev.event) {
       case 'START':
-        if (this.engine.scenario?.teaser) this.commentary.sayRaw(this.engine.scenario.teaser, false);
+        if (this.engine.scenario?.teaser) this.commentary.sayRaw(this.engine.scenario.teaser, false, TEASERS_JA[this.engine.scenario.id] ?? this.engine.scenario.teaser);
         break;
       case 'COSTUME_COLLAPSE':
         a.play('cardboardDrop', { pos, minGain: 0.5, gain: 1.2 });
@@ -378,6 +387,7 @@ export class Game {
           this.camera.setMode('RESULT_CAMERA', true);
           this.ui.setSubtitle(null);
           this.audio.stopRacerLoops();
+          this.voice.stop();
           this.audio.play('fanfare', { gain: 0.6 });
           this.ui.showResult(this.engine.ranking, this.racers.racers, this.events.highlights, this.engine.scenario?.title ?? '');
         }

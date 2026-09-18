@@ -17,6 +17,8 @@ export interface RacerDefinition {
   number: number;
   name: string;
   nameEn: string;
+  /** 일본어 음성 중계용 이름 */
+  nameJa: string;
   emoji: string;
   /** 최고 속도 (m/s) */
   speed: number;

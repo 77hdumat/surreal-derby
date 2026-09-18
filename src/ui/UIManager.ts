@@ -51,6 +51,7 @@ export class UIManager {
   onAgain: (() => void) | null = null;
   onBackToSelect: (() => void) | null = null;
   onToggleMute: (() => boolean) | null = null;
+  onToggleVoice: (() => boolean) | null = null;
 
   constructor(defs: RacerDefinition[]) {
     this.defs = defs;
@@ -66,6 +67,10 @@ export class UIManager {
     $('btn-start').addEventListener('click', () => this.onStart?.());
     $('btn-again').addEventListener('click', () => this.onAgain?.());
     $('btn-select').addEventListener('click', () => this.onBackToSelect?.());
+    $('btn-voice').addEventListener('click', (e) => {
+      const on = this.onToggleVoice?.() ?? false;
+      (e.currentTarget as HTMLElement).classList.toggle('off', !on);
+    });
     $('btn-mute').addEventListener('click', (e) => {
       const muted = this.onToggleMute?.() ?? false;
       (e.currentTarget as HTMLElement).textContent = muted ? '🔇' : '🔊';

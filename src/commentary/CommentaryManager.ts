@@ -1,6 +1,7 @@
 import type { RaceEvent, RaceEventType } from '../events/RaceEvent';
 import type { Racer } from '../racers/Racer';
 import type { RaceEngine } from '../game/RaceEngine';
+import { BANKS_JA, DESTINY_JA } from './CommentaryJa';
 
 type BankKey = RaceEventType | 'FINISH_FIRST' | 'FINISH_OTHER' | 'GENERIC' | 'OUTSIDE' | 'CORNER' | 'BACKSTRAIGHT' | 'GAP' | 'TIGHT' | 'COUNTDOWN' | 'PHOTO';
 
@@ -69,6 +70,8 @@ function iga(name: string): string {
 
 export interface CommentaryLine {
   text: string;
+  /** 음성용 일본어 */
+  ja: string;
   major: boolean;
 }
 
@@ -77,7 +80,8 @@ export interface CommentaryLine {
  */
 export class CommentaryManager {
   private recent = new Map<string, number[]>();
-  private queue: { text: string; major: boolean }[] = [];
+  private queue: CommentaryLine[] = [];
+  onSpeak: ((ja: string, major: boolean) => void) | null = null;
   private current: CommentaryLine | null = null;
   private showTimer = 0;
   private tickTimer = 4;
@@ -99,7 +103,7 @@ export class CommentaryManager {
     this.onLine?.(null);
   }
 
-  private pick(key: BankKey): string {
+  private pick(key: BankKey): [string, string] {
     const bank = BANKS[key];
     const used = this.recent.get(key) ?? [];
     let candidates = bank.map((_, i) => i).filter((i) => !used.includes(i));
@@ -108,36 +112,37 @@ export class CommentaryManager {
     used.push(idx);
     while (used.length > Math.min(2, bank.length - 1)) used.shift();
     this.recent.set(key, used);
-    return bank[idx];
+    const jaBank = BANKS_JA[key];
+    return [bank[idx], jaBank ? jaBank[Math.min(idx, jaBank.length - 1)] : bank[idx]];
   }
 
-  private fill(template: string, r?: Racer, t?: Racer, second?: Racer): string {
+  private fill(template: string, r?: Racer, t?: Racer, second?: Racer, ja = false): string {
     return template
       .replace(/\{n\}/g, r ? String(r.def.number) : '')
-      .replace(/\{name\}/g, r ? r.def.name : '')
+      .replace(/\{name\}/g, r ? (ja ? r.def.nameJa : r.def.name) : '')
       .replace(/\{iga\}/g, r ? iga(r.def.name) : '')
       .replace(/\{tn\}/g, t ? String(t.def.number) : '')
       .replace(/\{tname\}/g, t ? t.def.name : '')
       .replace(/\{n2\}/g, second ? String(second.def.number) : '');
   }
 
-  sayRaw(text: string, major: boolean): void {
-    this.push(text, major);
+  sayRaw(text: string, major: boolean, ja = text): void {
+    this.push(text, major, ja);
   }
 
   say(key: BankKey, major: boolean, r?: Racer, t?: Racer, second?: Racer): void {
-    const text = this.fill(this.pick(key), r, t, second);
-    this.push(text, major);
+    const [ko, jaT] = this.pick(key);
+    this.push(this.fill(ko, r, t, second), major, this.fill(jaT, r, t, second, true));
   }
 
-  private push(text: string, major: boolean): void {
+  private push(text: string, major: boolean, ja: string): void {
     if (major) {
       this.queue = this.queue.filter((q) => q.major);
-      this.queue.unshift({ text, major });
+      this.queue.unshift({ text, ja, major });
       this.showTimer = 0; // 즉시 교체
     } else {
       if (this.queue.length > 2) return;
-      this.queue.push({ text, major });
+      this.queue.push({ text, ja, major });
     }
   }
 
@@ -165,7 +170,7 @@ export class CommentaryManager {
         return;
       default:
         if (ev.event in BANKS) this.say(ev.event as BankKey, ev.major, r, t);
-        if (ev.destiny) this.push('믿을 수 없는 역전이 시작됩니다!!', true);
+        if (ev.destiny) this.push('믿을 수 없는 역전이 시작됩니다!!', true, DESTINY_JA);
     }
   }
 
@@ -179,6 +184,7 @@ export class CommentaryManager {
         this.current = next;
         this.showTimer = next.major ? 2.6 : 2.0;
         this.onLine?.(next);
+        this.onSpeak?.(next.ja, next.major);
       } else if (this.current) {
         this.current = null;
         this.onLine?.(null);
