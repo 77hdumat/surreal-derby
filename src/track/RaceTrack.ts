@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeGrassField, makeTree } from './Vegetation';
+import { makeGrassField, makeTree, applyCloudShadow } from './Vegetation';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -149,14 +149,14 @@ export class RaceTrack {
     const ctx = c.getContext('2d')!;
     // 잔디 깎은 줄무늬 (레인당 한 줄) + 잔디 결 노이즈
     for (let i = 0; i < 8; i++) {
-      ctx.fillStyle = i % 2 === 0 ? '#57b33a' : '#4aa030';
+      ctx.fillStyle = i % 2 === 0 ? '#6da86f' : '#5f9a64';
       ctx.fillRect(0, i * 64, 256, 64);
     }
     let seed = 3;
     const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
     for (let i = 0; i < 9000; i++) {
-      const g = 120 + rnd() * 90;
-      ctx.fillStyle = `rgba(${40 + rnd() * 30},${g},${25 + rnd() * 20},${0.25 + rnd() * 0.3})`;
+      const g = 130 + rnd() * 60;
+      ctx.fillStyle = `rgba(${70 + rnd() * 30},${g},${90 + rnd() * 30},${0.2 + rnd() * 0.25})`;
       const x = rnd() * 256;
       const y = rnd() * 512;
       ctx.fillRect(x, y, 1 + rnd() * 2, 2 + rnd() * 5);
@@ -174,7 +174,7 @@ export class RaceTrack {
     c.width = 512;
     c.height = 512;
     const ctx = c.getContext('2d')!;
-    ctx.fillStyle = '#4a9f33';
+    ctx.fillStyle = '#5f9a6a';
     ctx.fillRect(0, 0, 512, 512);
     let seed = 11;
     const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
@@ -185,14 +185,14 @@ export class RaceTrack {
       const x = rnd() * 512;
       const y = rnd() * 512;
       const g2 = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g2.addColorStop(0, `rgba(${60 + rnd() * 30},${140 + rnd() * 40},${40},0.18)`);
+      g2.addColorStop(0, `rgba(${80 + rnd() * 30},${150 + rnd() * 30},${110 + rnd() * 20},0.18)`);
       g2.addColorStop(1, 'rgba(0,0,0,0)');
       void grd;
       ctx.fillStyle = g2;
       ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
     for (let i = 0; i < 14000; i++) {
-      ctx.fillStyle = `rgba(${50 + rnd() * 30},${130 + rnd() * 60},${30 + rnd() * 20},${0.12 + rnd() * 0.18})`;
+      ctx.fillStyle = `rgba(${70 + rnd() * 30},${140 + rnd() * 40},${95 + rnd() * 25},${0.12 + rnd() * 0.18})`;
       ctx.fillRect(rnd() * 512, rnd() * 512, 1, 2 + rnd() * 3);
     }
     const tex = new THREE.CanvasTexture(c);
@@ -206,6 +206,7 @@ export class RaceTrack {
   private buildGround(): void {
     const geo = new THREE.PlaneGeometry(1600, 1600);
     const mat = new THREE.MeshStandardMaterial({ map: this.grassTexture(), roughness: 1, metalness: 0 });
+    applyCloudShadow(mat, 0.3);
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
     m.position.y = -0.05;
@@ -244,6 +245,7 @@ export class RaceTrack {
     geo.setIndex(indices);
     geo.computeVertexNormals();
     const mat = new THREE.MeshStandardMaterial({ map: this.stripeTexture(), roughness: 1, metalness: 0 });
+    applyCloudShadow(mat, 0.3);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     this.group.add(mesh);
@@ -640,7 +642,7 @@ export class RaceTrack {
     // 연못 (살짝 반사되는 물)
     const pond = new THREE.Mesh(
       new THREE.CircleGeometry(22, 32),
-      new THREE.MeshStandardMaterial({ color: 0x5fb3e6, roughness: 0.15, metalness: 0.1 }),
+      new THREE.MeshStandardMaterial({ color: 0x5a7aa2, roughness: 0.12, metalness: 0.15 }),
     );
     pond.rotation.x = -Math.PI / 2;
     pond.position.set(-40, 0.02, -8);
@@ -703,13 +705,13 @@ export class RaceTrack {
       side: THREE.BackSide,
       depthWrite: false,
       uniforms: {
-        top: { value: new THREE.Color(0x5b93d9) },
-        mid: { value: new THREE.Color(0xb7d6f2) },
-        bottom: { value: new THREE.Color(0xf7e3c9) },
+        top: { value: new THREE.Color(0x248fd5) },
+        mid: { value: new THREE.Color(0xcaf0fe) },
+        bottom: { value: new THREE.Color(0xfff4e2) },
       },
       vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
       fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bottom; varying vec3 vP;
-        void main(){ float h = normalize(vP).y; vec3 c = h > 0.15 ? mix(mid, top, smoothstep(0.15, 0.8, h)) : mix(bottom, mid, smoothstep(-0.05, 0.15, h)); gl_FragColor = vec4(c,1.0); }`,
+        void main(){ float h = normalize(vP).y; vec3 c = h > 0.08 ? mix(mid, top, smoothstep(0.08, 0.55, h)) : mix(bottom, mid, smoothstep(-0.04, 0.08, h)); gl_FragColor = vec4(c,1.0); }`,
     });
     const sky = new THREE.Mesh(skyGeo, skyMat);
     sky.userData.noShadow = true;
@@ -728,7 +730,7 @@ export class RaceTrack {
     this.group.add(halo);
 
     // 구름 (납작한 스프라이트 느낌의 박스)
-    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4e6, emissiveIntensity: 0.55, roughness: 1, transparent: true, opacity: 0.92 });
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xfff1de, emissive: 0xffe5c4, emissiveIntensity: 0.7, roughness: 1, transparent: true, opacity: 0.94 });
     for (let i = 0; i < 18; i++) {
       const c = new THREE.Group();
       const n = 3 + Math.floor(Math.random() * 3);

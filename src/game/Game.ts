@@ -14,6 +14,7 @@ import { UIManager } from '../ui/UIManager';
 import { VoiceManager } from '../audio/VoiceManager';
 import { TEASERS_JA } from '../commentary/CommentaryJa';
 import { updateWind } from '../track/Vegetation';
+import { installHsvFog } from '../effects/HsvFog';
 import type { RacePhase } from './RaceState';
 import type { RaceEvent } from '../events/RaceEvent';
 
@@ -50,7 +51,7 @@ export class Game {
   private tmp = new THREE.Vector3();
   private firstFinishHandled = false;
   private sun: THREE.DirectionalLight;
-  private sunOffset = new THREE.Vector3(85, 70, 55);
+  private sunOffset = new THREE.Vector3(70, 95, 50);
 
   constructor(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' });
@@ -58,19 +59,21 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // 여름 오후: 따뜻한 낮은 태양, 긴 그림자, 부드러운 안개
-    this.scene.fog = new THREE.Fog(0xe9dfd0, 260, 950);
+    // HSV 안개: fogColor.r = 목표 명도, .g = 목표 채도 (installHsvFog 참고)
+    installHsvFog();
+    this.scene.fog = new THREE.Fog(new THREE.Color(0.66, 0.32, 0), 45, 340);
     // 실사풍 PBR 조명: 환경맵(간접광) + 태양(그림자) + 하늘/지면 반구광
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.5;
+    this.scene.environmentIntensity = 0.35;
     pmrem.dispose();
-    this.scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x8a9a62, 0.6));
-    this.sun = new THREE.DirectionalLight(0xffd9a6, 2.4);
+    this.scene.add(new THREE.HemisphereLight(0x8fb3d9, 0x8c8776, 0.75));
+    this.sun = new THREE.DirectionalLight(0xffe3bd, 2.6);
     this.sun.position.copy(this.sunOffset);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);

@@ -4,6 +4,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { makeGradePass } from './GradePass';
 
 /**
  * 포스트프로세싱(잔상/블룸) + 2D 스피드라인 오버레이.
@@ -12,6 +14,7 @@ export class EffectsManager {
   readonly composer: EffectComposer;
   private afterimage: AfterimagePass;
   private bloom: UnrealBloomPass;
+  private grade: ShaderPass;
   private fxCanvas: HTMLCanvasElement;
   private fxCtx: CanvasRenderingContext2D;
   private afterTarget = 0.1;
@@ -26,9 +29,12 @@ export class EffectsManager {
     const size = renderer.getSize(new THREE.Vector2());
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
+    // 컬러 그레이딩 (거리 안개는 재질 셰이더의 HSV 안개가 담당)
+    this.grade = makeGradePass();
+    this.composer.addPass(this.grade);
     this.afterimage = new AfterimagePass(0.1);
     this.composer.addPass(this.afterimage);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.32, 0.5, 0.86);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.22, 0.6, 0.92);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.fxCanvas = fxCanvas;
@@ -71,7 +77,7 @@ export class EffectsManager {
   update(dt: number, cameraVelocity: number): void {
     this.afterCurrent = THREE.MathUtils.lerp(this.afterCurrent, this.afterTarget, Math.min(1, dt * 6));
     (this.afterimage.uniforms as { damp: { value: number } }).damp.value = this.afterCurrent;
-    this.bloom.strength = 0.28 + this.speedLines * 0.35;
+    this.bloom.strength = 0.22 + this.speedLines * 0.35;
     this.speedLines = THREE.MathUtils.lerp(this.speedLines, this.speedLinesTarget, Math.min(1, dt * 5));
     this.flash = Math.max(0, this.flash - dt * 3);
     this.drawOverlay(dt, cameraVelocity);

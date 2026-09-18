@@ -39,6 +39,35 @@ uniform float uTime; uniform float uWind; uniform float uStrength;`,
   return mat;
 }
 
+/** 구름 그림자: 월드 xz 기반 저주파 노이즈로 지면을 어둡게 (참고 사이트의 tCloudsTop 곱셈을 절차적으로 대체) */
+export function applyCloudShadow(mat: THREE.Material, strength = 0.28): THREE.Material {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    prev?.(shader, renderer);
+    shader.uniforms.uTime = windUniforms.uTime;
+    shader.uniforms.uCloudStr = { value: strength };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCloudPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n{ vec4 cwp = modelMatrix * vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\ncwp = modelMatrix * instanceMatrix * vec4(transformed, 1.0);\n#endif\nvCloudPos = cwp.xyz; }');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uTime; uniform float uCloudStr; varying vec3 vCloudPos;
+float cn_hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float cn_noise(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(cn_hash(i), cn_hash(i+vec2(1,0)), f.x), mix(cn_hash(i+vec2(0,1)), cn_hash(i+vec2(1,1)), f.x), f.y); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec2 cuv = vCloudPos.xz * 0.006 + vec2(uTime * 0.012, uTime * 0.007);
+  float c = cn_noise(cuv) * 0.6 + cn_noise(cuv * 2.3 + 7.7) * 0.4;
+  float shade = smoothstep(0.42, 0.72, c);
+  diffuseColor.rgb *= 1.0 - shade * uCloudStr;
+}`);
+  };
+  const key = mat.customProgramCacheKey?.bind(mat);
+  mat.customProgramCacheKey = () => (key ? key() : '') + `-cloud-${strength}`;
+  return mat;
+}
+
 export function updateWind(time: number, strength = 1): void {
   windUniforms.uTime.value = time;
   windUniforms.uWind.value = strength;
@@ -48,7 +77,7 @@ export function updateWind(time: number, strength = 1): void {
 export function makeGrassField(
   count: number,
   sampler: () => [number, number] | null,
-  colors: number[] = [0x4f9a2e, 0x63b23a, 0x3f8a27, 0x76c447],
+  colors: number[] = [0x558f6e, 0x6fa982, 0x9bc2a4, 0x4d8a63],
 ): THREE.InstancedMesh {
   // 두 장을 십자로 겹친 블레이드
   const blade = new THREE.PlaneGeometry(0.08, 0.42, 1, 3);
@@ -64,8 +93,9 @@ export function makeGrassField(
     pos.setX(i, pos.getX(i) * w);
     pos.setZ(i, pos.getZ(i) * w);
   }
-  const mat = new THREE.MeshStandardMaterial({ color: 0xcfd6c8, roughness: 1, side: THREE.DoubleSide, vertexColors: false });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd8dccf, roughness: 1, side: THREE.DoubleSide, vertexColors: false });
   applyWind(mat, 0.09, true);
+  applyCloudShadow(mat, 0.25);
   const mesh = new THREE.InstancedMesh(merged, mat, count);
   const dummy = new THREE.Object3D();
   const c = new THREE.Color();
@@ -103,7 +133,7 @@ export function makeTree(scale = 1): THREE.Group {
   trunk.position.y = trunkH / 2;
   trunk.castShadow = true;
   g.add(trunk);
-  const palette = [0x7cb26a, 0x9ccb6e, 0x5f9a55, 0x86c46b, 0xa9d477];
+  const palette = [0x6f9f7a, 0x86b58c, 0x5f9470, 0x9bc2a4, 0x7fae86];
   const n = 3 + Math.floor(Math.random() * 3);
   const base = palette[Math.floor(Math.random() * palette.length)];
   const mat = new THREE.MeshStandardMaterial({ color: base, roughness: 0.9 });
