@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>제1회 초현실 경마 그랑프리</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="gl"></canvas>
+      <canvas id="fx"></canvas>
+      <div id="tv"></div>
+
+      <div id="hud" class="hidden">
+        <div class="hud-top">
+          <div class="title-tag"><span class="tag-round">제1회</span> 초현실 경마 그랑프리</div>
+          <div class="live"><span class="dot"></span>LIVE</div>
+          <div class="race-time" id="race-time">00.0</div>
+        </div>
+        <div class="ranking">
+          <div class="ranking-head">현재 순위</div>
+          <ol id="rank-list"></ol>
+        </div>
+        <div id="cam-label"></div>
+        <div id="countdown"></div>
+        <div id="slowmo" class="hidden">SLOW MOTION</div>
+        <div class="subtitle-wrap"><div class="subtitle hidden" id="subtitle"></div></div>
+        <div class="controls">
+          <button id="btn-mute" title="소리">🔊</button>
+        </div>
+      </div>
+
+      <div id="intro">
+        <div class="intro-inner">
+          <header class="intro-header">
+            <div class="brand">
+              <span class="brand-badge">제1회</span>
+              <h1>초현실 경마 그랑프리</h1>
+              <div class="brand-sub">SURREAL DERBY GRAND PRIX · TODAY'S RACERS</div>
+            </div>
+            <div class="intro-actions">
+              <button id="btn-start" class="nintendo-btn">레이스 시작</button>
+              <button id="btn-reset-names" class="text-btn">이름 초기화</button>
+            </div>
+          </header>
+          <div class="intro-body">
+            <div class="intro-hero">
+              <img src="/cover.webp" alt="" />
+            </div>
+            <div class="intro-panel">
+              <ol id="intro-list"></ol>
+              <div id="detail-card" class="detail-card">
+                <div class="detail-empty">출전 선수를 선택하세요</div>
+              </div>
+              <div class="hint">선수 카드의 이름을 클릭하면 바로 수정할 수 있습니다 · 변경한 이름은 이 브라우저에 저장됩니다</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="result" class="hidden">
+        <div class="result-inner">
+          <div class="result-title">RACE RESULT</div>
+          <div class="result-body">
+            <ol id="result-list"></ol>
+            <div class="result-side">
+              <div id="result-pick"></div>
+              <div class="result-events-head">주요 사건</div>
+              <ul id="result-events"></ul>
+            </div>
+          </div>
+          <div class="result-actions">
+            <button id="btn-again" class="big">다시 경기</button>
+            <button id="btn-select">선수 선택으로</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
