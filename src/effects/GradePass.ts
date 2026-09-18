@@ -9,9 +9,9 @@ export const GradeShader = {
   uniforms: {
     tDiffuse: { value: null as THREE.Texture | null },
     uOverlay: { value: new THREE.Color('#fff4e2') },
-    uOverlayAmount: { value: 0.22 },
-    uVibrance: { value: 0.18 },
-    uContrast: { value: 0.12 },
+    uOverlayAmount: { value: 0.12 },
+    uVibrance: { value: 0.22 },
+    uContrast: { value: 0.2 },
     uVignette: { value: 0.28 },
     uExposure: { value: 1.0 },
   },

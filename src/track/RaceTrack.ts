@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeGrassField, makeTree, applyCloudShadow } from './Vegetation';
+import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -40,6 +41,9 @@ export class RaceTrack {
   private crowdPhase: Float32Array = new Float32Array(0);
   private lightTowers: THREE.Mesh[] = [];
   private clouds: THREE.Group[] = [];
+  sky!: Sky;
+  /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
+  static readonly SUN_DIR = new THREE.Vector3(0.55, 0.62, 0.42).normalize();
 
   private tmpFrame: TrackFrame = {
     pos: new THREE.Vector3(),
@@ -699,31 +703,26 @@ export class RaceTrack {
   }
 
   private buildBackground(): void {
-    // 하늘 그라데이션 돔
-    const skyGeo = new THREE.SphereGeometry(900, 24, 12);
-    const skyMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      uniforms: {
-        top: { value: new THREE.Color(0x248fd5) },
-        mid: { value: new THREE.Color(0xcaf0fe) },
-        bottom: { value: new THREE.Color(0xfff4e2) },
-      },
-      vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-      fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bottom; varying vec3 vP;
-        void main(){ float h = normalize(vP).y; vec3 c = h > 0.08 ? mix(mid, top, smoothstep(0.08, 0.55, h)) : mix(bottom, mid, smoothstep(-0.04, 0.08, h)); gl_FragColor = vec4(c,1.0); }`,
-    });
-    const sky = new THREE.Mesh(skyGeo, skyMat);
+    // 물리 기반 하늘 (Preetham) — 태양 위치와 대기 산란으로 자연스러운 그라데이션
+    const sky = new Sky();
+    sky.scale.setScalar(1800);
+    const u = sky.material.uniforms;
+    u.turbidity.value = 3.2;
+    u.rayleigh.value = 2.4;
+    u.mieCoefficient.value = 0.003;
+    u.mieDirectionalG.value = 0.8;
+    u.sunPosition.value.copy(RaceTrack.SUN_DIR);
     sky.userData.noShadow = true;
+    this.sky = sky;
     this.group.add(sky);
     // 오후의 태양
-    const sun = new THREE.Mesh(new THREE.SphereGeometry(28, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff1c8 }));
-    sun.position.set(420, 330, 260);
+    const sun = new THREE.Mesh(new THREE.SphereGeometry(22, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff6dc, fog: false }));
+    sun.position.copy(RaceTrack.SUN_DIR).multiplyScalar(820);
     sun.userData.noShadow = true;
     this.group.add(sun);
     const halo = new THREE.Mesh(
       new THREE.SphereGeometry(60, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.25, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.2, depthWrite: false, fog: false }),
     );
     halo.position.copy(sun.position);
     halo.userData.noShadow = true;

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "howler": "^2.2.4",
+    "n8ao": "^2.0.1",
     "three": "^0.170.0"
   },
   "devDependencies": {

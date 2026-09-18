@@ -29,7 +29,7 @@ export function installHsvFog(): void {
   {
     // fogColor 는 수렴 목표(명도·채도)로만 사용: r = 목표 명도, g = 목표 채도
     vec3 hsvF = hsvfog_rgb2hsv(gl_FragColor.rgb);
-    hsvF.z = mix(hsvF.z, fogColor.r, fogFactor * 0.85);
+    hsvF.z = mix(hsvF.z, fogColor.r, fogFactor * 0.7);
     hsvF.y = mix(hsvF.y, fogColor.g, fogFactor);
     gl_FragColor.rgb = hsvfog_hsv2rgb(hsvF);
   }

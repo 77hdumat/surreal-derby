@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RaceTrack } from '../track/RaceTrack';
 import { RacerManager } from '../racers/RacerManager';
 import { RACER_DEFINITIONS } from '../racers/RacerDefinitions';
@@ -53,6 +52,7 @@ export class Game {
   private sun: THREE.DirectionalLight;
   private sunOffset = new THREE.Vector3(70, 95, 50);
 
+
   constructor(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -66,31 +66,39 @@ export class Game {
     // 여름 오후: 따뜻한 낮은 태양, 긴 그림자, 부드러운 안개
     // HSV 안개: fogColor.r = 목표 명도, .g = 목표 채도 (installHsvFog 참고)
     installHsvFog();
-    this.scene.fog = new THREE.Fog(new THREE.Color(0.66, 0.32, 0), 45, 340);
-    // 실사풍 PBR 조명: 환경맵(간접광) + 태양(그림자) + 하늘/지면 반구광
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.35;
-    pmrem.dispose();
-    this.scene.add(new THREE.HemisphereLight(0x8fb3d9, 0x8c8776, 0.75));
-    this.sun = new THREE.DirectionalLight(0xffe3bd, 2.6);
+    this.scene.fog = new THREE.Fog(new THREE.Color(0.64, 0.36, 0), 90, 560);
+    // 조명: 하늘(물리 Sky)에서 뽑은 환경맵 + 태양 + 약한 반구광
+    this.scene.add(new THREE.HemisphereLight(0x9fbfe0, 0x8c8776, 0.45));
+    this.sun = new THREE.DirectionalLight(0xfff0d8, 2.8);
     this.sun.position.copy(this.sunOffset);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(3072, 3072);
     this.sun.shadow.camera.near = 10;
     this.sun.shadow.camera.far = 400;
     const sc = this.sun.shadow.camera;
-    sc.left = -70;
-    sc.right = 70;
-    sc.top = 70;
-    sc.bottom = -70;
-    this.sun.shadow.bias = -0.0008;
-    this.sun.shadow.normalBias = 0.03;
+    sc.left = -55;
+    sc.right = 55;
+    sc.top = 55;
+    sc.bottom = -55;
+    this.sun.shadow.bias = -0.0005;
+    this.sun.shadow.normalBias = 0.02;
+    this.sun.shadow.radius = 3;
     this.scene.add(this.sun, this.sun.target);
     
 
     this.track = new RaceTrack();
     this.scene.add(this.track.group);
+    this.sunOffset.copy(RaceTrack.SUN_DIR).multiplyScalar(130);
+    // 하늘 돔을 환경맵으로 구워 간접광·반사에 사용
+    {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      const skyScene = new THREE.Scene();
+      skyScene.add(this.track.sky);
+      this.scene.environment = pmrem.fromScene(skyScene, 0, 1, 3000).texture;
+      this.scene.environmentIntensity = 0.45;
+      this.track.group.add(this.track.sky);
+      pmrem.dispose();
+    }
     this.particles = new ParticleManager(3000);
     this.scene.add(this.particles.points);
     this.racers = new RacerManager(this.scene, this.track, this.particles);

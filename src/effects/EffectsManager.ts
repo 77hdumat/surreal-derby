@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { makeGradePass } from './GradePass';
+import { N8AOPass } from 'n8ao';
 
 /**
  * 포스트프로세싱(잔상/블룸) + 2D 스피드라인 오버레이.
@@ -15,6 +16,7 @@ export class EffectsManager {
   private afterimage: AfterimagePass;
   private bloom: UnrealBloomPass;
   private grade: ShaderPass;
+  private ao: N8AOPass;
   private fxCanvas: HTMLCanvasElement;
   private fxCtx: CanvasRenderingContext2D;
   private afterTarget = 0.1;
@@ -29,6 +31,15 @@ export class EffectsManager {
     const size = renderer.getSize(new THREE.Vector2());
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
+    // 스크린 스페이스 앰비언트 오클루전 — 발밑·접촉면이 땅에 붙어 보이게 (N8AO)
+    this.ao = new N8AOPass(scene, camera, size.x, size.y);
+    this.ao.configuration.aoRadius = 1.6;
+    this.ao.configuration.distanceFalloff = 1.2;
+    this.ao.configuration.intensity = 2.2;
+    this.ao.configuration.halfRes = true;
+    this.ao.configuration.gammaCorrection = false;
+    this.ao.setQualityMode('Low');
+    this.composer.addPass(this.ao);
     // 컬러 그레이딩 (거리 안개는 재질 셰이더의 HSV 안개가 담당)
     this.grade = makeGradePass();
     this.composer.addPass(this.grade);
@@ -48,10 +59,12 @@ export class EffectsManager {
   setCamera(camera: THREE.Camera): void {
     const rp = this.composer.passes[0] as RenderPass;
     rp.camera = camera;
+    (this.ao as unknown as { camera: THREE.Camera }).camera = camera;
   }
 
   resize(w: number, h: number): void {
     this.composer.setSize(w, h);
+    this.ao.setSize(w, h);
     this.bloom.setSize(w / 2, h / 2);
     this.fxCanvas.width = w;
     this.fxCanvas.height = h;
