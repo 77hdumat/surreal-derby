@@ -23,6 +23,7 @@ export class RacerManager {
   private tmpBack = new THREE.Vector3();
   private tmpHoof = new THREE.Vector3();
   private ctxCache = new Map<string, VisualContext>();
+  private prevLane = new Map<string, number>();
 
   constructor(scene: THREE.Scene, track: RaceTrack, particles: ParticleManager) {
     this.scene = scene;
@@ -50,6 +51,7 @@ export class RacerManager {
         distanceToFinish: track.raceDistance,
         sideHint: 1,
         extension: 0,
+        lateralVel: 0,
       });
       r.reset(track.laneToLat(r.def.number - 1));
     }
@@ -134,6 +136,15 @@ export class RacerManager {
         this.particles.sparkle(pos.clone().setY(1.5));
         this.particles.impact(pos.clone().setY(0.3), 0.8);
         break;
+      case 'TROJAN_AMBUSH':
+        this.particles.impact(pos.clone().setY(0.5), 1.0);
+        break;
+      case 'ELEPHANT_STOMP':
+        this.particles.shockwave(pos.clone().setY(0.3));
+        break;
+      case 'ELEPHANT_TRUNK':
+        this.particles.sparkle(pos.clone().setY(2.5));
+        break;
       case 'CIRCUS_ACT':
         this.particles.sparkle(pos.clone().setY(2));
         this.particles.sparkle(pos.clone().setY(1));
@@ -173,6 +184,9 @@ export class RacerManager {
       ctx.riderless = s.riderless;
       ctx.distanceToFinish = this.track.raceDistance - s.distance;
       ctx.extension = s.extension;
+      const pl = this.prevLane.get(r.def.id) ?? s.lane;
+      ctx.lateralVel = dt > 0 ? THREE.MathUtils.lerp(ctx.lateralVel, (s.lane - pl) / dt, 0.25) : 0;
+      this.prevLane.set(r.def.id, s.lane);
       v.update(ctx);
 
       // 파티클 — 카메라 근처 선수만
@@ -197,6 +211,11 @@ export class RacerManager {
           this.particles.hoofDust(this.tmpHoof, this.tmpBack, 1.5);
         }
         continue;
+      }
+      // 코끼리: 물대포
+      if (doExhaust && s.state === 'SPRAYING') {
+        const tip = RacerFactory.trunkTip(v);
+        if (tip) this.particles.water(tip, this.tmpTan);
       }
       // 소: 분노 시 콧김 / 인간: 탈진 시 땀
       if (doExhaust && s.state === 'RAGING') {

@@ -288,6 +288,44 @@ export class ParticleManager {
     });
   }
 
+  water(pos: THREE.Vector3, forward: THREE.Vector3): void {
+    this.emit({
+      pos,
+      count: 6,
+      vel: this.tmp.copy(forward).multiplyScalar(14).setY(3),
+      spread: 2.5,
+      size: 0.22,
+      sizeVar: 0.15,
+      life: 0.9,
+      lifeVar: 0.3,
+      colors: [0x6fc3ff, 0xa8dcff, 0xffffff],
+      gravity: 9,
+      drag: 0.6,
+      grow: 0.2,
+      alpha: 0.9,
+    });
+  }
+
+  shockwave(pos: THREE.Vector3): void {
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * Math.PI * 2;
+      this.emit({
+        pos,
+        count: 2,
+        vel: this.tmp.set(Math.cos(a) * 12, 1.5, Math.sin(a) * 12),
+        spread: 0.5,
+        size: 0.8,
+        sizeVar: 0.4,
+        life: 0.9,
+        colors: [0xc9a97a, 0xb08a5a, 0xe0d0b0],
+        gravity: 2,
+        drag: 2.5,
+        grow: 2.5,
+        alpha: 0.8,
+      });
+    }
+  }
+
   sparkle(pos: THREE.Vector3): void {
     this.emit({
       pos,

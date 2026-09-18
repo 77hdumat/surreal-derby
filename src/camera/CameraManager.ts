@@ -148,8 +148,8 @@ export class CameraManager {
     }
     if (!ev.major) return;
     this.eventTarget = ev.racerId;
-    this.eventTimer = 3.2;
-    if (!this.finishLocked) this.setMode('EVENT_CAMERA', false);
+    this.eventTimer = this.finishLocked ? 2.4 : 3.2;
+    this.setMode('EVENT_CAMERA', false);
     switch (ev.event) {
       case 'MOTORCYCLE_BOOST':
         this.shake(0.5);
@@ -158,6 +158,13 @@ export class CameraManager {
       case 'ELEPHANT_CHARGE':
         this.shake(0.7);
         this.fovBoost = 0.7;
+        break;
+      case 'ELEPHANT_STOMP':
+        this.shake(1.0);
+        break;
+      case 'ELEPHANT_TRUNK':
+      case 'ELEPHANT_SPRAY':
+        this.shake(0.4);
         break;
       case 'COW_RAGE':
       case 'SUPER_SPRINT':
@@ -272,7 +279,7 @@ export class CameraManager {
       case 'FINISH_SIDE_CAMERA': {
         const fs = t.finishS;
         P(fs - 2, -half - 8, 2.6, this.desiredPos);
-        const lookS = THREE.MathUtils.clamp(pack.leaderS, fs - 30, fs + 30);
+        const lookS = THREE.MathUtils.clamp(pack.leaderS, fs - 30, fs + 60);
         P(lookS, pack.leaderLat, 1.3, this.desiredLook);
         break;
       }
@@ -305,7 +312,10 @@ export class CameraManager {
         this.eventTimer -= dt;
         if (this.eventTimer <= 0) {
           this.eventTarget = null;
-          this.autoSwitch();
+          if (this.finishLocked) {
+            this.setMode(this.finishSideTimer > 1.4 ? 'FINISH_SIDE_CAMERA' : 'FINISH_CAMERA', true);
+            this.modeDuration = 999;
+          } else this.autoSwitch();
         }
       } else if (this.modeTimer > this.modeDuration && this.mode !== 'START_CAMERA') {
         this.autoSwitch();
@@ -313,6 +323,7 @@ export class CameraManager {
       if (this.finishSideTimer > 0) {
         this.finishSideTimer += dt;
         if (this.finishSideTimer > 1.4 && this.mode === 'FINISH_CAMERA') this.setMode('FINISH_SIDE_CAMERA', true);
+        if (this.finishSideTimer > 4.5 && this.finishSideTimer < 4.6 && this.mode === 'FINISH_SIDE_CAMERA') this.setMode('FINISH_CAMERA', true);
       }
     }
     this.computeDesired(dt);

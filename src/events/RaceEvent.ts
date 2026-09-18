@@ -3,6 +3,9 @@ export type RaceEventType =
   | 'COSTUME_COLLAPSE'
   | 'COSTUME_RECOVER'
   | 'ELEPHANT_CHARGE'
+  | 'ELEPHANT_TRUNK'
+  | 'ELEPHANT_STOMP'
+  | 'ELEPHANT_SPRAY'
   | 'COW_RAGE'
   | 'MOTORCYCLE_BOOST'
   | 'ENGINE_FAILURE'
@@ -13,6 +16,7 @@ export type RaceEventType =
   | 'GIRAFFE_PHOTO_FINISH'
   | 'LONGBODY_STRETCH'
   | 'CIRCUS_ACT'
+  | 'TROJAN_AMBUSH'
   | 'LONGBODY_RETRACT'
   | 'RIDER_FALL'
   | 'TRIP'
@@ -50,6 +54,9 @@ export interface ScheduledEvent {
 export const MAJOR_EVENTS = new Set<RaceEventType>([
   'COSTUME_COLLAPSE',
   'ELEPHANT_CHARGE',
+  'ELEPHANT_TRUNK',
+  'ELEPHANT_STOMP',
+  'ELEPHANT_SPRAY',
   'COW_RAGE',
   'MOTORCYCLE_BOOST',
   'ENGINE_FAILURE',
@@ -57,6 +64,7 @@ export const MAJOR_EVENTS = new Set<RaceEventType>([
   'GIRAFFE_NECK_ATTACK',
   'LONGBODY_STRETCH',
   'CIRCUS_ACT',
+  'TROJAN_AMBUSH',
   'RIDER_FALL',
   'TRIP',
   'SUPER_SPRINT',
@@ -69,7 +77,11 @@ export const EVENT_LABELS: Record<RaceEventType, string> = {
   COSTUME_COLLAPSE: '말탈 벗겨짐 (붕괴)',
   COSTUME_RECOVER: '말탈 다시 착용',
   CIRCUS_ACT: '서커스 퍼포먼스',
+  TROJAN_AMBUSH: '트로이 목마 병사 출동',
   ELEPHANT_CHARGE: '코끼리 돌진',
+  ELEPHANT_TRUNK: '코끼리 코 늘어남 (붙잡기)',
+  ELEPHANT_STOMP: '코끼리 발구르기 (지진)',
+  ELEPHANT_SPRAY: '코끼리 물대포',
   COW_RAGE: '소 폭주',
   MOTORCYCLE_BOOST: '모터사이클 엔진 가동',
   ENGINE_FAILURE: '엔진 고장',

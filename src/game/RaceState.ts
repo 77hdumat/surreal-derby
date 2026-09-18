@@ -14,6 +14,9 @@ export type RacerStatus =
   | 'BIPEDAL'
   | 'STRETCHED'
   | 'PERFORMING'
+  | 'AMBUSH'
+  | 'GRABBING'
+  | 'SPRAYING'
   | 'FINISHED';
 
 /** RaceEngine 이 매 프레임 갱신하는 순수 데이터. Three.js 는 이 값을 읽기만 한다. */

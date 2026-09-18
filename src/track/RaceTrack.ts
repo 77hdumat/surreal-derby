@@ -17,8 +17,8 @@ export interface TrackFrame {
 export class RaceTrack {
   readonly straight = 200;
   readonly radius = 60;
-  readonly width = 27;
-  readonly laneCount = 9;
+  readonly width = 30;
+  readonly laneCount = 10;
   readonly length: number;
   /** 결승선 s 위치 (정면 직선주로 중간) */
   readonly finishS = 165;

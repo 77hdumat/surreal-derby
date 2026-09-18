@@ -28,6 +28,8 @@ export interface VisualContext {
   sideHint: number;
   /** 몸 늘어남 등 0..1 (엔진이 계산) */
   extension: number;
+  /** 횡방향 속도 m/s (+ = 오른쪽) */
+  lateralVel: number;
 }
 
 export interface RacerVisual {
@@ -287,6 +289,8 @@ export abstract class PlaceholderVisual implements RacerVisual {
   protected neckBob: THREE.Object3D | null = null;
   protected neckBase = 0;
   protected stridePhase = 0;
+  /** 바퀴 달린 선수: 몸통 바운스/피치 없음, 바퀴만 회전 */
+  protected wheeled = false;
 
   constructor(def: RacerDefinition) {
     this.def = def;
@@ -388,26 +392,27 @@ export abstract class PlaceholderVisual implements RacerVisual {
       this.stridePhase = (this.stridePhase + strideHz * dt) % 1;
     }
     const ph = this.stridePhase;
+    const gait = this.wheeled ? 0 : 1;
     // 뒷다리가 차고(ph≈0.1) 공중(ph≈0.3) → 앞다리 착지(ph≈0.5): 바운스 1회/보폭
-    const air = Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.05)));
+    const air = Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.05))) * gait;
     const bounce = air * this.bounceAmp * (0.5 + animSpeed * 0.7);
-    const jitter = (Math.sin(time * 13.1 + this.seed) * 0.5 + Math.sin(time * 7.3 + this.seed * 2)) * 0.01 * animSpeed;
+    const jitter = (Math.sin(time * 13.1 + this.seed) * 0.5 + Math.sin(time * 7.3 + this.seed * 2)) * 0.01 * animSpeed * gait;
     this.body.position.set(0, this.baseY + bounce + jitter, 0);
     const lean = -ctx.cornerWeight * Math.atan((ctx.speed * ctx.speed) / (60 * 9.8)) * 1.25;
-    const roll = lean + Math.sin(time * 9 + this.seed) * 0.02 * animSpeed + ctx.bump * ctx.bumpDir * 0.35 * Math.sin(ctx.bump * 20);
+    const roll = lean + Math.sin(time * 9 + this.seed) * 0.02 * animSpeed * gait + ctx.bump * ctx.bumpDir * 0.35 * Math.sin(ctx.bump * 20);
     // 차고 나갈 때 코가 들리고, 앞다리 착지 때 코가 내려감
-    const gallopPitch = Math.cos(Math.PI * 2 * (ph - 0.15)) * 0.07 * (0.3 + animSpeed);
+    const gallopPitch = Math.cos(Math.PI * 2 * (ph - 0.15)) * 0.07 * (0.3 + animSpeed) * gait;
     const pitch = gallopPitch - ctx.accel * 0.012 - this.stumble * 0.6;
-    this.body.rotation.set(roll, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed, pitch);
+    this.body.rotation.set(roll, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed * gait, pitch);
     if (this.neckBob) this.neckBob.rotation.z = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.12 * (0.3 + animSpeed);
     this.stumble = Math.max(0, this.stumble - dt * 1.2);
     this.riders.forEach((r, i) => {
       if (!r.parent || r.parent !== this.riderParent[i]) return;
       const b = this.riderBase[i];
       // 기수는 말보다 살짝 늦게 따라 오르내림
-      const lag = Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.18)));
-      r.position.set(b.x + Math.cos(Math.PI * 2 * ph) * 0.03 * animSpeed, b.y + lag * 0.07 * animSpeed, b.z);
-      r.rotation.z = this.riderTilt[i] - Math.cos(Math.PI * 2 * (ph - 0.2)) * 0.1 * animSpeed - ctx.accel * 0.02;
+      const lag = Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.18))) * gait;
+      r.position.set(b.x + Math.cos(Math.PI * 2 * ph) * 0.03 * animSpeed * gait, b.y + lag * 0.07 * animSpeed, b.z);
+      r.rotation.z = this.riderTilt[i] - Math.cos(Math.PI * 2 * (ph - 0.2)) * 0.1 * animSpeed * gait - ctx.accel * 0.02;
     });
     this.updateFallen(dt);
     this.updateSpecial(ctx);

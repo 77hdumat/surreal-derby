@@ -9,6 +9,7 @@ export type SpecialAbility =
   | 'HUMAN'
   | 'GIRAFFE'
   | 'CIRCUS'
+  | 'TROJAN'
   | 'CLASSIC';
 
 export interface RacerDefinition {
@@ -40,8 +41,12 @@ export interface RacerDefinition {
   strideLength: number;
   /** GLB 경로를 지정하면 placeholder 대신 GLTF 모델을 사용 */
   modelUrl?: string;
-  /** GLB 안의 달리기 클립 이름 */
+  /** GLB 안의 달리기 클립 이름 (없으면 첫 클립) */
   runClipName?: string;
+  /** GLB 크기 보정 (말 키 ≈ 1.6m 가 되도록) */
+  modelScale?: number;
+  /** GLB 가 +x 를 보지 않을 때 Y축 회전 보정 (라디안). 예: +z 를 보는 모델 → -Math.PI/2 */
+  modelYaw?: number;
 }
 
 export class Racer {
@@ -98,7 +103,8 @@ export class Racer {
     s.rank = this.def.number;
     s.prevRank = this.def.number;
     s.finishTime = null;
-    s.form = 0.95 + Math.random() * 0.1;
+    // 컨디션: 매 레이스 ±9% — 기본 능력치 차이보다 커서 우승자가 매번 달라짐
+    s.form = 0.88 + Math.random() * 0.24;
     s.bumpTimer = 0;
     s.bumpDir = 0;
     s.riderless = false;

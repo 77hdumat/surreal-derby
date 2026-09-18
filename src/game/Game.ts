@@ -213,10 +213,24 @@ export class Game {
         a.crowdRoar(0.4);
         break;
       case 'ELEPHANT_CHARGE':
-        a.play('elephantGrowl', { pos, minGain: 0.55, gain: 1.1 });
-        a.play('elephant', { pos, minGain: 0.35, gain: 0.8, rate: 0.95 });
+        a.play('elephantGrowl', { pos, minGain: 0.25, gain: 0.45 });
         a.crowdRoar(0.7);
         this.excitement += 0.2;
+        break;
+      case 'ELEPHANT_TRUNK':
+        a.play('whooshEpic', { pos, minGain: 0.5, gain: 0.9 });
+        a.play('elephant', { pos, minGain: 0.2, gain: 0.35, rate: 1.1 });
+        a.crowdGasp();
+        break;
+      case 'ELEPHANT_STOMP':
+        a.play('impactHeavy', { pos, minGain: 0.7, gain: 1.2, rate: 0.8 });
+        a.play('elephantAngry', { pos, minGain: 0.2, gain: 0.3 });
+        a.crowdGasp();
+        break;
+      case 'ELEPHANT_SPRAY':
+        a.play('elephant', { pos, minGain: 0.2, gain: 0.35 });
+        a.play('whoosh', { pos, minGain: 0.3, gain: 0.7, rate: 0.7 });
+        a.crowdRoar(0.4);
         break;
       case 'COW_RAGE':
         a.play(Math.random() < 0.5 ? 'cow' : 'cow2', { pos, minGain: 0.55, gain: 1.1 });
@@ -266,6 +280,12 @@ export class Game {
         break;
       case 'BUMP':
         a.play('impact', { pos, gain: 0.55, cooldown: 0.4 });
+        break;
+      case 'TROJAN_AMBUSH':
+        a.play('cardboardOpen', { pos, minGain: 0.5 });
+        a.play('scream', { pos, minGain: 0.4, gain: 0.7, rate: 0.85 });
+        a.play('whooshEpic', { pos, minGain: 0.3, gain: 0.5 });
+        a.crowdRoar(0.7);
         break;
       case 'CIRCUS_ACT':
         a.play('tada', { pos, minGain: 0.6, gain: 0.9 });
@@ -412,7 +432,7 @@ export class Game {
         continue;
       }
       const active = s.state !== 'COLLAPSED' && s.state !== 'IDLE' && s.currentSpeed > 1.5;
-      if (r.def.specialAbility === 'HUMAN' || r.def.specialAbility === 'COSTUME') {
+      if (r.def.specialAbility === 'HUMAN' || r.def.specialAbility === 'COSTUME' || r.def.specialAbility === 'TROJAN') {
         this.audio.updateRacerLoop(r.def.id, 'grass', pos, speedNorm, { active });
       } else {
         const heavy = r.def.specialAbility === 'ELEPHANT' ? 1.7 : r.def.specialAbility === 'GIRAFFE' ? 1.2 : 1;

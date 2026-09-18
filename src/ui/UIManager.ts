@@ -44,7 +44,7 @@ export class UIManager {
   private previewVisual: RacerVisual | null = null;
   private previewCtx: VisualContext = {
     dt: 0, time: 0, speedNorm: 0.85, speed: 14, accel: 0, state: 'RUNNING', stateTimer: 0, cornerWeight: 0,
-    boost: 0, bump: 0, bumpDir: 0, riderless: false, distanceToFinish: 500, sideHint: 1, extension: 0,
+    boost: 0, bump: 0, bumpDir: 0, riderless: false, distanceToFinish: 500, sideHint: 1, extension: 0, lateralVel: 0,
   };
 
   onStart: (() => void) | null = null;
@@ -346,6 +346,9 @@ export class UIManager {
     else if (st === 'RAGING') s = '폭주!';
     else if (st === 'BIPEDAL') s = '두발!';
     else if (st === 'PERFORMING') s = '공연중!';
+    else if (st === 'AMBUSH') s = '병사출동!';
+    else if (st === 'GRABBING') s = '코 공격!';
+    else if (st === 'SPRAYING') s = '물대포!';
     else if (st === 'STRETCHED') s = '쭈욱!';
     else if (st === 'EXHAUSTED') s = '탈진';
     else if (st === 'STUNNED') s = '휘청';

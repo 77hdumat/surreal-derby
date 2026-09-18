@@ -15,7 +15,10 @@ interface EventSpec {
 
 const EVENT_POOL: EventSpec[] = [
   { type: 'COSTUME_COLLAPSE', racerId: 'costume', weight: 0.85, window: [0.25, 0.8], bad: true },
-  { type: 'ELEPHANT_CHARGE', racerId: 'elephant', weight: 0.82, window: [0.55, 0.85], bad: false },
+  { type: 'ELEPHANT_CHARGE', racerId: 'elephant', weight: 0.75, window: [0.55, 0.85], bad: false },
+  { type: 'ELEPHANT_TRUNK', racerId: 'elephant', weight: 0.5, window: [0.25, 0.8], bad: false },
+  { type: 'ELEPHANT_STOMP', racerId: 'elephant', weight: 0.45, window: [0.2, 0.75], bad: false },
+  { type: 'ELEPHANT_SPRAY', racerId: 'elephant', weight: 0.42, window: [0.2, 0.8], bad: false },
   { type: 'MOTORCYCLE_BOOST', racerId: 'motorcycle', weight: 0.85, window: [0.4, 0.72], bad: false },
   { type: 'ENGINE_FAILURE', racerId: 'motorcycle', weight: 0.3, window: [0.15, 0.9], bad: true },
   { type: 'COW_RAGE', racerId: 'cow', weight: 0.62, window: [0.3, 0.7], bad: false },
@@ -24,6 +27,7 @@ const EVENT_POOL: EventSpec[] = [
   { type: 'GIRAFFE_NECK_ATTACK', racerId: 'giraffe', weight: 0.38, window: [0.3, 0.8], bad: false },
   { type: 'LONGBODY_STRETCH', racerId: 'longbody', weight: 0.4, window: [0.2, 0.7], bad: false },
   { type: 'CIRCUS_ACT', racerId: 'circus', weight: 0.72, window: [0.3, 0.8], bad: false },
+  { type: 'TROJAN_AMBUSH', racerId: 'trojan', weight: 0.7, window: [0.35, 0.85], bad: false },
   { type: 'RIDER_FALL', racerId: 'DYNAMIC', weight: 0.32, window: [0.2, 0.85], bad: true },
   { type: 'TRIP', racerId: 'DYNAMIC', weight: 0.38, window: [0.15, 0.85], bad: true },
   { type: 'SUPER_SPRINT', racerId: 'DYNAMIC', weight: 0.36, window: [0.5, 0.85], bad: false },
@@ -68,7 +72,7 @@ export class RaceEventManager {
       const i = Math.floor(Math.random() * rest.length);
       picked.push(rest.splice(i, 1)[0]);
     }
-    while (picked.length > 7) {
+    while (picked.length > 9) {
       // 가중치 낮은 것부터 제거 후보
       picked.sort((a, b) => a.weight - b.weight);
       picked.splice(Math.floor(Math.random() * Math.min(3, picked.length)), 1);
