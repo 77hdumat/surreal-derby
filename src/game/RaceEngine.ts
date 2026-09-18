@@ -179,6 +179,8 @@ export class RaceEngine {
     const leadDist = this.ranking.length ? Math.max(...this.ranking.map((e) => e.distance)) : s.distance;
     const gap = Math.max(0, leadDist - s.distance);
     let rubber = 1 + Math.min(gap / 120, 1) * 0.16;
+    // 우승 예정자: 피날레 전까지 선두와 45m 이상 벌어지지 않게 조용히 보정
+    if (this.scenario?.winnerId === d.id && !s.destiny && gap > 45) rubber += 0.18;
     if (s.rank === 1 && this.ranking[1] && this.ranking[1].gapToLeader > 12) rubber = 0.975;
     const baseTarget0 = d.speed * s.form * cornerFactor * fatigue * wobble * s.speedMultiplier * stateFactor * straightBonus * riderlessFactor * rubber * (s.state === 'CARRYING' ? 1.3 : 1);
 
@@ -199,9 +201,10 @@ export class RaceEngine {
         const gap = leadEff - myEff;
         const leadSpeed = Math.max(4, lead.state.currentSpeed);
         const timeLeft = Math.max(0.6, (D - leadEff) / leadSpeed);
-        const required = leadSpeed + (gap + 4) / timeLeft;
+        // 여유 12m: 기린 목·코끼리 코처럼 막판에 갑자기 늘어나는 판정 거리까지 감안
+        const required = leadSpeed + (gap + 12) / timeLeft;
         if (gap > -3) {
-          target2 = Math.max(target2, Math.min(required * 1.12, 75));
+          target2 = Math.max(target2, Math.min(required * 1.2, 110));
           accel = Math.max(accel, 14);
         }
       }
@@ -443,6 +446,12 @@ export class RaceEngine {
   private knock(r: Racer, dir: number, stun: number, speedKeep: number): void {
     const s = r.state;
     if (s.state === 'COLLAPSED' || s.state === 'FINISHED' || s.state === 'ENGINE_FAILURE') return;
+    // 우승 예정자는 밀려도 넘어지지 않음 (각본 보호)
+    if (this.scenario?.winnerId === r.def.id) {
+      s.bumpTimer = 0.4;
+      s.bumpDir = dir;
+      return;
+    }
     s.currentSpeed *= speedKeep;
     s.bumpTimer = 0.7;
     s.bumpDir = dir;
@@ -571,7 +580,7 @@ export class RaceEngine {
         label = `${r.def.name} 결승 직전 멈춰서 풀 뜯기`;
         break;
       case 'TWIST_ROCKET':
-        this.setState(r, 'BOOSTING', dur ?? 6, 2.7, 20);
+        this.setState(r, 'BOOSTING', dur ?? 6, 2.0, 20);
         s.fatigued = false;
         label = `${r.def.name} 후방에서 로켓 역전`;
         break;
@@ -708,8 +717,10 @@ export class RaceEngine {
     const lead = this.ranking[0] ? this.ranking[0].distance : r.state.distance;
     const toFinishLead = this.track.raceDistance - lead;
     const f = this.scenario.finale;
-    // 선두 기준으로 발동 (우승자가 많이 뒤처져 있어도 늦지 않게)
-    if (toFinishLead > f.distance) return;
+    // 선두 기준으로 발동. 우승 예정자가 많이 뒤처졌으면 더 일찍 발동해 따라잡을 시간을 준다
+    const gapToWinner = lead - r.state.distance;
+    const triggerDist = f.distance + Math.max(0, gapToWinner - 25) * 2.2;
+    if (toFinishLead > triggerDist) return;
     this.finaleFired = true;
     this.applyEvent({
       time: this.time,
@@ -758,7 +769,8 @@ export class RaceEngine {
     }
     // 후방 로켓: 우승 예정자가 아니면서 뒤에 있는 선수 하나가 미친 속도로 (30%)
     // 각본 시나리오에선 우승 예정자가 이미 선두일 때만 (역전을 망치지 않게)
-    const rocketAllowed = !winnerId || lead.id === winnerId;
+    // 로켓 역전은 우승 예정자가 없는 경우에만 (현재는 항상 우승자가 정해져 있으므로 각본 피날레가 그 역할)
+    const rocketAllowed = !winnerId;
     if (rocketAllowed && (Math.random() < 0.3 || (!victim && !winnerId))) {
       const back = this.racers.filter(
         (r) => r.state.state === 'RUNNING' && r.state.rank >= 4 && r.def.id !== winnerId && r !== victim,

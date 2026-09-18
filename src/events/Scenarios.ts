@@ -170,12 +170,22 @@ export const SCENARIOS: Scenario[] = [
   },
 ];
 
+const WINNER_IDS = ['costume', 'longbody', 'elephant', 'cow', 'motorcycle', 'human', 'giraffe', 'classic', 'circus', 'trojan'];
+
+/**
+ * 우승자를 10명 중 균등 확률(10%)로 먼저 뽑고, 그 선수의 각본 시나리오(75%) 또는
+ * 각본 없는 대혼돈 + 일반 스퍼트 피날레(25%)를 돌린다. 어느 쪽이든 운명 보정으로 우승은 보장.
+ */
 export function pickScenario(): Scenario {
-  const total = SCENARIOS.reduce((a, s) => a + s.weight, 0);
-  let r = Math.random() * total;
-  for (const s of SCENARIOS) {
-    r -= s.weight;
-    if (r <= 0) return s;
-  }
-  return SCENARIOS[SCENARIOS.length - 1];
+  const winnerId = WINNER_IDS[Math.floor(Math.random() * WINNER_IDS.length)];
+  const scripted = SCENARIOS.filter((s) => s.winnerId === winnerId);
+  if (scripted.length && Math.random() < 0.75) return scripted[Math.floor(Math.random() * scripted.length)];
+  const chaos = SCENARIOS.find((s) => s.id === 'chaos')!;
+  return {
+    ...chaos,
+    id: 'chaos',
+    title: `대혼돈 — 아무도 모르는 결말`,
+    winnerId,
+    finale: { event: 'SUPER_SPRINT', distance: 210, duration: 40 },
+  };
 }
