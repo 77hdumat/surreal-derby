@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { RacerDefinition } from './Racer';
 import type { RaceEventType } from '../events/RaceEvent';
+import { loft } from './Loft';
 import {
   PlaceholderVisual,
   box,
@@ -56,71 +57,112 @@ function buildHorse(parent: THREE.Object3D, o: HorseOpts): HorseParts {
   const bodyLen = o.bodyLen ?? 1.2;
   const R = o.bodyR ?? 0.5;
   const y = 1.45;
-  const barrel = capsule(R, bodyLen, o.hide, 'x');
-  barrel.position.set(0, y, 0);
+  const L = bodyLen / 2;
+  // 몸통: 꼬리 밑 → 엉덩이 → 배 → 가슴 → 목 밑동으로 이어지는 한 덩어리 실루엣
+  const barrel = new THREE.Mesh(
+    loft([
+      { p: [-L - R * 0.95, y + 0.12, 0], r: R * 0.5, s: [0.9, 1.0] },
+      { p: [-L - R * 0.35, y + 0.1, 0], r: R * 0.98, s: [0.95, 1.08] },
+      { p: [-L * 0.3, y - 0.02, 0], r: R * 1.02, s: [1.0, 1.02] },
+      { p: [L * 0.45, y, 0], r: R * 0.97, s: [0.95, 1.05] },
+      { p: [L + R * 0.45, y + 0.02, 0], r: R * 0.82, s: [0.88, 1.0] },
+      { p: [L + R * 0.95, y - 0.05, 0], r: R * 0.45, s: [0.85, 0.9] },
+    ]),
+    o.hide,
+  );
+  barrel.castShadow = true;
   parent.add(barrel);
-  const chest = sphere(R * 1.12, o.hide, 1, 1.02, 1);
-  chest.position.set(bodyLen / 2 + R * 0.35, y - 0.02, 0);
-  parent.add(chest);
-  const rump = sphere(R * 1.1, o.hide, 1, 1.05, 1);
-  rump.position.set(-bodyLen / 2 - R * 0.35, y + 0.05, 0);
-  parent.add(rump);
+  const chest = barrel;
+  const rump = barrel;
+  // 목: 밑동은 굵고 머리 쪽으로 가늘어짐 (그룹 로컬 +y 방향, 그룹을 앞으로 기울임)
   const neck = new THREE.Group();
-  neck.position.set(bodyLen / 2 + R * 0.55, y + R * 0.55, 0);
+  neck.position.set(L + R * 0.5, y + R * 0.5, 0);
   neck.rotation.z = -0.85;
   const neckLen = o.neckLen ?? 0.7;
-  const neckM = capsule(R * 0.52, neckLen, o.hide);
-  neckM.position.y = neckLen / 2 + 0.1;
+  const neckM = new THREE.Mesh(
+    loft([
+      { p: [0, -0.1, 0], r: R * 0.55, s: [0.85, 1.1] },
+      { p: [0.02, neckLen * 0.45, 0], r: R * 0.42, s: [0.8, 1.15] },
+      { p: [0.06, neckLen * 0.95, 0], r: R * 0.33, s: [0.8, 1.1] },
+      { p: [0.08, neckLen + 0.3, 0], r: R * 0.27, s: [0.85, 1.0] },
+    ]),
+    o.hide,
+  );
+  neckM.castShadow = true;
   neck.add(neckM);
-  const mane = makeMane(neckLen, o.mane, -R * 0.42);
-  neck.add(mane);
+  neck.add(makeMane(neckLen, o.mane, -R * 0.4));
+  // 머리: 이마 → 콧등 → 주둥이로 가늘어지는 쐐기형
   const head = new THREE.Group();
   head.position.set(0.05, neckLen + 0.35, 0);
   head.rotation.z = 0.95;
   const hs = o.headScale ?? 1;
-  const skull = capsule(0.2 * hs, 0.5 * hs, o.hide, 'x');
-  skull.position.set(0.32 * hs, 0, 0);
+  const skull = new THREE.Mesh(
+    loft([
+      { p: [-0.12 * hs, 0.02, 0], r: 0.2 * hs, s: [0.95, 1.15] },
+      { p: [0.18 * hs, 0.04, 0], r: 0.21 * hs, s: [0.95, 1.1] },
+      { p: [0.5 * hs, 0.0, 0], r: 0.165 * hs, s: [0.9, 1.0] },
+      { p: [0.8 * hs, -0.05, 0], r: 0.13 * hs, s: [0.95, 0.95] },
+      { p: [0.98 * hs, -0.08, 0], r: 0.09 * hs, s: [1.0, 0.85] },
+    ]),
+    o.hide,
+  );
+  skull.castShadow = true;
   head.add(skull);
-  const brow = sphere(0.24 * hs, o.hide, 1, 0.9, 1);
-  brow.position.set(0.05 * hs, 0.05, 0);
-  head.add(brow);
-  const muzzle = sphere(0.17 * hs, o.hide, 1.1, 0.85, 0.95);
-  muzzle.position.set(0.68 * hs, -0.04, 0);
-  head.add(muzzle);
-  for (const s of [-1, 1]) {
-    const nostril = sphere(0.035, toon(0x2a1a12));
-    nostril.position.set(0.82 * hs, 0.0, s * 0.08);
+  // 아래턱
+  const jaw = new THREE.Mesh(
+    loft([
+      { p: [0.05 * hs, -0.15, 0], r: 0.14 * hs, s: [0.85, 0.7] },
+      { p: [0.45 * hs, -0.16, 0], r: 0.1 * hs, s: [0.85, 0.6] },
+      { p: [0.8 * hs, -0.14, 0], r: 0.07 * hs, s: [0.9, 0.6] },
+    ]),
+    o.hide,
+  );
+  jaw.castShadow = true;
+  head.add(jaw);
+  for (const sgn of [-1, 1]) {
+    const nostril = sphere(0.032, toon(0x2a1a12));
+    nostril.position.set(0.93 * hs, -0.02, sgn * 0.07);
     head.add(nostril);
-    const eye = sphere(0.055, toon(0x111111));
-    eye.position.set(0.22 * hs, 0.12, s * 0.2 * hs);
+    const eye = sphere(0.05, toon(0x111111));
+    eye.position.set(0.24 * hs, 0.1, sgn * 0.19 * hs);
     head.add(eye);
     if (o.ears !== false) {
-      const ear = capsule(0.045, 0.16, o.hide);
-      ear.position.set(-0.05 * hs, 0.3, s * 0.12 * hs);
-      ear.rotation.x = s * 0.35;
-      ear.rotation.z = -0.2;
+      const ear = new THREE.Mesh(
+        loft([
+          { p: [0, 0, 0], r: 0.05, s: [0.6, 1] },
+          { p: [-0.02, 0.12, 0], r: 0.045, s: [0.5, 1] },
+          { p: [-0.03, 0.22, 0], r: 0.015, s: [0.5, 1] },
+        ]),
+        o.hide,
+      );
+      ear.position.set(-0.05 * hs, 0.17, sgn * 0.11 * hs);
+      ear.rotation.x = sgn * 0.35;
+      ear.rotation.z = -0.15;
+      ear.castShadow = true;
       head.add(ear);
     }
   }
   // 앞머리 술 + 굴레
   const forelock = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.16, 3, 8), o.mane);
-  forelock.position.set(0.12 * hs, 0.26, 0);
+  forelock.position.set(0.1 * hs, 0.24, 0);
   forelock.rotation.z = 1.1;
   head.add(forelock);
   if (o.bridle !== false) makeBridle(head, hs, toon(0x3a2416));
   neck.add(head);
   parent.add(neck);
-  const tail = capsule(0.07, 0.7, o.mane);
-  tail.position.set(-bodyLen / 2 - R * 0.9, y + 0.05, 0);
-  tail.rotation.z = 0.55;
+  // 꼬리: 밑동에서 흘러내리는 술
+  const tail = new THREE.Mesh(
+    loft([
+      { p: [0, 0, 0], r: 0.06 },
+      { p: [-0.25, -0.25, 0], r: 0.09 },
+      { p: [-0.45, -0.6, 0], r: 0.08 },
+      { p: [-0.55, -0.95, 0], r: 0.035 },
+    ]),
+    o.mane,
+  );
+  tail.position.set(-L - R * 0.85, y + 0.25, 0);
+  tail.castShadow = true;
   parent.add(tail);
-  for (let i = 0; i < 3; i++) {
-    const t = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.4, 3, 6), o.mane);
-    t.position.set(-bodyLen / 2 - R * 0.9 - 0.25 - i * 0.05, y - 0.25 - i * 0.12, (i - 1) * 0.06);
-    t.rotation.z = 0.35 + i * 0.12;
-    t.castShadow = true;
-    parent.add(t);
-  }
   return { chest, rump, neck, head, barrel, tail };
 }
 
@@ -751,11 +793,13 @@ class CowVisual extends PlaceholderVisual {
   }
 }
 
-// ================================================================ 5. 모터사이클 말
+// ================================================================ 5. 모터 스탤리온 (리젠트 머리 검은 말 + 할리 핸들)
 class MotorcycleVisual extends PlaceholderVisual {
   private declare wheels: THREE.Mesh[];
   private declare flames: THREE.Mesh[];
   private declare frame: THREE.Group;
+  private declare parts: HorseParts;
+  private declare pompadour: THREE.Mesh;
   private wheelie = 0;
   private failShake = 0;
   declare exhaustPoints: THREE.Vector3[];
@@ -765,135 +809,155 @@ class MotorcycleVisual extends PlaceholderVisual {
     this.flames = [];
     this.exhaustPoints = [];
     const d = this.def;
-    const paint = toon(d.bodyColor);
-    const chrome = toon(0xd8dde6);
-    const orange = toon(0xff6a00);
-    const rubber = toon(0x1a1a1a);
+    const black = toon(0x151316);
+    (black as THREE.MeshStandardMaterial).roughness = 0.55; // 윤기 나는 검은 털
+    const chrome = new THREE.MeshStandardMaterial({ color: 0xe8ecf2, roughness: 0.2, metalness: 0.95 });
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.35, metalness: 0.1 });
     this.frame = new THREE.Group();
-    // 연료 탱크 + 프레임 + 시트
-    const tank = capsule(0.32, 1.2, paint, 'x');
-    tank.position.set(0.1, 1.0, 0);
-    this.frame.add(tank);
-    const lower = box(2.0, 0.28, 0.5, toon(0x3a3a40));
-    lower.position.set(0, 0.7, 0);
-    this.frame.add(lower);
-    const seat = box(0.9, 0.2, 0.5, toon(0x111111));
-    seat.position.set(-0.7, 1.28, 0);
-    this.frame.add(seat);
-    const tailFairing = box(0.6, 0.25, 0.45, orange);
-    tailFairing.position.set(-1.25, 1.18, 0);
-    tailFairing.rotation.z = 0.25;
-    this.frame.add(tailFairing);
-    // 말 머리 모양 페어링
-    const neck = capsule(0.22, 0.55, paint);
-    neck.position.set(1.15, 1.5, 0);
-    neck.rotation.z = -0.5;
-    this.frame.add(neck);
-    const head = capsule(0.2, 0.5, paint, 'x');
-    head.position.set(1.7, 1.85, 0);
-    head.rotation.z = -0.15;
-    this.frame.add(head);
-    const mane = makeMane(0.5, orange, -0.2, 5);
-    mane.position.set(1.15, 1.35, 0);
-    mane.rotation.z = -0.5;
-    this.frame.add(mane);
-    for (const s of [-1, 1]) {
-      const ear = capsule(0.04, 0.2, orange);
-      ear.position.set(1.45, 2.15, s * 0.13);
-      this.frame.add(ear);
-      const light = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff7cc }));
-      light.position.set(2.02, 1.86, s * 0.12);
-      light.userData.noOutline = true;
-      this.frame.add(light);
-      const bar = capsule(0.035, 0.45, chrome, 'z');
-      bar.position.set(0.9, 1.55, s * 0.32);
+    // 검은 말 본체
+    this.parts = buildHorse(this.frame, { hide: black, mane: hairMat, bodyLen: 1.25, bodyR: 0.52, bridle: false });
+    this.neckBob = this.parts.neck;
+    this.neckBase = -0.85;
+    // 리젠트(폼파도르): 이마에서 앞으로 크게 말아 올린 머리
+    this.pompadour = new THREE.Mesh(
+      loft([
+        { p: [-0.3, 0.12, 0], r: 0.14, s: [1.2, 0.8] },
+        { p: [-0.05, 0.3, 0], r: 0.2, s: [1.25, 1.0] },
+        { p: [0.35, 0.42, 0], r: 0.22, s: [1.2, 1.05] },
+        { p: [0.75, 0.4, 0], r: 0.19, s: [1.1, 1.0] },
+        { p: [1.0, 0.22, 0], r: 0.11, s: [0.9, 0.9] },
+      ]),
+      hairMat,
+    );
+    this.pompadour.castShadow = true;
+    this.parts.head.add(this.pompadour);
+    // 구레나룻
+    for (const sgn of [-1, 1]) {
+      const sideburn = box(0.12, 0.28, 0.04, hairMat);
+      sideburn.position.set(0.05, -0.02, sgn * 0.21);
+      this.parts.head.add(sideburn);
+      // 선글라스
+      const lens = box(0.06, 0.1, 0.16, new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.15, metalness: 0.6 }));
+      lens.position.set(0.3, 0.1, sgn * 0.17);
+      this.parts.head.add(lens);
+    }
+    const bridge = box(0.03, 0.02, 0.2, chrome);
+    bridge.position.set(0.31, 0.12, 0);
+    this.parts.head.add(bridge);
+    // 이빨 쑤시개(?) — 입에 문 지푸라기
+    const straw = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.45, 5), toon(0xd8c070));
+    straw.position.set(1.0, -0.14, 0.05);
+    straw.rotation.z = -0.4;
+    this.parts.head.add(straw);
+    // 할리 에이프행어 핸들: 기갑(어깨) 위 크롬 파이프가 위로 솟아 그립까지
+    for (const sgn of [-1, 1]) {
+      const bar = new THREE.Mesh(
+        loft(
+          [
+            { p: [0.55, 2.0, sgn * 0.12], r: 0.035 },
+            { p: [0.72, 2.35, sgn * 0.26], r: 0.032 },
+            { p: [0.78, 2.75, sgn * 0.34], r: 0.03 },
+            { p: [0.62, 2.95, sgn * 0.36], r: 0.03 },
+          ],
+          16,
+          10,
+        ),
+        chrome,
+      );
+      bar.castShadow = true;
       this.frame.add(bar);
-      const grip = capsule(0.045, 0.14, rubber, 'z');
-      grip.position.set(0.9, 1.55, s * 0.55);
+      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.2, 10), toon(0x1a1a1a));
+      grip.position.set(0.58, 2.97, sgn * 0.36);
+      grip.rotation.z = Math.PI / 2;
       this.frame.add(grip);
-      const pipe = capsule(0.08, 1.2, chrome, 'x');
-      pipe.rotation.z = 0.12;
-      pipe.position.set(-1.1, 0.62, s * 0.34);
+      // 배기관: 옆구리 아래 크롬 파이프
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 1.5, 10), chrome);
+      pipe.rotation.z = Math.PI / 2 + 0.08;
+      pipe.position.set(-0.55, 1.02, sgn * 0.58);
+      pipe.castShadow = true;
       this.frame.add(pipe);
-      const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.25, 12), chrome);
+      const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.075, 0.25, 12), chrome);
       tip.rotation.z = Math.PI / 2;
-      tip.position.set(-1.8, 0.55, s * 0.34);
+      tip.position.set(-1.38, 0.96, sgn * 0.58);
       this.frame.add(tip);
-      this.exhaustPoints.push(new THREE.Vector3(-1.95, 0.55, s * 0.34));
+      this.exhaustPoints.push(new THREE.Vector3(-1.52, 0.96, sgn * 0.58));
       const flame = new THREE.Mesh(
-        new THREE.ConeGeometry(0.16, 1.3, 10),
+        new THREE.ConeGeometry(0.12, 1.1, 10),
         new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0.9 }),
       );
       flame.rotation.z = Math.PI / 2;
-      flame.position.set(-2.5, 0.55, s * 0.34);
+      flame.position.set(-2.0, 0.96, sgn * 0.58);
       flame.visible = false;
       flame.userData.noOutline = true;
       this.frame.add(flame);
       this.flames.push(flame);
-      // 포크
-      const fork = capsule(0.035, 0.7, chrome);
-      fork.position.set(1.0, 0.9, s * 0.16);
-      fork.rotation.z = -0.35;
-      this.frame.add(fork);
     }
-    const cloth = makeNumberCloths(d.number, d.clothColor, 0.5, 0.36);
-    cloth.position.set(-0.2, 1.0, 0);
+    // 가슴 헤드라이트 + 크롬 연료탱크 느낌의 등 커버
+    const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), new THREE.MeshStandardMaterial({ color: 0xfff1c8, emissive: 0xffe9a8, emissiveIntensity: 0.45, roughness: 0.3 }));
+    headlight.position.set(1.62, 1.45, 0);
+    headlight.userData.noOutline = true;
+    this.frame.add(headlight);
+    const lightRim = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.025, 8, 16), chrome);
+    lightRim.position.set(1.62, 1.45, 0);
+    lightRim.rotation.y = Math.PI / 2;
+    this.frame.add(lightRim);
+    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), new THREE.MeshStandardMaterial({ color: 0xc41e1e, roughness: 0.25, metalness: 0.4 }));
+    tank.scale.set(1.3, 0.55, 0.9);
+    tank.position.set(0.35, 2.0, 0);
+    tank.castShadow = true;
+    this.frame.add(tank);
+    const cloth = makeNumberCloths(d.number, d.clothColor, 0.6, 0.55);
+    cloth.position.set(-0.3, 1.42, 0);
     this.frame.add(cloth);
-    for (const x of [1.1, -1.1]) {
-      const w = new THREE.Group();
-      const tire = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.12, 10, 22), rubber);
-      tire.castShadow = true;
-      w.add(tire);
-      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.16, 16), chrome);
-      rim.rotation.x = Math.PI / 2;
-      rim.castShadow = true;
-      w.add(rim);
-      for (let k = 0; k < 3; k++) {
-        const spoke = box(0.62, 0.04, 0.05, toon(0x555a66));
-        spoke.rotation.z = (k * Math.PI) / 3;
-        w.add(spoke);
-      }
-      w.position.set(x, 0.5, 0);
-      this.frame.add(w);
-      this.wheels.push(w as unknown as THREE.Mesh);
-      this.hoofPoints.push(new THREE.Vector3(x, 0, 0));
-    }
+    // 안장은 바이크 시트
+    const seat = box(0.75, 0.12, 0.5, toon(0x111111));
+    seat.position.set(-0.45, 2.0, 0);
+    this.frame.add(seat);
     this.body.add(this.frame);
-    this.addRider(new THREE.Vector3(-0.5, 1.4, 0));
-    this.reparentRider(0, this.frame, -0.4);
-    this.wheeled = true;
-    this.bounceAmp = 0;
-    this.height = 2.2;
+    this.addLegs([
+      { x: 0.85, z: -0.3, w: 0.18, len: 1.02, mat: black, y: 1.02, hoof: 0x111111 },
+      { x: 0.85, z: 0.3, w: 0.18, len: 1.02, mat: black, y: 1.02, hoof: 0x111111 },
+      { x: -0.85, z: -0.3, w: 0.18, len: 1.02, mat: black, y: 1.02, hoof: 0x111111 },
+      { x: -0.85, z: 0.3, w: 0.18, len: 1.02, mat: black, y: 1.02, hoof: 0x111111 },
+    ]);
+    // 기수: 뒤로 젖혀 앉아 에이프행어를 잡는 초퍼 자세
+    this.addRider(new THREE.Vector3(-0.45, 2.1, 0));
+    this.reparentRider(0, this.frame, 0.95);
+    this.bounceAmp = 0.12;
+    this.height = 2.9;
   }
 
   protected updateSpecial(ctx: VisualContext): void {
-    const { dt, time, speed } = ctx;
-    const rot = (speed * dt) / 0.5;
-    this.wheels.forEach((w) => (w.rotation.z -= rot));
+    const { dt, time } = ctx;
     const boosting = ctx.state === 'BOOSTING';
+    // 부스트: 앞다리 들고 뒷발로 튀어나감(윌리)
     this.wheelie = damp(this.wheelie, boosting ? 1 : 0, boosting ? 6 : 3, dt);
-    // 시동 걸린 엔진 드르릉: 고주파 미세 진동 (몸통은 갤럽 없이 진동만)
-    const rattle = 0.4 + ctx.speedNorm * 0.6;
-    this.frame.rotation.z = this.wheelie * 0.35 + Math.sin(time * 52) * 0.012 * rattle;
-    this.frame.position.y = this.wheelie * 0.4 + Math.sin(time * 61) * 0.012 * rattle + Math.sin(time * 9.3) * 0.006;
-    // 와리가리: 횡속도 방향으로 차체를 눕힘 (오른쪽 이동 → 오른쪽으로 기울기 = rotation.x +)
-    this.frame.rotation.x = THREE.MathUtils.clamp(ctx.lateralVel * 0.14, -0.6, 0.6);
+    this.frame.rotation.z = this.wheelie * 0.3;
+    this.frame.position.y = this.wheelie * 0.25;
+    if (this.wheelie > 0.05) {
+      this.legs[0].rotation.z = THREE.MathUtils.lerp(this.legs[0].rotation.z, 1.1 + Math.sin(time * 9) * 0.3, this.wheelie);
+      this.legs[1].rotation.z = THREE.MathUtils.lerp(this.legs[1].rotation.z, 0.9 + Math.cos(time * 9) * 0.3, this.wheelie);
+    }
+    // 와리가리: 횡속도 방향으로 몸을 눕힘
+    this.frame.rotation.x = THREE.MathUtils.clamp(ctx.lateralVel * 0.12, -0.5, 0.5);
     this.frame.rotation.y = -THREE.MathUtils.clamp(ctx.lateralVel * 0.05, -0.25, 0.25);
-    this.frame.position.x = -this.wheelie * 0.3;
     this.flames.forEach((f) => {
       f.visible = boosting;
-      const s = 0.7 + Math.random() * 0.8;
-      f.scale.set(s, s * 1.4, s);
+      const sc = 0.7 + Math.random() * 0.8;
+      f.scale.set(sc, sc * 1.4, sc);
     });
+    // 리젠트는 바람에 살짝 출렁
+    this.pompadour.rotation.z = Math.sin(time * 6) * 0.05 * ctx.speedNorm - this.wheelie * 0.2;
     const fail = ctx.state === 'ENGINE_FAILURE';
     this.failShake = damp(this.failShake, fail ? 1 : 0, 8, dt);
     if (this.failShake > 0.01) {
       this.frame.rotation.z += (Math.random() - 0.5) * 0.08 * this.failShake;
       this.frame.rotation.x += (Math.random() - 0.5) * 0.1 * this.failShake;
-      // 기수가 발로 킥스타트
       const r = this.riders[0];
       if (r.parent === this.frame) r.position.y += Math.abs(Math.sin(time * 6)) * 0.25 * this.failShake;
     }
+    // 엔진 드르릉 (말인데 엔진 소리가 남)
+    this.frame.position.y += Math.sin(time * 52) * 0.008 * (0.4 + ctx.speedNorm * 0.6);
   }
 }
 
@@ -1033,12 +1097,20 @@ class GiraffeVisual extends PlaceholderVisual {
     const tex = this.spotTexture();
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     const hide = toon(0xffffff, { map: tex });
-    const barrel = capsule(0.52, 1.0, hide, 'x');
-    barrel.position.set(0, 2.3, 0);
+    // 기린 몸통: 엉덩이가 낮고 어깨가 높은 경사진 등
+    const barrel = new THREE.Mesh(
+      loft([
+        { p: [-1.05, 2.05, 0], r: 0.3, s: [0.9, 1.0] },
+        { p: [-0.7, 2.15, 0], r: 0.5, s: [0.95, 1.1] },
+        { p: [-0.1, 2.3, 0], r: 0.55, s: [1.0, 1.05] },
+        { p: [0.55, 2.45, 0], r: 0.55, s: [0.95, 1.1] },
+        { p: [1.0, 2.55, 0], r: 0.4, s: [0.85, 1.0] },
+        { p: [1.2, 2.6, 0], r: 0.22, s: [0.8, 0.9] },
+      ]),
+      hide,
+    );
+    barrel.castShadow = true;
     this.body.add(barrel);
-    const chest = sphere(0.58, hide, 1, 1.05, 1);
-    chest.position.set(0.75, 2.4, 0);
-    this.body.add(chest);
     this.neck = new THREE.Group();
     this.neck.position.set(0.95, 2.85, 0);
     const neckLen = 3.4;

@@ -43,7 +43,7 @@ export class RaceTrack {
   private clouds: THREE.Group[] = [];
   sky!: Sky;
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
-  static readonly SUN_DIR = new THREE.Vector3(0.45, 0.9, 0.35).normalize();
+  static readonly SUN_DIR = new THREE.Vector3(0.35, 1.05, 0.3).normalize();
 
   private tmpFrame: TrackFrame = {
     pos: new THREE.Vector3(),
@@ -710,8 +710,8 @@ export class RaceTrack {
     const sky = new Sky();
     sky.scale.setScalar(1800);
     const u = sky.material.uniforms;
-    u.turbidity.value = 2.2;
-    u.rayleigh.value = 1.1;
+    u.turbidity.value = 1.8;
+    u.rayleigh.value = 0.55;
     u.mieCoefficient.value = 0.0012;
     u.mieDirectionalG.value = 0.7;
     u.sunPosition.value.copy(RaceTrack.SUN_DIR);

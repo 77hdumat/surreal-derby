@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { RacerDefinition } from './Racer';
 import type { RacerStatus } from '../game/RaceState';
 import type { RaceEventType } from '../events/RaceEvent';
+import { furBumpTexture, loft } from './Loft';
 
 /**
  * 모델 로컬 좌표 규약: +x 전방, +y 위, +z 오른쪽.
@@ -63,7 +64,8 @@ function getGradient(): THREE.DataTexture {
 export const USE_TOON = false;
 export function toon(color: number, opts: Partial<THREE.MeshToonMaterialParameters> = {}): THREE.MeshStandardMaterial | THREE.MeshToonMaterial {
   if (USE_TOON) return new THREE.MeshToonMaterial({ color, gradientMap: getGradient(), ...opts });
-  const params: THREE.MeshStandardMaterialParameters = { color, roughness: 0.72, metalness: 0.0 };
+  // 미세 범프로 플라스틱 광택을 죽여 가죽/천 느낌
+  const params: THREE.MeshStandardMaterialParameters = { color, roughness: 0.8, metalness: 0.0, bumpMap: furBumpTexture(), bumpScale: 0.01 };
   if (opts.map) params.map = opts.map;
   if (opts.transparent !== undefined) params.transparent = opts.transparent;
   if (opts.opacity !== undefined) params.opacity = opts.opacity;
@@ -149,21 +151,31 @@ export function capsule(radius: number, length: number, mat: THREE.Material, axi
 export function makeLeg(w: number, len: number, mat: THREE.Material, name: string, hoofColor = 0x2a211c): THREE.Mesh {
   const upperLen = len * 0.52;
   const lowerLen = len - upperLen;
-  const geo = new THREE.CapsuleGeometry(w / 2, Math.max(0.05, upperLen - w * 0.6), 4, 10);
+  // 허벅지: 위가 굵고 무릎 쪽으로 가늘어지는 원뿔대 + 무릎 관절 구
+  const geo = new THREE.CylinderGeometry(w * 0.34, w * 0.62, upperLen, 12);
   geo.translate(0, -upperLen / 2, 0);
   const upper = new THREE.Mesh(geo, mat);
   upper.name = name;
   upper.castShadow = true;
+  const hipCap = new THREE.Mesh(new THREE.SphereGeometry(w * 0.62, 12, 8), mat);
+  hipCap.scale.set(1, 0.7, 1);
+  upper.add(hipCap);
   const knee = new THREE.Group();
   knee.name = name + '_lower';
   knee.position.y = -upperLen;
-  const lgeo = new THREE.CapsuleGeometry(w * 0.42, Math.max(0.05, lowerLen - w * 0.5), 4, 10);
-  lgeo.translate(0, -lowerLen / 2 + w * 0.1, 0);
+  const kneeBall = new THREE.Mesh(new THREE.SphereGeometry(w * 0.36, 10, 8), mat);
+  knee.add(kneeBall);
+  // 정강이: 가늘고 발목(구절)에서 살짝 굵어짐
+  const lgeo = new THREE.CylinderGeometry(w * 0.26, w * 0.31, lowerLen - w * 0.3, 10);
+  lgeo.translate(0, -(lowerLen - w * 0.3) / 2, 0);
   const lower = new THREE.Mesh(lgeo, mat);
   lower.castShadow = true;
   knee.add(lower);
-  const hoof = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.5, w * 0.58, w * 0.45, 10), toon(hoofColor));
-  hoof.position.y = -lowerLen + w * 0.2;
+  const fetlock = new THREE.Mesh(new THREE.SphereGeometry(w * 0.3, 10, 8), mat);
+  fetlock.position.y = -(lowerLen - w * 0.3);
+  knee.add(fetlock);
+  const hoof = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.42, w * 0.5, w * 0.4, 12), toon(hoofColor));
+  hoof.position.y = -lowerLen + w * 0.18;
   hoof.castShadow = true;
   knee.add(hoof);
   upper.add(knee);
@@ -207,43 +219,84 @@ export function makeNumberCloths(n: number, cloth: number, size: number, halfWid
 }
 
 /** 기수 (안장 위 피벗) — 둥근 몸, 헬멧, 고글, 채찍 */
+/** 기수 실크 무늬 (가로 줄무늬 + 소매 배색) */
+function silksTexture(silks: number, trim: number): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#' + silks.toString(16).padStart(6, '0');
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = '#' + trim.toString(16).padStart(6, '0');
+  for (let y = 8; y < 128; y += 32) ctx.fillRect(0, y, 128, 10);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 export function makeRider(silks: number, helmet: number, scale = 1): THREE.Group {
   const g = new THREE.Group();
-  const silk = toon(silks);
+  const silk = new THREE.MeshStandardMaterial({ map: silksTexture(silks, helmet), roughness: 0.85, metalness: 0 });
   const skin = toon(0xf0caad);
-  const torso = capsule(0.16, 0.26, silk);
-  torso.position.set(0.08, 0.5, 0);
-  torso.rotation.z = -0.65; // 앞으로 숙임
+  // 상체: 어깨 넓고 허리 좁은 몸통, 앞으로 깊이 숙인 경마 기수 자세
+  const torso = new THREE.Mesh(
+    loft([
+      { p: [0, -0.02, 0], r: 0.11, s: [1.1, 0.8] },
+      { p: [0.02, 0.14, 0], r: 0.14, s: [1.2, 0.85] },
+      { p: [0.05, 0.3, 0], r: 0.16, s: [1.35, 0.85] },
+      { p: [0.07, 0.4, 0], r: 0.12, s: [1.1, 0.8] },
+    ]),
+    silk,
+  );
+  torso.position.set(0.06, 0.34, 0);
+  torso.rotation.z = -0.95;
+  torso.castShadow = true;
   g.add(torso);
-  const head = sphere(0.16, skin);
-  head.position.set(0.3, 0.74, 0);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.1, 8), skin);
+  neck.position.set(0.32, 0.6, 0);
+  neck.rotation.z = -0.9;
+  g.add(neck);
+  const head = sphere(0.14, skin, 0.95, 1.05, 0.9);
+  head.position.set(0.4, 0.66, 0);
   g.add(head);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(helmet));
-  cap.position.set(0.29, 0.76, 0);
-  cap.rotation.z = -0.25;
+  // 헬멧: 반구 + 챙 + 고글, 색 커버
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.165, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(helmet));
+  cap.position.set(0.39, 0.7, 0);
+  cap.rotation.z = -0.6;
   cap.castShadow = true;
   g.add(cap);
-  const visor = box(0.16, 0.06, 0.3, toon(0x111111));
-  visor.position.set(0.44, 0.78, 0);
-  g.add(visor);
-  const goggles = box(0.06, 0.09, 0.3, toon(0x1b3a6b));
-  goggles.position.set(0.44, 0.72, 0);
+  const peak = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 16, 1, false, -0.5, 1.6), toon(helmet));
+  peak.position.set(0.44, 0.7, 0);
+  peak.rotation.z = -0.6;
+  g.add(peak);
+  const goggles = box(0.05, 0.07, 0.26, toon(0x1b3a6b));
+  goggles.position.set(0.52, 0.66, 0);
   g.add(goggles);
   for (const s of [-1, 1]) {
-    const arm = capsule(0.05, 0.3, silk);
-    arm.position.set(0.36, 0.45, s * 0.2);
-    arm.rotation.z = Math.PI / 2 - 0.5;
-    g.add(arm);
-    const glove = sphere(0.06, toon(0xffffff));
-    glove.position.set(0.55, 0.35, s * 0.2);
+    // 팔: 어깨에서 앞으로 뻗어 고삐를 잡음 (팔꿈치 살짝 굽힘)
+    const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.2, 8), silk);
+    upperArm.position.set(0.28, 0.52, s * 0.19);
+    upperArm.rotation.z = Math.PI / 2 - 0.3;
+    g.add(upperArm);
+    const foreArm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.2, 8), silk);
+    foreArm.position.set(0.45, 0.42, s * 0.2);
+    foreArm.rotation.z = Math.PI / 2 + 0.35;
+    g.add(foreArm);
+    const glove = sphere(0.05, toon(0xf4f4f4));
+    glove.position.set(0.55, 0.34, s * 0.2);
     g.add(glove);
-    const thigh = capsule(0.07, 0.22, toon(0xf6f6f6));
-    thigh.position.set(0.0, 0.2, s * 0.22);
-    thigh.rotation.x = s * 0.55;
-    thigh.rotation.z = -0.3;
+    // 다리: 무릎을 높이 올려 접은 몽키 자세
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 0.24, 8), toon(0xf6f6f6));
+    thigh.position.set(0.06, 0.2, s * 0.22);
+    thigh.rotation.x = s * 0.5;
+    thigh.rotation.z = -0.55;
     g.add(thigh);
-    const boot = box(0.2, 0.09, 0.09, toon(0x222222));
-    boot.position.set(0.1, -0.06, s * 0.32);
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.24, 8), toon(0x1c1c1c));
+    shin.position.set(0.05, 0.02, s * 0.3);
+    shin.rotation.z = 0.35;
+    g.add(shin);
+    const boot = box(0.18, 0.07, 0.08, toon(0x151515));
+    boot.position.set(0.1, -0.09, s * 0.31);
     g.add(boot);
   }
   const whip = capsule(0.012, 0.5, toon(0x3a2a1a));
