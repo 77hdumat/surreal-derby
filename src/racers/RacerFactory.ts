@@ -1260,7 +1260,10 @@ export class GltfRacerVisual implements RacerVisual {
       (gltf) => {
         this.model = gltf.scene;
         this.model.traverse((o) => {
-          if ((o as THREE.Mesh).isMesh) o.castShadow = true;
+          if ((o as THREE.Mesh).isMesh) {
+            o.castShadow = true;
+            o.frustumCulled = false; // 스키닝 애니메이션은 바운드가 갱신되지 않아 컬링되면 사라짐
+          }
         });
         this.model.scale.setScalar(def.modelScale ?? 1);
         this.model.rotation.y = def.modelYaw ?? 0;
@@ -1290,7 +1293,7 @@ export class GltfRacerVisual implements RacerVisual {
       this.mixer.update(ctx.dt);
     }
     if (this.model) {
-      this.model.rotation.x = -ctx.cornerWeight * 0.3;
+      this.model.rotation.x = -ctx.cornerWeight * 0.25;
       this.model.position.y = Math.abs(Math.sin(((ctx.time * ctx.speed) / this.def.strideLength) * Math.PI)) * 0.1 * ctx.speedNorm;
     }
   }

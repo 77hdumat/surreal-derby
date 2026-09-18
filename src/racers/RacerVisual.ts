@@ -524,11 +524,12 @@ export abstract class PlaceholderVisual implements RacerVisual {
     const bounce = air * this.bounceAmp * (0.5 + animSpeed * 0.9);
     const jitter = (Math.sin(time * 13.1 + this.seed) * 0.5 + Math.sin(time * 7.3 + this.seed * 2)) * 0.01 * animSpeed * gait;
     this.body.position.set(0, this.baseY + bounce + jitter, 0);
-    const lean = -ctx.cornerWeight * Math.atan((ctx.speed * ctx.speed) / (60 * 9.8)) * 1.25;
+    // 코너 기울기: 속도가 아무리 높아도 최대 ~20° (부스트/폭주 때 옆으로 눕지 않게)
+    const lean = -ctx.cornerWeight * THREE.MathUtils.clamp((ctx.speed * ctx.speed) / (60 * 9.8), 0, 1) * 0.35;
     const roll = lean + Math.sin(time * 9 + this.seed) * 0.02 * animSpeed * gait + ctx.bump * ctx.bumpDir * 0.35 * Math.sin(ctx.bump * 20);
     // 차고 나갈 때 코가 들리고, 앞다리 착지 때 코가 내려감
     const gallopPitch = Math.cos(Math.PI * 2 * (ph - 0.15)) * 0.085 * (0.3 + animSpeed) * gait;
-    const pitch = gallopPitch - ctx.accel * 0.012 - this.stumble * 0.6;
+    const pitch = gallopPitch - THREE.MathUtils.clamp(ctx.accel, -8, 8) * 0.012 - this.stumble * 0.6;
     this.body.rotation.set(roll, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed * gait, pitch);
     if (this.neckBob) this.neckBob.rotation.z = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.12 * (0.3 + animSpeed);
     this.stumble = Math.max(0, this.stumble - dt * 1.2);
