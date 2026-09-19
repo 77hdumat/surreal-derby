@@ -371,6 +371,32 @@ interface FallenRider {
   spin: number;
 }
 
+function makeSleepZSprite(): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = '900 74px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = 'rgba(18,24,54,0.95)';
+  ctx.strokeText('zZzzzzZZ', 256, 66);
+  ctx.fillStyle = '#fff3a6';
+  ctx.fillText('zZzzzzZZ', 256, 66);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false });
+  const sprite = new THREE.Sprite(material);
+  sprite.name = 'sleep_zzzz';
+  sprite.scale.set(3.2, 0.8, 1);
+  sprite.visible = false;
+  sprite.renderOrder = 20;
+  return sprite;
+}
+
 /**
  * Placeholder 공통 베이스. 새 캐릭터는 이 클래스를 상속해 buildBody / updateSpecial 만 구현.
  */
@@ -399,6 +425,9 @@ export abstract class PlaceholderVisual implements RacerVisual {
   /** 목/머리 끄덕임 콜백용 — 서브클래스가 neck 을 두면 갤럽에 맞춰 흔든다 */
   protected neckBob: THREE.Object3D | null = null;
   protected neckBase = 0;
+  protected grazeDrop = 1.15;
+  /** 풀 뜯기 때 턱·주둥이를 씹는 파츠. buildBody 에서 이름으로 자동 수집한다. */
+  protected grazeMouths: THREE.Object3D[] = [];
   protected stridePhase = 0;
   /** 바퀴 달린 선수: 몸통 바운스/피치 없음, 바퀴만 회전 */
   protected wheeled = false;
@@ -409,6 +438,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
   protected downPose = 0;
   protected grazePose = 0;
   protected planted = 0;
+  protected declare sleepZ: THREE.Sprite;
   private reinTmpA = new THREE.Vector3();
   private reinTmpB = new THREE.Vector3();
   private reinTmpC = new THREE.Vector3();
@@ -418,10 +448,17 @@ export abstract class PlaceholderVisual implements RacerVisual {
     this.def = def;
     this.root.add(this.body);
     this.buildBody();
+    this.sleepZ = makeSleepZSprite();
+    this.root.add(this.sleepZ);
     // 절차형 로프트와 빠르게 변형되는 관절은 카메라 각도에 따라 뒷면이
     // 노출될 수 있다. 불투명 캐릭터 재질은 양면 깊이 렌더링으로 보강해
     // 애니메이션 중 몸통에 구멍이 뚫린 듯 보이는 현상을 막는다.
     this.body.traverse((o) => {
+      if (o.name === 'graze_mouth') {
+        o.userData.grazeBaseRotZ = o.rotation.z;
+        o.userData.grazeBaseScaleY = o.scale.y;
+        this.grazeMouths.push(o);
+      }
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -624,7 +661,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
     // 넘어짐/잠듦: 옆으로 누움 (원점이 발밑이라 몸이 바닥에 눕는다), 뒷걸음질: 몸이 뒤로 젖힘
     const dp = this.downPose;
     const reverse = st === 'REVERSING' ? 1 : 0;
-    this.body.rotation.set(roll * (1 - dp) + dp * 1.5, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed * gait, pitch * (1 - dp) + reverse * 0.18 + this.grazePose * 0.12);
+    this.body.rotation.set(roll * (1 - dp) + dp * 1.5, Math.sin(time * 5.3 + this.seed) * 0.015 * animSpeed * gait, pitch * (1 - dp) + reverse * 0.18 - this.grazePose * 0.04);
     if (dp > 0.02) this.body.position.y = this.baseY + dp * 0.15 + Math.sin(time * 2.2) * 0.02 * dp;
     // 코끼리에게 받힘: 포물선으로 날아올라 빙글 돌다 머리부터 땅에 꽂힘
     if (st === 'LAUNCHED') {
@@ -650,9 +687,18 @@ export abstract class PlaceholderVisual implements RacerVisual {
     }
     if (this.neckBob) {
       const bob = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.12 * (0.3 + animSpeed);
-      // 풀 뜯기: 목을 바닥으로
-      this.neckBob.rotation.z = THREE.MathUtils.lerp(bob, this.neckBase + 1.15, this.grazePose);
+      // 풀 뜯기: +회전은 하늘을 향한다. 목을 아래로 접도록 기준각에서
+      // 음의 방향으로 내리고, 씹는 박자에 맞춰 코를 작게 끄덕인다.
+      const grazeNod = Math.sin(time * 6.5) * 0.055 * this.grazePose;
+      this.neckBob.rotation.z = THREE.MathUtils.lerp(bob, this.neckBase - this.grazeDrop + grazeNod, this.grazePose);
     }
+    this.grazeMouths.forEach((mouth, i) => {
+      const baseRot = mouth.userData.grazeBaseRotZ as number;
+      const baseScaleY = mouth.userData.grazeBaseScaleY as number;
+      const bite = this.grazePose * (0.5 + 0.5 * Math.sin(time * 13 + i * 0.8));
+      mouth.rotation.z = baseRot - bite * 0.12;
+      mouth.scale.y = baseScaleY * (1 - bite * 0.1);
+    });
     // 누웠을 때 다리는 축 늘어지고 가끔 움찔
     if (dp > 0.3) {
       this.legs.forEach((l, i) => {
@@ -670,6 +716,14 @@ export abstract class PlaceholderVisual implements RacerVisual {
     });
     this.updateFallen(dt);
     this.updateSpecial(ctx);
+    const sleeping = st === 'SLEEPING';
+    this.sleepZ.visible = sleeping && this.downPose > 0.04;
+    if (this.sleepZ.visible) {
+      const pulse = 1 + Math.sin(time * 3.2) * 0.08;
+      this.sleepZ.position.set(-0.15 + Math.sin(time * 1.4) * 0.12, this.height + 0.72 + Math.sin(time * 2.1) * 0.1, 0);
+      this.sleepZ.scale.set(3.2 * pulse, 0.8 * pulse, 1);
+      (this.sleepZ.material as THREE.SpriteMaterial).opacity = THREE.MathUtils.clamp(this.downPose * 1.6, 0, 1);
+    }
     this.updateMane(time, animSpeed);
     this.updateReins();
   }
@@ -741,6 +795,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
     this.body.rotation.set(0, 0, 0);
     this.body.scale.set(1, 1, 1);
     this.body.position.set(0, this.baseY, 0);
+    this.sleepZ.visible = false;
   }
 
   dispose(): void {

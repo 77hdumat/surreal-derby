@@ -60,7 +60,7 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 0.9;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -69,8 +69,8 @@ export class Game {
     installHsvFog();
     this.scene.fog = new THREE.Fog(new THREE.Color(0.64, 0.36, 0), 90, 560);
     // 조명: 하늘(물리 Sky)에서 뽑은 환경맵 + 태양 + 약한 반구광
-    this.scene.add(new THREE.HemisphereLight(0xbcd7f5, 0x8c8776, 0.5));
-    this.sun = new THREE.DirectionalLight(0xfff6e8, 2.6);
+    this.scene.add(new THREE.HemisphereLight(0xbcd7f5, 0x8c8776, 0.45));
+    this.sun = new THREE.DirectionalLight(0xfff6e8, 2.2);
     this.sun.position.copy(this.sunOffset);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -96,7 +96,7 @@ export class Game {
       const skyScene = new THREE.Scene();
       skyScene.add(this.track.sky);
       this.scene.environment = pmrem.fromScene(skyScene, 0, 1, 3000).texture;
-      this.scene.environmentIntensity = 0.45;
+      this.scene.environmentIntensity = 0.38;
       this.track.group.add(this.track.sky);
       pmrem.dispose();
     }

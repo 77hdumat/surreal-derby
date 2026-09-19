@@ -774,7 +774,7 @@ export class RaceTrack {
     this.group.add(sun);
     const halo = new THREE.Mesh(
       new THREE.SphereGeometry(60, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.2, depthWrite: false, fog: false }),
+      new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.12, depthWrite: false, fog: false }),
     );
     halo.position.copy(sun.position);
     halo.userData.noShadow = true;

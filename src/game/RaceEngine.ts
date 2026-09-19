@@ -322,9 +322,11 @@ export class RaceEngine {
     s.accelMultiplier = 1;
     switch (prev) {
       case 'COLLAPSED':
-        s.state = 'RECOVERING';
-        s.stateTimer = 1.6;
-        this.events.emit({ time: this.time, racerId: r.def.id, event: 'COSTUME_RECOVER', major: false });
+        // 쓰러진 뒤 탈을 다시 뒤집어쓰지 않고 머리 위로 들어 완주한다.
+        this.carryDuration = 60;
+        this.setState(r, 'CARRYING', this.carryDuration, 1.0, 3);
+        s.fatigued = false;
+        this.events.emit({ time: this.time, racerId: r.def.id, event: 'COSTUME_CARRY', major: false, label: `${r.def.name} 말탈을 들고 결승선으로 질주` });
         return;
       case 'ENGINE_FAILURE':
         s.state = 'RUNNING';
@@ -343,9 +345,10 @@ export class RaceEngine {
         s.state = 'RUNNING';
         return;
       case 'BROKEN':
-        // 병사들이 바퀴를 다시 끼운 뒤 레이스에 복귀
-        s.state = 'RECOVERING';
-        s.stateTimer = 1.4;
+        // 바퀴는 그대로 빠진 채 병사 전원이 뒤에서 밀어 결승선까지 간다.
+        this.setState(r, 'AMBUSH', 60, 0.62, 2.2);
+        s.extension = 1;
+        this.events.emit({ time: this.time, racerId: r.def.id, event: 'TROJAN_AMBUSH', major: false, label: `${r.def.name} 병사들이 바퀴 대신 밀어 완주 시도` });
         return;
       case 'LAUNCHED':
         // 착지: 잠시 머리부터 박혔다가 구조되어 다시 출발

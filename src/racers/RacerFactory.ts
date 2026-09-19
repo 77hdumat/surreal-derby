@@ -117,6 +117,7 @@ function buildHorse(parent: THREE.Object3D, o: HorseOpts): HorseParts {
     ]),
     o.hide,
   );
+  jaw.name = 'graze_mouth';
   jaw.castShadow = true;
   head.add(jaw);
   for (const sgn of [-1, 1]) {
@@ -183,10 +184,33 @@ class CostumeVisual extends PlaceholderVisual {
   private collapse = 0;
   private carry = 0;
   private liftT = 99;
+  private carryFinishPose = false;
 
   onEvent(type: RaceEventType, ctx: VisualContext): void {
     super.onEvent(type, ctx);
-    if (type === 'COSTUME_CARRY') this.liftT = 0;
+    if (type === 'COSTUME_COLLAPSE') this.carryFinishPose = false;
+    if (type === 'COSTUME_CARRY') {
+      this.liftT = 0;
+      this.carryFinishPose = true;
+    }
+  }
+
+  reset(): void {
+    super.reset();
+    this.collapse = 0;
+    this.carry = 0;
+    this.liftT = 99;
+    this.carryFinishPose = false;
+    this.shell.position.set(0, 0, 0);
+    this.shell.rotation.set(0, 0, 0);
+    this.shell.scale.set(1, 1, 1);
+    this.persons.forEach((p) => {
+      p.visible = false;
+      p.position.y = 0;
+      p.position.z = 0;
+      p.rotation.set(0, 0, 0);
+    });
+    this.heads.forEach((h) => (h.visible = false));
   }
 
   /** 두 사람 달리기: 앞사람 좌/우 반대 위상, 뒷사람은 앞사람과 어긋나게 */
@@ -345,6 +369,7 @@ class CostumeVisual extends PlaceholderVisual {
     this.arms = [];
     [0.6, -0.65].forEach((x, i) => {
       const p = new THREE.Group();
+      p.name = `costume_person_${i}`;
       const shirt = toon(i === 0 ? 0xe84c3d : 0x3d7be8);
       const torso = capsule(0.2, 0.32, shirt);
       torso.position.y = 1.32;
@@ -401,7 +426,8 @@ class CostumeVisual extends PlaceholderVisual {
     const { time, speedNorm, dt } = ctx;
     const target = ctx.state === 'COLLAPSED' ? 1 : ctx.state === 'RECOVERING' ? 0.35 : 0;
     this.collapse = damp(this.collapse, target, ctx.state === 'COLLAPSED' ? 9 : 3, dt);
-    this.carry = damp(this.carry, ctx.state === 'CARRYING' ? 1 : 0, 6, dt);
+    const carryingToFinish = ctx.state === 'CARRYING' || (ctx.state === 'FINISHED' && this.carryFinishPose);
+    this.carry = damp(this.carry, carryingToFinish ? 1 : 0, 6, dt);
     const c = this.collapse;
     const k = this.carry;
     this.liftT += dt;
@@ -417,8 +443,14 @@ class CostumeVisual extends PlaceholderVisual {
       this.persons.forEach((p, i) => {
         p.visible = true;
         p.position.y = Math.abs(Math.sin(time * 11 + i * 1.3)) * 0.08 * k;
+        p.position.z = 0;
+        p.rotation.x = 0;
         p.rotation.z = 0.12 * k; // 살짝 앞으로 숙이고 달림
         p.scale.setScalar(THREE.MathUtils.lerp(0.001, 1, Math.min(1, k * 1.5)));
+      });
+      this.legs.forEach((l, i) => {
+        l.position.y = 0.98;
+        l.position.z = i % 2 === 0 ? -0.22 : 0.22;
       });
       this.arms.forEach((a, i) => {
         const s = i % 2 ? 1 : -1;
@@ -431,13 +463,14 @@ class CostumeVisual extends PlaceholderVisual {
       this.parts.head.rotation.z = 0.95 + k * 0.6;
       return;
     }
-    this.persons.forEach((p) => (p.visible = false));
     const wob = speedNorm * (1 - c);
     // 사람 두 명이 탈을 쓰고 뛰는 흔들림: 앞사람/뒷사람 발걸음(보폭당 2보)이 어긋나 탈이 위아래·앞뒤로 출렁
     const step = this.stridePhase * 2;
     const frontBob = Math.abs(Math.sin(Math.PI * step)) * 0.1 * wob;
     const rearBob = Math.abs(Math.sin(Math.PI * (step + 0.3))) * 0.1 * wob;
-    this.shell.position.y = (frontBob + rearBob) * 0.5 - c * 0.7;
+    const runningBob = (frontBob + rearBob) * 0.5;
+    // 옆으로 누운 상자의 회전된 바닥면이 지면(y=0)에 닿도록 피벗을 올린다.
+    this.shell.position.y = THREE.MathUtils.lerp(runningBob, 0.3, c);
     // 붕괴 시 말처럼 몸을 구부리거나 찌그러뜨리지 않고, 완성된 상자 탈이
     // 옆으로 넘어져 바닥에 그대로 널브러진다.
     this.shell.rotation.z = (rearBob - frontBob) * 0.55 + Math.sin(time * 2.1 + this.seed) * 0.02 * wob + c * 0.06;
@@ -447,21 +480,40 @@ class CostumeVisual extends PlaceholderVisual {
     // 목·머리 상자도 원래 각진 형태를 유지한 채 연결부만 살짝 처진다.
     this.parts.head.rotation.z = 0.95 + Math.sin(Math.PI * 2 * step - 0.9) * 0.14 * wob + c * 0.18;
     this.parts.neck.rotation.z = -0.75 + Math.sin(Math.PI * 2 * step - 1.2) * 0.06 * wob - c * 0.12;
-    // 쓰러지면 두 사람이 탈 아래 누운 모양: 다리는 바닥에 눕고 무릎은 펴짐
+    // 쓰러지면 머리만 따로 튀어나오는 대신 두 사람의 상체·머리·팔을 전부
+    // 드러내고, 각자의 두 다리와 이어지는 방향으로 바닥에 널브러뜨린다.
+    this.persons.forEach((p, i) => {
+      p.visible = c > 0.08;
+      p.position.y = c * 0.16;
+      p.position.z = -c * 0.58;
+      p.rotation.x = (i === 0 ? -0.12 : 0.12) * c;
+      p.rotation.z = (i === 0 ? 1.25 : -1.25) * c;
+      p.scale.setScalar(1);
+    });
+    this.arms.forEach((a, i) => {
+      const side = i % 2 === 0 ? -1 : 1;
+      a.rotation.x = side * (0.25 + c * 0.35);
+      a.rotation.z = side * c * 0.55;
+    });
     this.legs.forEach((l, i) => {
       if (c > 0.05) {
         const lie = (i < 2 ? 1.5 : -1.5) * c;
         l.rotation.z = THREE.MathUtils.lerp(l.rotation.z, lie + Math.sin(time * 3 + i) * 0.08 * c, Math.min(1, c * 1.5));
         l.position.y = 0.98 - c * 0.62;
+        l.position.z = (i % 2 === 0 ? -0.22 : 0.22) - c * 0.58;
         const knee = l.children.find((ch) => ch.name.endsWith('_lower'));
         if (knee) knee.rotation.z = THREE.MathUtils.lerp(knee.rotation.z, 0, Math.min(1, c * 1.5));
-      } else l.position.y = 0.98;
+      } else {
+        l.position.y = 0.98;
+        l.position.z = i % 2 === 0 ? -0.22 : 0.22;
+      }
     });
     this.riders.forEach((r, i) => {
       if (r.parent === this.riderParent[i]) r.position.y += -c * 1.1;
     });
     this.heads.forEach((h, i) => {
-      h.visible = c > 0.4;
+      // 상자 안에 달린 임시 머리는 숨기고 완전한 person 리그만 사용한다.
+      h.visible = false;
       h.position.y = 1.5 + c * 0.25;
       h.rotation.y = Math.sin(time * 4 + i * 2) * 0.6;
       h.scale.setScalar(1);
@@ -623,6 +675,7 @@ class ElephantVisual extends PlaceholderVisual {
     shoulder.position.set(1.15, 2.25, 0);
     this.body.add(shoulder);
     this.head = new THREE.Group();
+    this.head.name = 'elephant_head';
     this.head.position.set(1.95, 2.55, 0);
     const skull = sphere(0.85, skin, 1.05, 1.1, 0.95);
     this.head.add(skull);
@@ -647,6 +700,7 @@ class ElephantVisual extends PlaceholderVisual {
     let off = new THREE.Vector3(0.8, -0.25, 0);
     for (let i = 0; i < 4; i++) {
       const seg = new THREE.Group();
+      seg.name = `elephant_trunk_${i}`;
       seg.position.copy(off);
       const r = 0.24 - i * 0.045;
       const geo = new THREE.CapsuleGeometry(r, 0.5, 4, 10);
@@ -700,13 +754,19 @@ class ElephantVisual extends PlaceholderVisual {
     this.head.rotation.y = Math.sin(time * 4.5 + this.seed) * 0.08 * speedNorm;
     this.trunk.forEach((seg, i) => {
       const sway = Math.sin(time * (5 + i) + i * 0.8) * (0.18 + 0.08 * i) * speedNorm * (1 - g);
-      // 늘어남: 각 마디를 길게, 수평(전방)으로 펴짐 / 물대포: 코를 위로 치켜듦
-      seg.rotation.z = 0.28 + sway - c * (0.8 + i * 0.45) + g * (i === 0 ? 1.25 : 0.05) - sp * (i === 0 ? 1.4 : 0.35);
-      seg.rotation.x = Math.sin(time * 3 + i) * 0.1 * speedNorm * (1 - g);
+      // 돌진 중에는 첫 관절을 뒤로 크게 젖히고 나머지는 작은 국소각으로 이어
+      // 전체 코가 몸 뒤로 길게 흐른다. 각 마디에 위상차를 둬 채찍처럼 휘날린다.
+      const streamWave = Math.sin(time * 9 - i * 1.05) * (0.1 + i * 0.045);
+      const streamTarget = i === 0 ? -1.18 + streamWave : -0.08 + streamWave;
+      const normal = 0.28 + sway;
+      seg.rotation.z = THREE.MathUtils.lerp(normal, streamTarget, c) + g * (i === 0 ? 1.25 : 0.05) - sp * (i === 0 ? 1.4 : 0.35);
+      seg.rotation.x = Math.sin(time * (5.5 + i * 0.35) - i) * (0.1 + c * (0.08 + i * 0.025)) * speedNorm * (1 - g);
       const trunkScale = ctx.extensionMax > 3 ? ctx.extensionMax / 2.4 : 3.2;
-      seg.scale.y = 1 + g * trunkScale;
+      const lengthScale = 1 + c * 0.18 + g * trunkScale;
+      seg.scale.y = lengthScale;
       // 늘어난 마디 끝에 다음 마디가 붙도록 위치 보정
-      if (i > 0) seg.position.y = -0.58 * (1 + g * trunkScale);
+      if (i > 0) seg.position.y = -0.58 * lengthScale;
+      seg.visible = true;
     });
     this.ears.forEach((e, i) => {
       const s = i === 0 ? -1 : 1;
@@ -819,6 +879,7 @@ class CowVisual extends PlaceholderVisual {
     skull.castShadow = true;
     head.add(skull);
     const muzzle = sphere(0.22, pink, 1.05, 0.75, 1.15);
+    muzzle.name = 'graze_mouth';
     muzzle.position.set(0.9, -0.06, 0);
     head.add(muzzle);
     for (const sgn of [-1, 1]) {
@@ -856,6 +917,7 @@ class CowVisual extends PlaceholderVisual {
     this.head = head;
     this.neckBob = neck;
     this.neckBase = -1.25;
+    this.grazeDrop = 0.9;
     // 방울 + 목걸이
     this.bell = sphere(0.1, toon(0xf5c400));
     this.bell.position.set(1.55, 1.05, 0);
@@ -939,6 +1001,7 @@ class MotorcycleVisual extends PlaceholderVisual {
     const chrome = new THREE.MeshStandardMaterial({ color: 0xe8ecf2, roughness: 0.2, metalness: 0.95 });
     const hairMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.35, metalness: 0.1 });
     this.frame = new THREE.Group();
+    this.frame.name = 'motor_frame';
     // 검은 말 본체
     this.parts = buildHorse(this.frame, { hide: black, mane: hairMat, bodyLen: 1.25, bodyR: 0.52, bridle: false });
     this.neckBob = this.parts.neck;
@@ -1040,12 +1103,15 @@ class MotorcycleVisual extends PlaceholderVisual {
     seat.position.set(-0.45, 2.0, 0);
     this.frame.add(seat);
     this.body.add(this.frame);
-    this.addLegs([
-      { x: 0.85, z: -0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
-      { x: 0.85, z: 0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
-      { x: -0.85, z: -0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
-      { x: -0.85, z: 0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
-    ]);
+    this.addLegs(
+      [
+        { x: 0.85, z: -0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
+        { x: 0.85, z: 0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
+        { x: -0.85, z: -0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
+        { x: -0.85, z: 0.3, w: 0.18, len: 1.2, mat: black, y: 1.2, hoof: 0x111111 },
+      ],
+      this.frame,
+    );
     // 기수: 뒤로 젖혀 앉아 에이프행어를 잡는 초퍼 자세
     this.addRider(new THREE.Vector3(-0.35, 2.1, 0));
     this.reparentRider(0, this.frame, 0.75);
@@ -1058,11 +1124,19 @@ class MotorcycleVisual extends PlaceholderVisual {
     const boosting = ctx.state === 'BOOSTING';
     // 부스트: 앞다리 들고 뒷발로 튀어나감(윌리)
     this.wheelie = damp(this.wheelie, boosting ? 1 : 0, boosting ? 6 : 3, dt);
-    this.frame.rotation.z = this.wheelie * 0.3;
-    this.frame.position.y = this.wheelie * 0.25;
+    // 본체·다리·기수가 같은 프레임을 공유하므로 윌리 중 관절이 분리되지 않는다.
+    this.frame.rotation.z = this.wheelie * 0.24;
+    this.frame.position.y = this.wheelie * 0.18;
     if (this.wheelie > 0.05) {
-      this.legs[0].rotation.z = THREE.MathUtils.lerp(this.legs[0].rotation.z, 1.1 + Math.sin(time * 9) * 0.3, this.wheelie);
-      this.legs[1].rotation.z = THREE.MathUtils.lerp(this.legs[1].rotation.z, 0.9 + Math.cos(time * 9) * 0.3, this.wheelie);
+      this.legs[0].rotation.z = THREE.MathUtils.lerp(this.legs[0].rotation.z, 0.78 + Math.sin(time * 9) * 0.18, this.wheelie);
+      this.legs[1].rotation.z = THREE.MathUtils.lerp(this.legs[1].rotation.z, 0.72 + Math.cos(time * 9) * 0.18, this.wheelie);
+      for (let i = 0; i < 2; i++) {
+        const knee = this.legs[i].children.find((ch) => ch.name.endsWith('_lower'));
+        if (knee) knee.rotation.z = THREE.MathUtils.lerp(knee.rotation.z, -1.05, this.wheelie);
+      }
+      // 뒷다리는 차체 아래에서 번갈아 지면을 밀어 급가속의 추진력을 표현한다.
+      this.legs[2].rotation.z = THREE.MathUtils.lerp(this.legs[2].rotation.z, -0.32 + Math.sin(time * 10) * 0.14, this.wheelie * 0.65);
+      this.legs[3].rotation.z = THREE.MathUtils.lerp(this.legs[3].rotation.z, -0.32 + Math.cos(time * 10) * 0.14, this.wheelie * 0.65);
     }
     // 와리가리: 횡속도 방향으로 몸을 눕힘
     this.frame.rotation.x = THREE.MathUtils.clamp(ctx.lateralVel * 0.12, -0.5, 0.5);
@@ -1291,6 +1365,7 @@ class GiraffeVisual extends PlaceholderVisual {
 
   protected buildBody(): void {
     const d = this.def;
+    this.body.name = 'giraffe_body';
     const tex = this.spotTexture();
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     const hide = toon(0xffffff, { map: tex });
@@ -1319,6 +1394,7 @@ class GiraffeVisual extends PlaceholderVisual {
     const maneMat = toon(0x6b3a1e);
     for (let i = 0; i < segN; i++) {
       const g = new THREE.Group();
+      g.name = `giraffe_neck_${i}`;
       g.position.y = i === 0 ? 0 : segLen;
       const r0 = 0.26 - (i / segN) * 0.08;
       const r1 = 0.26 - ((i + 1) / segN) * 0.08;
@@ -1411,17 +1487,20 @@ class GiraffeVisual extends PlaceholderVisual {
     this.neck.scale.y = 1 + st * (mega - 1);
     // 머리는 항상 앞을 보도록 목 기울기를 상쇄
     this.head.rotation.z = Math.sin(time * 6) * 0.1 * speedNorm + st * 0.9;
-    // 목 댄스: 멈춰 서서 목이 ~~~ 물결치듯 좌우로 (마디마다 위상 차)
+    // 목 댄스: 멈춰 서서 옆모습이 명확한 ~~~~ 파형을 만들도록 각 마디를
+    // z축으로 크게 번갈아 굽히고, x축에는 작은 깊이 흔들림만 더한다.
     this.dance = damp(this.dance, ctx.state === 'DANCING' ? 1 : 0, 5, dt);
     const dn = this.dance;
     this.neckSegs.forEach((seg, i) => {
-      seg.rotation.x = Math.sin(time * 7 - i * 0.85) * 0.42 * dn;
-      seg.rotation.z = Math.sin(time * 3.5 - i * 0.6) * 0.08 * dn;
+      const wave = time * 5.2 - i * 1.08;
+      seg.rotation.z = Math.sin(wave) * 0.3 * dn;
+      seg.rotation.x = Math.cos(wave) * 0.12 * dn;
     });
     if (dn > 0.05) {
-      this.neck.rotation.z = -0.35 - dn * 0.15;
-      this.body.position.y += Math.abs(Math.sin(time * 7)) * 0.08 * dn; // 리듬 타기
-      this.head.rotation.z += Math.sin(time * 7 - 6.8) * 0.3 * dn;
+      this.neck.rotation.z = -0.42 + Math.sin(time * 2.6) * 0.08 * dn;
+      this.body.position.y += Math.abs(Math.sin(time * 5.2)) * 0.09 * dn;
+      this.body.rotation.x += Math.sin(time * 5.2) * 0.06 * dn;
+      this.head.rotation.z += Math.sin(time * 5.2 - 7.5) * 0.38 * dn;
     }
   }
 }
@@ -1492,6 +1571,7 @@ class CircusVisual extends PlaceholderVisual {
 
   protected buildBody(): void {
     const d = this.def;
+    this.body.name = 'circus_body';
     const hide = toon(d.bodyColor);
     this.parts = buildHorse(this.body, { hide, mane: toon(0xf7f0dc), bodyLen: 1.2, bodyR: 0.5 });
     this.neckBob = this.parts.neck;
@@ -1541,22 +1621,34 @@ class CircusVisual extends PlaceholderVisual {
     const { dt, time, speedNorm } = ctx;
     this.perform = damp(this.perform, ctx.state === 'PERFORMING' ? 1 : 0, 4, dt);
     const p = this.perform;
-    // 뒷발로 서서 껑충껑충 (rearing) — 몸 전체 피치 업 + 높은 점프
-    const hop = Math.abs(Math.sin(time * 6)) * p;
-    this.body.rotation.z += p * 0.75;
-    this.body.position.y += p * 0.55 + hop * 0.45;
-    this.body.position.x += -p * 0.4;
-    // 앞다리는 허공에서 허우적
+    // 부스트 공연: 몸은 트랙을 옆으로 게걸음하고 앞·뒷다리는 좌우로
+    // 과장되게 벌렸다 오므리며 달린다.
+    const sideStep = Math.sin(time * 6.2);
+    const hop = Math.abs(Math.cos(time * 6.2)) * p;
+    this.body.position.z += sideStep * 0.82 * p;
+    this.body.position.y += hop * 0.2;
+    this.body.rotation.x += -sideStep * 0.28 * p;
+    this.body.rotation.y += Math.sin(time * 3.1) * 0.16 * p;
+    this.body.rotation.z += Math.sin(time * 6.2 + 0.8) * 0.1 * p;
     if (p > 0.05) {
-      this.legs[0].rotation.z = THREE.MathUtils.lerp(this.legs[0].rotation.z, 1.3 + Math.sin(time * 9) * 0.4, p);
-      this.legs[1].rotation.z = THREE.MathUtils.lerp(this.legs[1].rotation.z, 1.1 + Math.cos(time * 9) * 0.4, p);
+      this.legs.forEach((leg, i) => {
+        const side = i % 2 === 0 ? -1 : 1;
+        const pairPhase = i < 2 ? 0 : Math.PI;
+        leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, side * (0.78 + Math.sin(time * 8 + pairPhase) * 0.18), p);
+        leg.rotation.z = THREE.MathUtils.lerp(leg.rotation.z, Math.sin(time * 10 + i * Math.PI * 0.5) * 0.52, p);
+        const knee = leg.children.find((ch) => ch.name.endsWith('_lower'));
+        if (knee) knee.rotation.z = THREE.MathUtils.lerp(knee.rotation.z, -0.55 - Math.abs(Math.sin(time * 10 + i)) * 0.5, p);
+      });
     }
     // 깃털 흔들림, 머리 흔들며 인사
     this.plume.rotation.z = Math.sin(time * 5) * 0.2 * (0.3 + speedNorm) + p * 0.3;
     this.parts.head.rotation.y = Math.sin(time * 3) * 0.5 * p;
     // 기수는 한 손 들어 관중 인사
     const r = this.riders[0];
-    if (r.parent === this.body) r.rotation.z += p * 0.9;
+    if (r.parent === this.body) {
+      r.rotation.x += sideStep * 0.22 * p;
+      r.rotation.z += -sideStep * 0.18 * p;
+    }
   }
 }
 
@@ -1567,8 +1659,12 @@ class TrojanVisual extends PlaceholderVisual {
   private broken = 0;
   private declare hatch: THREE.Mesh;
   private declare soldiers: THREE.Group[];
+  private declare soldierLegs: THREE.Group[][];
+  private declare soldierArms: THREE.Group[][];
+  private declare commandSword: THREE.Group;
   private declare parts: HorseParts;
   private ambush = 0;
+  private pushToFinish = false;
 
   private plankTexture(): THREE.CanvasTexture {
     return canvasTex(256, 256, (ctx) => {
@@ -1592,6 +1688,8 @@ class TrojanVisual extends PlaceholderVisual {
   protected buildBody(): void {
     this.wheels = [];
     this.soldiers = [];
+    this.soldierLegs = [];
+    this.soldierArms = [];
     const d = this.def;
     const tex = this.plankTexture();
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -1643,41 +1741,93 @@ class TrojanVisual extends PlaceholderVisual {
       this.wheels.push(w as unknown as THREE.Mesh);
       this.hoofPoints.push(new THREE.Vector3(x, 0, z));
     }
-    // 병사들 (숨어 있다가 이벤트 때 뒤에서 밀기)
+    // 병사들 (숨어 있다가 이벤트 때 실제 사람 크기로 뒤에서 밀기)
     for (let i = 0; i < 12; i++) {
       const g = new THREE.Group();
-      const bodyM = capsule(0.13, 0.35, toon(i < 3 ? 0xb03030 : [0xb03030, 0x2a4a9a, 0x8a6a1a][i % 3]));
-      bodyM.position.y = 0.45;
+      g.name = `trojan_soldier_${i}`;
+      const uniform = toon(i < 3 ? 0xb03030 : [0xb03030, 0x2a4a9a, 0x8a6a1a][i % 3]);
+      const skin = toon(0xf0caad);
+      const bodyM = capsule(0.19, 0.55, uniform);
+      bodyM.position.y = 1.08;
       g.add(bodyM);
-      const head = sphere(0.13, toon(0xf0caad));
-      head.position.y = 0.8;
+      const head = sphere(0.18, skin);
+      head.position.y = 1.65;
       g.add(head);
-      const helm = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xc9b037));
-      helm.position.y = 0.83;
+      const helm = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xc9b037));
+      helm.position.y = 1.7;
       g.add(helm);
-      const crest = box(0.3, 0.14, 0.05, toon(0xd02020));
-      crest.position.y = 0.98;
+      const crest = box(0.38, 0.18, 0.06, toon(0xd02020));
+      crest.position.y = 1.9;
       g.add(crest);
-      for (const s of [-1, 1]) {
-        const legM = capsule(0.05, 0.2, toon(0xf0caad));
-        legM.position.set(0, 0.12, s * 0.08);
-        g.add(legM);
-        const arm = capsule(0.045, 0.28, toon(0xf0caad));
-        arm.position.set(0.18, 0.55, s * 0.16);
-        arm.rotation.z = -1.3;
-        g.add(arm);
+      const legs: THREE.Group[] = [];
+      const arms: THREE.Group[] = [];
+      for (const side of [-1, 1]) {
+        const hip = new THREE.Group();
+        hip.position.set(0, 0.78, side * 0.12);
+        const thigh = capsule(0.075, 0.36, uniform);
+        thigh.position.y = -0.25;
+        hip.add(thigh);
+        const knee = new THREE.Group();
+        knee.position.y = -0.52;
+        const shin = capsule(0.06, 0.32, skin);
+        shin.position.y = -0.23;
+        knee.add(shin);
+        const boot = box(0.22, 0.1, 0.14, toon(0x3a2416));
+        boot.position.set(0.06, -0.48, 0);
+        knee.add(boot);
+        hip.add(knee);
+        g.add(hip);
+        legs.push(hip);
+
+        const shoulder = new THREE.Group();
+        shoulder.position.set(0, 1.34, side * 0.23);
+        shoulder.rotation.z = 1.18;
+        const arm = capsule(0.06, 0.43, uniform);
+        arm.position.y = -0.29;
+        shoulder.add(arm);
+        const hand = sphere(0.075, skin);
+        hand.position.y = -0.57;
+        shoulder.add(hand);
+        g.add(shoulder);
+        arms.push(shoulder);
       }
       const row = Math.floor(i / 3);
-      g.position.set(-1.9 - row * 0.55, 0, ((i % 3) - 1) * 0.42 + (row % 2) * 0.2);
+      const baseX = -1.75 - row * 0.68;
+      const baseZ = ((i % 3) - 1) * 0.55 + (row % 2) * 0.14;
+      g.position.set(baseX, 0, baseZ);
+      g.userData.pushBaseX = baseX;
+      g.userData.pushBaseZ = baseZ;
       g.visible = false;
       this.body.add(g);
       this.soldiers.push(g);
+      this.soldierLegs.push(legs);
+      this.soldierArms.push(arms);
     }
     addSaddle(this.body, -0.3, 2.85, 1.2, d.clothColor);
     const cloth = makeNumberCloths(d.number, d.clothColor, 0.7, 0.62);
     cloth.position.set(-0.4, 2.0, 0);
     this.body.add(cloth);
-    this.addRider(new THREE.Vector3(-0.3, 2.95, 0));
+    const commander = this.addRider(new THREE.Vector3(-0.3, 2.95, 0));
+    // 나폴레옹식 지휘 자세: 오른손 위치에서 검을 전방으로 곧게 겨눈다.
+    this.commandSword = new THREE.Group();
+    this.commandSword.name = 'trojan_sword';
+    this.commandSword.position.set(0.53, 0.35, 0.2);
+    this.commandSword.rotation.z = 0.1;
+    const steel = new THREE.MeshStandardMaterial({ color: 0xe9edf5, roughness: 0.18, metalness: 0.92 });
+    const blade = capsule(0.025, 0.9, steel, 'x');
+    blade.position.x = 0.48;
+    this.commandSword.add(blade);
+    const guard = box(0.05, 0.3, 0.06, toon(0xc9a227));
+    guard.position.x = 0.02;
+    this.commandSword.add(guard);
+    const pommel = sphere(0.05, toon(0xc9a227));
+    pommel.position.x = -0.09;
+    this.commandSword.add(pommel);
+    commander.add(this.commandSword);
+    const bicorne = box(0.34, 0.08, 0.28, toon(0x16151a));
+    bicorne.position.set(0.39, 0.82, 0);
+    bicorne.rotation.z = -0.08;
+    commander.add(bicorne);
     this.attachReins(this.parts.head, new THREE.Vector3(0.56, -0.05, 0.15));
     this.wheeled = true;
     this.bounceAmp = 0;
@@ -1687,6 +1837,7 @@ class TrojanVisual extends PlaceholderVisual {
   onEvent(type: RaceEventType, ctx: VisualContext): void {
     super.onEvent(type, ctx);
     if (type === 'TWIST_WHEEL_OFF' && !this.looseWheel) {
+      this.pushToFinish = true;
       // 앞바퀴 하나가 빠져 굴러감
       const w = this.wheels[0];
       const scene = this.root.parent;
@@ -1717,6 +1868,8 @@ class TrojanVisual extends PlaceholderVisual {
       this.looseWheel = null;
     }
     this.broken = 0;
+    this.ambush = 0;
+    this.pushToFinish = false;
   }
 
   protected updateSpecial(ctx: VisualContext): void {
@@ -1741,18 +1894,35 @@ class TrojanVisual extends PlaceholderVisual {
     this.broken = damp(this.broken, ctx.state === 'BROKEN' ? 1 : 0, 4, dt);
     this.body.rotation.z += this.broken * 0.12;
     this.body.rotation.x += -this.broken * 0.1;
-    this.ambush = damp(this.ambush, ctx.state === 'AMBUSH' ? 1 : 0, 5, dt);
+    const pushedFinish = ctx.state === 'AMBUSH' || (ctx.state === 'FINISHED' && this.pushToFinish);
+    this.ambush = damp(this.ambush, pushedFinish ? 1 : 0, 5, dt);
     const a = this.ambush;
     this.hatch.rotation.x = a * 1.4;
     this.hatch.position.y = 1.3 - a * 0.3;
-    const army = ctx.extension > 0.5 ? 12 : 3;
+    const army = ctx.extension > 0.5 ? 12 : 6;
     this.soldiers.forEach((s, i) => {
       s.visible = a > 0.1 && i < army;
-      // 뒤에서 달리며 밀기
-      s.position.x = -1.9 - Math.max(0, 1 - a) * 0.8;
-      s.position.y = Math.abs(Math.sin(time * 9 + i)) * 0.15 * a;
-      s.rotation.z = -0.35 * a;
+      const stride = Math.sin(time * 10 + i * 0.72);
+      const baseX = s.userData.pushBaseX as number;
+      const baseZ = s.userData.pushBaseZ as number;
+      // 상체를 앞으로 기울이고 두 손을 목마 뒤판에 댄 채 보폭을 맞춘다.
+      s.position.x = baseX - Math.max(0, 1 - a) * 0.75 + Math.abs(stride) * 0.04 * a;
+      s.position.z = baseZ;
+      s.position.y = Math.abs(stride) * 0.055 * a;
+      s.rotation.z = -0.18 * a;
+      this.soldierLegs[i].forEach((leg, side) => {
+        leg.rotation.z = stride * (side === 0 ? 0.55 : -0.55) * a;
+        const knee = leg.children.find((ch) => ch.type === 'Group');
+        if (knee) knee.rotation.z = -Math.max(0, stride * (side === 0 ? 1 : -1)) * 0.7 * a;
+      });
+      this.soldierArms[i].forEach((arm, side) => {
+        arm.rotation.z = 1.18 + Math.sin(time * 10 + i + side) * 0.08 * a;
+        arm.rotation.x = (side === 0 ? -1 : 1) * 0.08 * a;
+      });
     });
+    const commander = this.riders[0];
+    if (commander?.parent === this.body) commander.rotation.z += a * 0.14;
+    this.commandSword.rotation.z = 0.1 + Math.sin(time * 5) * 0.035 * (0.3 + a);
     // 목마는 갤럽 없이 고정, 바퀴만 굴러감 + 나무 덜컹거림(바퀴 회전 주파수의 미세 진동)
     const rattle = ctx.speedNorm * (0.6 + a * 0.6);
     this.body.position.y += Math.sin(time * 23) * 0.012 * rattle + Math.sin(time * 37 + 1) * 0.006 * rattle;
