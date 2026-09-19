@@ -67,20 +67,21 @@ export class EffectsManager {
 
   resize(w: number, h: number): void {
     this.composer.setSize(w, h);
-    const bloomScale = this.highQuality ? 1 : 0.5;
+    // 블룸은 원본보다 낮은 해상도에서도 형태 차이가 거의 없다.
+    const bloomScale = this.highQuality ? 0.65 : 0.4;
     this.bloom.setSize(w * this.pixelRatio * bloomScale, h * this.pixelRatio * bloomScale);
     this.fxCanvas.width = Math.floor(w * this.pixelRatio);
     this.fxCanvas.height = Math.floor(h * this.pixelRatio);
   }
 
-  /** 고급 모드는 AO를 전체 해상도·고샘플로 계산해 접촉면과 털 굴곡을 선명하게 한다. */
+  /** 고급 모드도 AO는 반 해상도로 유지해 프레임 급락을 막고 샘플 품질만 높인다. */
   setHighQuality(high: boolean, pixelRatio: number): void {
     this.highQuality = high;
     this.pixelRatio = pixelRatio;
     this.composer.setPixelRatio(pixelRatio);
-    this.ao.setQualityMode(high ? 'High' : 'Performance');
-    this.ao.configuration.halfRes = !high;
-    this.ao.configuration.transparencyAware = true;
+    this.ao.setQualityMode(high ? 'Medium' : 'Performance');
+    this.ao.configuration.halfRes = true;
+    this.ao.configuration.transparencyAware = false;
   }
 
   /** 잔상 강도 0..1 (0.1 = 거의 없음, 1 = 매우 강함) */

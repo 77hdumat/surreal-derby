@@ -266,6 +266,7 @@ export function makeRider(silks: number, helmet: number, scale = 1): THREE.Group
   neck.rotation.z = -0.9;
   g.add(neck);
   const head = sphere(0.14, skin, 0.95, 1.05, 0.9);
+  head.name = 'rider_head';
   head.position.set(0.4, 0.66, 0);
   g.add(head);
   // 헬멧: 반구 + 챙 + 고글, 색 커버

@@ -138,8 +138,9 @@ export class Game {
     } catch {
       /* private browsing 등 저장 불가 환경 */
     }
-    const defaultHigh = window.innerWidth >= 900 && window.devicePixelRatio <= 2.5;
-    this.setHighQuality(savedQuality === null ? defaultHigh : savedQuality === 'high');
+    // 고급 모드는 사용자가 직접 선택할 때만 켠다. 고해상도 디스플레이에서
+    // 첫 진입부터 무거운 후처리를 돌려 프레임이 급락하는 일을 막는다.
+    this.setHighQuality(savedQuality === 'high');
   }
 
   start(): void {
@@ -158,8 +159,13 @@ export class Game {
 
   private setHighQuality(high: boolean): boolean {
     this.highQuality = high;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, high ? 2 : 1.25));
-    const shadowSize = high ? 4096 : 2048;
+    // 2x DPR + 4096 그림자 + full-res AO 조합은 1080p에서도 수천만 픽셀을
+    // 여러 번 처리한다. 고급 모드는 선명도 차이는 남기되 GPU 비용을 제한한다.
+    const pixelBudget = high ? 3_600_000 : 2_200_000;
+    const budgetRatio = Math.sqrt(pixelBudget / Math.max(1, window.innerWidth * window.innerHeight));
+    const ratio = Math.min(window.devicePixelRatio, high ? 1.5 : 1.1, Math.max(0.75, budgetRatio));
+    this.renderer.setPixelRatio(ratio);
+    const shadowSize = high ? 2048 : 1024;
     if (this.sun.shadow.mapSize.x !== shadowSize) {
       this.sun.shadow.mapSize.set(shadowSize, shadowSize);
       this.sun.shadow.map?.dispose();

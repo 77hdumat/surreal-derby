@@ -201,7 +201,13 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 #result-events li { display: flex; gap: 10px; padding: 5px 0; font-size: 14px; border-bottom: 1px dashed rgba(255,255,255,0.15); }
 #result-events li .t { font-family: 'Courier New', monospace; color: var(--yellow); width: 60px; flex-shrink: 0; }
 .result-actions { display: flex; gap: 14px; justify-content: center; margin-top: 20px; align-items: center; }
-#btn-select { font-family: var(--font); font-weight: 800; font-size: 16px; padding: 10px 18px; background: transparent; color: #fff; border: 2px solid #fff; border-radius: 6px; cursor: pointer; }
+.result-button {
+  min-width: 150px; font-family: var(--font); font-weight: 800; font-size: 16px; line-height: 1.2;
+  padding: 10px 18px; background: transparent; color: #fff; border: 2px solid #fff; border-radius: 6px;
+  cursor: pointer; transition: background 0.15s, color 0.15s, transform 0.08s;
+}
+.result-button:hover { background: #fff; color: #151b35; transform: translateY(-1px); }
+.result-button:active { transform: translateY(1px); }
 
 @media (max-width: 900px) {
   .intro-body { flex-direction: column; }

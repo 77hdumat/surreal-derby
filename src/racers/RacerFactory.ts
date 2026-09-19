@@ -265,6 +265,7 @@ class CostumeVisual extends PlaceholderVisual {
       return m;
     };
     this.shell = new THREE.Group();
+    this.shell.name = 'costume_shell';
     // 몸통 상자 (살짝 찌그러짐)
     const torso = sharp(2.5, 1.15, 1.0, cardBody);
     torso.position.set(0, 1.5, 0);
@@ -436,16 +437,16 @@ class CostumeVisual extends PlaceholderVisual {
     const step = this.stridePhase * 2;
     const frontBob = Math.abs(Math.sin(Math.PI * step)) * 0.1 * wob;
     const rearBob = Math.abs(Math.sin(Math.PI * (step + 0.3))) * 0.1 * wob;
-    this.shell.position.y = (frontBob + rearBob) * 0.5 - c * 0.95;
-    // 앞뒤 높이 차 → 탈이 시소처럼 피치, 발 디딜 때마다 좌우로 살짝 흔들
-    this.shell.rotation.z = (rearBob - frontBob) * 0.55 + Math.sin(time * 2.1 + this.seed) * 0.02 * wob - c * 0.9;
-    this.shell.rotation.x = Math.sin(Math.PI * 2 * step) * 0.045 * wob + Math.sin(time * 1.7) * 0.015 * wob + c * 0.35;
-    this.shell.rotation.y = Math.sin(Math.PI * 2 * step + 0.6) * 0.02 * wob;
-    // 천이라 살짝 출렁 (딱딱하지 않게)
-    this.shell.scale.set(1 + c * 0.1, 1 - c * 0.7 + Math.sin(Math.PI * 2 * step) * 0.012 * wob, 1 + c * 0.1);
-    // 머리는 천이라 힘없이 뒤늦게 따라오며 까딱거림
-    this.parts.head.rotation.z = 0.95 + Math.sin(Math.PI * 2 * step - 0.9) * 0.14 * wob + c * 0.8;
-    this.parts.neck.rotation.z = -0.75 + Math.sin(Math.PI * 2 * step - 1.2) * 0.06 * wob;
+    this.shell.position.y = (frontBob + rearBob) * 0.5 - c * 0.7;
+    // 붕괴 시 말처럼 몸을 구부리거나 찌그러뜨리지 않고, 완성된 상자 탈이
+    // 옆으로 넘어져 바닥에 그대로 널브러진다.
+    this.shell.rotation.z = (rearBob - frontBob) * 0.55 + Math.sin(time * 2.1 + this.seed) * 0.02 * wob + c * 0.06;
+    this.shell.rotation.x = Math.sin(Math.PI * 2 * step) * 0.045 * wob + Math.sin(time * 1.7) * 0.015 * wob + c * 1.34;
+    this.shell.rotation.y = Math.sin(Math.PI * 2 * step + 0.6) * 0.02 * wob - c * 0.08;
+    this.shell.scale.set(1, 1, 1);
+    // 목·머리 상자도 원래 각진 형태를 유지한 채 연결부만 살짝 처진다.
+    this.parts.head.rotation.z = 0.95 + Math.sin(Math.PI * 2 * step - 0.9) * 0.14 * wob + c * 0.18;
+    this.parts.neck.rotation.z = -0.75 + Math.sin(Math.PI * 2 * step - 1.2) * 0.06 * wob - c * 0.12;
     // 쓰러지면 두 사람이 탈 아래 누운 모양: 다리는 바닥에 눕고 무릎은 펴짐
     this.legs.forEach((l, i) => {
       if (c > 0.05) {
@@ -461,9 +462,9 @@ class CostumeVisual extends PlaceholderVisual {
     });
     this.heads.forEach((h, i) => {
       h.visible = c > 0.4;
-      h.position.y = 1.5 + c * 1.7;
+      h.position.y = 1.5 + c * 0.25;
       h.rotation.y = Math.sin(time * 4 + i * 2) * 0.6;
-      h.scale.setScalar(1 / Math.max(0.3, this.shell.scale.y));
+      h.scale.setScalar(1);
     });
   }
 }
@@ -1096,45 +1097,54 @@ class HumanVisual extends PlaceholderVisual {
     return [1, 1, 1, 1];
   }
   private declare torso: THREE.Group;
+  private declare headRig: THREE.Group;
   private declare headMesh: THREE.Mesh;
+  private declare lowers: THREE.Object3D[];
+  private declare shoes: THREE.Object3D[];
   private upright = 0;
   private tired = 0;
   sweatPoint = new THREE.Vector3(0.8, 1.2, 0);
 
   protected buildBody(): void {
+    this.lowers = [];
+    this.shoes = [];
     const d = this.def;
     const skin = toon(d.bodyColor);
     const shirt = toon(0xf4f4f4);
     const shorts = toon(0x2255aa);
     this.torso = new THREE.Group();
+    this.torso.name = 'human_torso';
     const chest = capsule(0.26, 0.55, shirt, 'x');
     chest.position.set(0.1, 0.95, 0);
     this.torso.add(chest);
     const hip = capsule(0.24, 0.2, shorts, 'x');
     hip.position.set(-0.5, 0.92, 0);
     this.torso.add(hip);
+    // 얼굴 전체를 하나의 관절에 묶어 달릴 때 머리·머리카락·표정이 분리되지 않는다.
+    this.headRig = new THREE.Group();
+    this.headRig.name = 'human_head';
+    this.headRig.position.set(0.82, 1.05, 0);
     this.headMesh = sphere(0.24, skin);
-    this.headMesh.position.set(0.82, 1.05, 0);
-    this.torso.add(this.headMesh);
+    this.headRig.add(this.headMesh);
     const hair = new THREE.Mesh(new THREE.SphereGeometry(0.255, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(0x222222));
-    hair.position.set(0.8, 1.1, 0);
+    hair.position.set(-0.02, 0.05, 0);
     hair.rotation.z = -0.6;
     hair.castShadow = true;
-    this.torso.add(hair);
+    this.headRig.add(hair);
     // 얼굴: 눈 + 이 악문 입
     for (const s of [-1, 1]) {
       const eye = sphere(0.035, toon(0x111111));
-      eye.position.set(1.02, 1.1, s * 0.09);
-      this.torso.add(eye);
+      eye.position.set(0.2, 0.05, s * 0.09);
+      this.headRig.add(eye);
     }
     const mouth = box(0.05, 0.05, 0.14, toon(0x7a2a2a));
-    mouth.position.set(1.02, 0.95, 0);
-    this.torso.add(mouth);
+    mouth.position.set(0.2, -0.1, 0);
+    this.headRig.add(mouth);
     // 말 장비: 굴레와 안장, 번호
     const bridle = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.03, 6, 14), toon(0x6b3a1e));
-    bridle.position.copy(this.headMesh.position);
     bridle.rotation.y = Math.PI / 2;
-    this.torso.add(bridle);
+    this.headRig.add(bridle);
+    this.torso.add(this.headRig);
     addSaddle(this.torso, -0.05, 1.18, 0.5, d.clothColor);
     const cloth = makeNumberCloths(d.number, d.clothColor, 0.4, 0.3);
     cloth.position.set(-0.15, 0.95, 0);
@@ -1149,14 +1159,32 @@ class HumanVisual extends PlaceholderVisual {
       ],
       this.torso,
     );
-    this.legs.forEach((l, i) => {
-      const shoe = box(0.3, 0.12, 0.17, toon(i < 2 ? 0xf2f2f2 : 0xff3030));
-      shoe.position.set(0.07, -0.82, 0);
-      l.add(shoe);
+    this.legs.forEach((limb, i) => {
+      const lower = limb.children.find((c) => c.name.endsWith('_lower'));
+      if (!lower) return;
+      this.lowers.push(lower);
+      // 말 발굽 형태는 숨기고, 팔 끝에는 손을, 다리 끝에는 운동화를 붙인다.
+      const hoof = lower.children[lower.children.length - 1];
+      if (hoof) hoof.visible = false;
+      const lowerLen = (i < 2 ? 0.82 : 0.86) * 0.48;
+      if (i < 2) {
+        const hand = sphere(0.1, skin, 0.9, 1.05, 0.9);
+        hand.name = `human_hand_${i}`;
+        hand.position.set(0, -lowerLen, 0);
+        lower.add(hand);
+      } else {
+        const shoe = box(0.34, 0.13, 0.2, toon(0xff3030));
+        shoe.name = `human_shoe_${i - 2}`;
+        shoe.position.set(0.12, -lowerLen, 0);
+        lower.add(shoe);
+        this.shoes.push(shoe);
+      }
     });
-    this.addRider(new THREE.Vector3(-0.1, 1.28, 0), 1.05);
+    this.addRider(new THREE.Vector3(-0.1, 1.28, 0), 0.9);
     this.reparentRider(0, this.torso);
-    this.bounceAmp = 0.16;
+    // 네발/두발 전환의 높이 변화는 아래 전용 러닝 리그에서 처리한다.
+    this.gaitBounce = false;
+    this.bounceAmp = 0;
     this.wobbleFreq = 1.0;
     this.legAmp = 0.8;
     this.kneeFold = 1.2;
@@ -1175,39 +1203,57 @@ class HumanVisual extends PlaceholderVisual {
     }
     this.tired = damp(this.tired, ctx.state === 'EXHAUSTED' ? 1 : 0, 3, dt);
     const u = this.upright;
-    const run = Math.sin(time * 11.5);
-    const runLift = Math.abs(Math.sin(time * 11.5)) * 0.1 * u * speedNorm;
-    this.torso.position.set(-0.52 * u, u * (0.62 + runLift), 0);
-    this.torso.rotation.z = u * 1.38;
+    // 실제 단거리 달리기의 한 보폭은 초당 약 2~3회다. 속도가 올라도 다리가
+    // 프로펠러처럼 돌지 않도록 물리 속도와 분리한 일정한 케이던스를 쓴다.
+    const cadence = THREE.MathUtils.lerp(2.15, 2.75, THREE.MathUtils.clamp(speedNorm, 0, 1));
+    const cycle = time * Math.PI * 2 * cadence;
+    const run = Math.sin(cycle);
+    const stepBounce = Math.abs(Math.sin(cycle)) * 0.085 * speedNorm;
+    const crawlBounce = Math.abs(Math.sin(this.stridePhase * Math.PI * 2)) * 0.07 * speedNorm;
+    const uprightAngle = 1.4;
+    this.torso.position.set(0.75 * u, THREE.MathUtils.lerp(crawlBounce, 1.3 + stepBounce, u), 0);
+    this.torso.rotation.z = u * uprightAngle;
+    this.torso.rotation.x = Math.sin(cycle) * 0.035 * u;
     if (u > 0.05) {
-      // 앞의 두 팔다리는 팔로 접어 균형을 잡고, 뒤의 두 다리만 사람처럼 교차한다.
-      this.legs[0].rotation.z = THREE.MathUtils.lerp(this.legs[0].rotation.z, -0.78 - run * 0.22, u);
-      this.legs[1].rotation.z = THREE.MathUtils.lerp(this.legs[1].rotation.z, -0.78 + run * 0.22, u);
-      this.legs[2].rotation.z = THREE.MathUtils.lerp(this.legs[2].rotation.z, run * 0.9 - 0.12, u);
-      this.legs[3].rotation.z = THREE.MathUtils.lerp(this.legs[3].rotation.z, -run * 0.9 - 0.12, u);
-      this.legs.forEach((leg, i) => {
-        const lower = leg.children.find((c) => c.name.endsWith('_lower'));
-        if (!lower) return;
-        const bend = i < 2 ? -0.85 : -Math.max(0, (i === 2 ? run : -run)) * 1.15 - 0.08;
-        lower.rotation.z = THREE.MathUtils.lerp(lower.rotation.z, bend, u);
-      });
+      // 팔은 반대쪽 다리와 교차하고, 다리는 엉덩이 아래 수직축을 기준으로
+      // 앞뒤로 흔든다. 회복 구간에서만 무릎을 깊게 접어 실제 달리기 실루엣을 만든다.
+      for (let side = 0; side < 2; side++) {
+        const sideSign = side === 0 ? 1 : -1;
+        const legWave = run * sideSign;
+        const armWave = -legWave;
+        const recovery = Math.max(0, Math.cos(cycle) * sideSign);
+        const arm = this.legs[side];
+        const leg = this.legs[side + 2];
+        const elbow = this.lowers[side];
+        const knee = this.lowers[side + 2];
+        arm.rotation.z = THREE.MathUtils.lerp(arm.rotation.z, -uprightAngle + 0.08 + armWave * 0.58, u);
+        elbow.rotation.z = THREE.MathUtils.lerp(elbow.rotation.z, -1.02 - Math.max(0, armWave) * 0.22, u);
+        leg.rotation.z = THREE.MathUtils.lerp(leg.rotation.z, -uprightAngle + legWave * 0.62, u);
+        knee.rotation.z = THREE.MathUtils.lerp(knee.rotation.z, -0.12 - recovery * 0.95 - Math.max(0, legWave) * 0.14, u);
+        // 운동화는 정강이 각도를 상쇄해 착지할 때 지면과 평행하게 보인다.
+        const shoe = this.shoes[side];
+        shoe.rotation.z = THREE.MathUtils.lerp(shoe.rotation.z, -(uprightAngle + leg.rotation.z + knee.rotation.z), u);
+      }
 
-      // 기수를 버리지 않고 등에 업는다. 상체 회전을 상쇄해 기수가 옆으로
-      // 눕지 않게 하고, 양팔 사이 등 위에 안정적으로 고정한다.
+      // 기수는 사람의 등 뒤에 붙이고 상체 회전을 정확히 상쇄한다. 기수의 손은
+      // 양쪽 어깨, 접힌 다리는 허리 높이에 오도록 해 실제 업힌 자세를 만든다.
       const rider = this.riders[0];
       if (rider?.parent === this.torso) {
         const mounted = this.riderBase[0];
         rider.position.set(
-          THREE.MathUtils.lerp(mounted.x, 0.42, u),
-          THREE.MathUtils.lerp(mounted.y, 1.02, u) + runLift * 0.35,
+          THREE.MathUtils.lerp(mounted.x, 0.05 + stepBounce * 0.18, u),
+          THREE.MathUtils.lerp(mounted.y, 1.55, u),
           mounted.z,
         );
-        rider.rotation.z = THREE.MathUtils.lerp(rider.rotation.z, -1.12 + run * 0.04, u);
+        rider.rotation.z = THREE.MathUtils.lerp(rider.rotation.z, -uprightAngle + 0.08 - run * 0.025, u);
       }
     }
-    this.headMesh.position.y = 1.05 - this.tired * 0.28 + Math.sin(time * 14) * 0.03 * speedNorm;
-    this.torso.rotation.y = Math.sin(time * 3.2) * 0.14 * this.tired;
-    this.headMesh.rotation.z = -this.tired * 0.6 + Math.sin(time * 9) * 0.1 * speedNorm;
+    const headBob = Math.sin(cycle * 2) * 0.018 * speedNorm;
+    this.headRig.position.x = 0.82 + headBob * u;
+    this.headRig.position.y = 1.05 - this.tired * 0.28 * (1 - u) + headBob * (1 - u);
+    this.torso.rotation.y = Math.sin(cycle) * 0.045 * u + Math.sin(time * 3.2) * 0.14 * this.tired;
+    this.headRig.rotation.z = -this.tired * 0.6 * (1 - u) - run * 0.035 * u;
+    this.height = THREE.MathUtils.lerp(1.6, 2.45, u);
   }
 
   get isTired(): boolean {
