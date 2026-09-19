@@ -134,7 +134,7 @@ export const EVENT_LABELS: Record<RaceEventType, string> = {
   TWIST_STUBBORN: '결승 직전 멈춰서 풀 뜯기',
   TWIST_NECK_DANCE: '결승 직전 멈춰서 목 댄스',
   LAUNCHED: '코끼리에게 받혀 하늘로',
-  PLANTED: '머리부터 땅에 꽂힘 (기권)',
+  PLANTED: '머리부터 땅에 꽂힘 (구조 중)',
   BUMP: '접촉',
   LEAD_CHANGE: '선두 교체',
   FINAL_STRETCH: '마지막 직선주로',

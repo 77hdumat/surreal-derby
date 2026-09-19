@@ -4,6 +4,7 @@ import { RACER_DEFINITIONS } from './RacerDefinitions';
 import { RacerFactory } from './RacerFactory';
 import type { RacerVisual, VisualContext } from './RacerVisual';
 import type { RaceTrack } from '../track/RaceTrack';
+import { FINISH_EXIT_DISTANCE } from '../game/RaceEngine';
 import type { RaceEvent } from '../events/RaceEvent';
 import type { ParticleManager } from '../effects/ParticleManager';
 
@@ -81,6 +82,7 @@ export class RacerManager {
 
   private place(r: Racer): void {
     const v = this.visuals.get(r.def.id)!;
+    v.root.visible = !(r.state.finishTime !== null && r.state.distance >= this.track.raceDistance + FINISH_EXIT_DISTANCE);
     const f = this.track.getFrame(r.state.distance);
     v.root.position.copy(f.pos).addScaledVector(f.right, r.state.lane);
     // 로컬 +x 를 tan 에 맞춤 (+z 가 오른쪽)
@@ -96,7 +98,9 @@ export class RacerManager {
   reset(): void {
     for (const r of this.racers) {
       r.reset(this.track.laneToLat(r.def.number - 1));
-      this.visuals.get(r.def.id)!.reset();
+      const v = this.visuals.get(r.def.id)!;
+      v.root.visible = true;
+      v.reset();
     }
     this.placeAll();
   }

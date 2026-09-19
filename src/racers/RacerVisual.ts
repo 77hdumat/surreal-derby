@@ -65,7 +65,14 @@ export const USE_TOON = false;
 export function toon(color: number, opts: Partial<THREE.MeshToonMaterialParameters> = {}): THREE.MeshStandardMaterial | THREE.MeshToonMaterial {
   if (USE_TOON) return new THREE.MeshToonMaterial({ color, gradientMap: getGradient(), ...opts });
   // 미세 범프로 플라스틱 광택을 죽여 가죽/천 느낌
-  const params: THREE.MeshStandardMaterialParameters = { color, roughness: 0.8, metalness: 0.0, bumpMap: furBumpTexture(), bumpScale: 0.01 };
+  const params: THREE.MeshStandardMaterialParameters = {
+    color,
+    roughness: 0.78,
+    metalness: 0.0,
+    bumpMap: furBumpTexture(),
+    bumpScale: 0.012,
+    side: THREE.DoubleSide,
+  };
   if (opts.map) params.map = opts.map;
   if (opts.transparent !== undefined) params.transparent = opts.transparent;
   if (opts.opacity !== undefined) params.opacity = opts.opacity;
@@ -128,7 +135,7 @@ export function box(w: number, h: number, d: number, mat: THREE.Material, name =
 }
 
 export function sphere(r: number, mat: THREE.Material, sx = 1, sy = 1, sz = 1): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 20), mat);
   m.scale.set(sx, sy, sz);
   m.castShadow = true;
   return m;
@@ -136,7 +143,7 @@ export function sphere(r: number, mat: THREE.Material, sx = 1, sy = 1, sz = 1): 
 
 /** 캡슐. axis: 'x' 는 전후 방향으로 눕힘 */
 export function capsule(radius: number, length: number, mat: THREE.Material, axis: 'x' | 'y' | 'z' = 'y'): THREE.Mesh {
-  const geo = new THREE.CapsuleGeometry(radius, length, 6, 14);
+  const geo = new THREE.CapsuleGeometry(radius, length, 8, 20);
   if (axis === 'x') geo.rotateZ(Math.PI / 2);
   if (axis === 'z') geo.rotateX(Math.PI / 2);
   const m = new THREE.Mesh(geo, mat);
@@ -152,31 +159,31 @@ export function makeLeg(w: number, len: number, mat: THREE.Material, name: strin
   const upperLen = len * 0.52;
   const lowerLen = len - upperLen;
   // 허벅지: 위가 굵고 무릎 쪽으로 가늘어지는 원뿔대 + 무릎 관절 구
-  const geo = new THREE.CylinderGeometry(w * 0.34, w * 0.62, upperLen, 12);
+  const geo = new THREE.CylinderGeometry(w * 0.34, w * 0.62, upperLen, 16);
   geo.translate(0, -upperLen / 2, 0);
   const upper = new THREE.Mesh(geo, mat);
   upper.name = name;
   upper.castShadow = true;
   // 엉덩이/어깨 관절: 몸통 속에 파묻히도록 크게
-  const hipCap = new THREE.Mesh(new THREE.SphereGeometry(w * 0.95, 12, 8), mat);
+  const hipCap = new THREE.Mesh(new THREE.SphereGeometry(w * 0.95, 16, 12), mat);
   hipCap.scale.set(1.1, 0.8, 1.1);
   hipCap.position.y = 0.04;
   upper.add(hipCap);
   const knee = new THREE.Group();
   knee.name = name + '_lower';
   knee.position.y = -upperLen;
-  const kneeBall = new THREE.Mesh(new THREE.SphereGeometry(w * 0.36, 10, 8), mat);
+  const kneeBall = new THREE.Mesh(new THREE.SphereGeometry(w * 0.36, 14, 10), mat);
   knee.add(kneeBall);
   // 정강이: 가늘고 발목(구절)에서 살짝 굵어짐
-  const lgeo = new THREE.CylinderGeometry(w * 0.26, w * 0.31, lowerLen - w * 0.3, 10);
+  const lgeo = new THREE.CylinderGeometry(w * 0.26, w * 0.31, lowerLen - w * 0.3, 14);
   lgeo.translate(0, -(lowerLen - w * 0.3) / 2, 0);
   const lower = new THREE.Mesh(lgeo, mat);
   lower.castShadow = true;
   knee.add(lower);
-  const fetlock = new THREE.Mesh(new THREE.SphereGeometry(w * 0.3, 10, 8), mat);
+  const fetlock = new THREE.Mesh(new THREE.SphereGeometry(w * 0.3, 14, 10), mat);
   fetlock.position.y = -(lowerLen - w * 0.3);
   knee.add(fetlock);
-  const hoof = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.42, w * 0.5, w * 0.4, 12), toon(hoofColor));
+  const hoof = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.42, w * 0.5, w * 0.4, 16), toon(hoofColor));
   hoof.position.y = -lowerLen + w * 0.18;
   hoof.castShadow = true;
   knee.add(hoof);
@@ -410,6 +417,21 @@ export abstract class PlaceholderVisual implements RacerVisual {
     this.def = def;
     this.root.add(this.body);
     this.buildBody();
+    // 절차형 로프트와 빠르게 변형되는 관절은 카메라 각도에 따라 뒷면이
+    // 노출될 수 있다. 불투명 캐릭터 재질은 양면 깊이 렌더링으로 보강해
+    // 애니메이션 중 몸통에 구멍이 뚫린 듯 보이는 현상을 막는다.
+    this.body.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of mats) {
+        if (!mat || mat.transparent) continue;
+        mat.side = THREE.DoubleSide;
+        mat.shadowSide = THREE.FrontSide;
+        mat.depthWrite = true;
+        mat.needsUpdate = true;
+      }
+    });
     this.setupMixer();
     addOutlines(this.body);
   }

@@ -13,7 +13,7 @@ export interface LoftPoint {
  * 스플라인을 따라 가변 반지름 단면을 이어 붙인 유기적 튜브 (몸통·목·머리·다리 등).
  * 찰흙 덩어리처럼 보이던 캡슐/구 조합 대신 실루엣이 연속되는 한 덩어리 메쉬를 만든다.
  */
-export function loft(points: LoftPoint[], segments = 28, sides = 16, closeStart = true, closeEnd = true): THREE.BufferGeometry {
+export function loft(points: LoftPoint[], segments = 36, sides = 24, closeStart = true, closeEnd = true): THREE.BufferGeometry {
   const pts = points.map((q) => new THREE.Vector3(...q.p));
   const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
   const frames = curve.computeFrenetFrames(segments, false);
@@ -41,21 +41,16 @@ export function loft(points: LoftPoint[], segments = 28, sides = 16, closeStart 
     const t = i / segments;
     curve.getPointAt(t, P);
     const [r, sz, sy] = radiusAt(t);
+    // Three.js 가 계산한 평행 이동 프레임을 그대로 사용한다. 이전 구현은
+    // 접선 기울기 0.9 지점에서 기준축을 갑자기 바꿔 링이 뒤집혔고,
+    // 그 결과 일부 삼각형이 안쪽을 향해 몸에 투명한 구멍처럼 보였다.
     const N = frames.normals[i];
     const B = frames.binormals[i];
     for (let j = 0; j <= sides; j++) {
       const a = (j / sides) * Math.PI * 2;
-      // N/B 는 경로 기준 프레임이라 y/z 축에 딱 맞지 않을 수 있어 월드 up 기준으로 재정렬
-      const T = frames.tangents[i];
-      // 경로가 거의 수직이면 up 과 평행해져 프레임이 무너지므로 기준축을 바꿈
-      const up = Math.abs(T.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-      const side = new THREE.Vector3().crossVectors(T, up).normalize();
-      const vUp = new THREE.Vector3().crossVectors(side, T).normalize();
-      void N;
-      void B;
-      const x = P.x + (side.x * Math.cos(a) * sz + vUp.x * Math.sin(a) * sy) * r;
-      const y = P.y + (side.y * Math.cos(a) * sz + vUp.y * Math.sin(a) * sy) * r;
-      const z = P.z + (side.z * Math.cos(a) * sz + vUp.z * Math.sin(a) * sy) * r;
+      const x = P.x + (N.x * Math.cos(a) * sz + B.x * Math.sin(a) * sy) * r;
+      const y = P.y + (N.y * Math.cos(a) * sz + B.y * Math.sin(a) * sy) * r;
+      const z = P.z + (N.z * Math.cos(a) * sz + B.z * Math.sin(a) * sy) * r;
       positions.push(x, y, z);
       uvs.push(t, j / sides);
     }

@@ -26,9 +26,12 @@ export class EffectsManager {
   private flash = 0;
   private lines: { a: number; len: number; w: number; off: number }[] = [];
   private slowMoTint = 0;
+  private highQuality = false;
+  private pixelRatio = 1;
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, fxCanvas: HTMLCanvasElement) {
     const size = renderer.getSize(new THREE.Vector2());
+    this.pixelRatio = renderer.getPixelRatio();
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
     // 스크린 스페이스 앰비언트 오클루전 — 발밑·접촉면이 땅에 붙어 보이게 (N8AO)
@@ -64,10 +67,20 @@ export class EffectsManager {
 
   resize(w: number, h: number): void {
     this.composer.setSize(w, h);
-    this.ao.setSize(w, h);
-    this.bloom.setSize(w / 2, h / 2);
-    this.fxCanvas.width = w;
-    this.fxCanvas.height = h;
+    const bloomScale = this.highQuality ? 1 : 0.5;
+    this.bloom.setSize(w * this.pixelRatio * bloomScale, h * this.pixelRatio * bloomScale);
+    this.fxCanvas.width = Math.floor(w * this.pixelRatio);
+    this.fxCanvas.height = Math.floor(h * this.pixelRatio);
+  }
+
+  /** 고급 모드는 AO를 전체 해상도·고샘플로 계산해 접촉면과 털 굴곡을 선명하게 한다. */
+  setHighQuality(high: boolean, pixelRatio: number): void {
+    this.highQuality = high;
+    this.pixelRatio = pixelRatio;
+    this.composer.setPixelRatio(pixelRatio);
+    this.ao.setQualityMode(high ? 'High' : 'Performance');
+    this.ao.configuration.halfRes = !high;
+    this.ao.configuration.transparencyAware = true;
   }
 
   /** 잔상 강도 0..1 (0.1 = 거의 없음, 1 = 매우 강함) */

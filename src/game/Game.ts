@@ -49,6 +49,7 @@ export class Game {
   private excitement = 0;
   private tmp = new THREE.Vector3();
   private firstFinishHandled = false;
+  private highQuality = false;
   private sun: THREE.DirectionalLight;
   private sunOffset = new THREE.Vector3(70, 95, 50);
 
@@ -123,6 +124,7 @@ export class Game {
       this.audio.setMuted(!this.audio.muted);
       return this.audio.muted;
     };
+    this.ui.onToggleQuality = () => this.setHighQuality(!this.highQuality);
     window.addEventListener('resize', () => this.resize());
     // 첫 클릭/키 입력에서 오디오 컨텍스트 준비 (샘플 프리로드)
     const prime = () => this.audio.init();
@@ -130,6 +132,14 @@ export class Game {
     window.addEventListener('keydown', prime, { once: true });
     this.engine.reset();
     this.racers.placeAll();
+    let savedQuality: string | null = null;
+    try {
+      savedQuality = localStorage.getItem('surreal-derby-quality');
+    } catch {
+      /* private browsing 등 저장 불가 환경 */
+    }
+    const defaultHigh = window.innerWidth >= 900 && window.devicePixelRatio <= 2.5;
+    this.setHighQuality(savedQuality === null ? defaultHigh : savedQuality === 'high');
   }
 
   start(): void {
@@ -144,6 +154,26 @@ export class Game {
     this.renderer.setSize(w, h);
     this.camera.resize(w / h);
     this.effects.resize(w, h);
+  }
+
+  private setHighQuality(high: boolean): boolean {
+    this.highQuality = high;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, high ? 2 : 1.25));
+    const shadowSize = high ? 4096 : 2048;
+    if (this.sun.shadow.mapSize.x !== shadowSize) {
+      this.sun.shadow.mapSize.set(shadowSize, shadowSize);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    this.effects.setHighQuality(high, this.renderer.getPixelRatio());
+    this.resize();
+    this.ui.setQuality(high);
+    try {
+      localStorage.setItem('surreal-derby-quality', high ? 'high' : 'balanced');
+    } catch {
+      /* 저장 불가 환경에서는 현재 세션에만 적용 */
+    }
+    return high;
   }
 
   // ---------------------------------------------------------------- phases
@@ -228,7 +258,7 @@ export class Game {
         break;
       case 'COSTUME_COLLAPSE':
         a.play('cardboardDrop', { pos, minGain: 0.5, gain: 1.2 });
-        a.play('scream', { pos, minGain: 0.35, gain: 0.8 });
+        a.playPixelTumble(pos);
         a.crowdGasp();
         break;
       case 'LAUNCHED':
@@ -244,7 +274,8 @@ export class Game {
         break;
       case 'TWIST_FALL':
         a.play('impactHeavy', { pos, minGain: 0.6, gain: 1.0 });
-        a.play('screamFall', { pos, minGain: 0.5 });
+        if (ev.racerId === 'costume') a.playPixelTumble(pos);
+        else a.play('screamFall', { pos, minGain: 0.5 });
         a.crowdGasp();
         break;
       case 'TWIST_REVERSE':
@@ -441,7 +472,7 @@ export class Game {
       case 'FINISH':
         this.finishTimer += dt;
         this.updateRacing(dt);
-        if (this.finishTimer > 2.8) {
+        if (this.finishTimer > 1.4) {
           this.phase = 'RESULT';
           this.camera.setMode('RESULT_CAMERA', true);
           this.ui.setSubtitle(null);

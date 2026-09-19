@@ -195,6 +195,29 @@ export class AudioManager {
     src.start();
   }
 
+  /** 말탈 브라더스 전용: 사람 비명 대신 짧고 귀여운 8비트 데굴데굴 소리. */
+  playPixelTumble(pos?: THREE.Vector3): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const volume = Math.max(this.distGain(pos), 0.45) * 0.16;
+    const notes = [784, 659, 523, 392, 523];
+    notes.forEach((freq, i) => {
+      const start = now + i * 0.065;
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = i === notes.length - 1 ? 'sine' : 'square';
+      osc.frequency.setValueAtTime(freq, start);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.92, start + 0.075);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(volume * (i === notes.length - 1 ? 1.2 : 1), start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.085);
+      osc.connect(gain);
+      gain.connect(this.sfx);
+      osc.start(start);
+      osc.stop(start + 0.09);
+    });
+  }
+
   // ---------------------------------------------------------------- 선수별 루프 (말발굽 / 잔디 달리기 / 엔진)
 
   private ensureLoop(id: string, kind: LoopKind): LoopNode | null {

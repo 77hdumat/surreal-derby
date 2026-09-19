@@ -52,6 +52,7 @@ export class UIManager {
   onBackToSelect: (() => void) | null = null;
   onToggleMute: (() => boolean) | null = null;
   onToggleVoice: (() => boolean) | null = null;
+  onToggleQuality: (() => boolean) | null = null;
 
   constructor(defs: RacerDefinition[]) {
     this.defs = defs;
@@ -75,6 +76,10 @@ export class UIManager {
       const muted = this.onToggleMute?.() ?? false;
       (e.currentTarget as HTMLElement).textContent = muted ? '🔇' : '🔊';
       (e.currentTarget as HTMLElement).classList.toggle('off', muted);
+    });
+    $('btn-quality').addEventListener('click', () => {
+      const high = this.onToggleQuality?.() ?? false;
+      this.setQuality(high);
     });
     this.previewScene.add(new THREE.HemisphereLight(0xffffff, 0x3f9a2c, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -286,6 +291,13 @@ export class UIManager {
 
   setSlowMo(on: boolean): void {
     this.slowmo.classList.toggle('hidden', !on);
+  }
+
+  setQuality(high: boolean): void {
+    const button = $('btn-quality');
+    button.textContent = high ? 'HD 고급' : '균형';
+    button.title = high ? '고급 렌더링 사용 중 (클릭해 균형 모드)' : '균형 모드 사용 중 (클릭해 고급 렌더링)';
+    button.classList.toggle('high', high);
   }
 
   setSubtitle(line: CommentaryLine | null): void {

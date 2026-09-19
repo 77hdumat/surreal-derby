@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { RaceEvent, RaceEventType } from '../events/RaceEvent';
 import type { Racer } from '../racers/Racer';
 import type { RaceEngine } from '../game/RaceEngine';
@@ -6,8 +7,8 @@ import { BANKS_JA, DESTINY_JA } from './CommentaryJa';
 type BankKey = RaceEventType | 'FINISH_FIRST' | 'FINISH_OTHER' | 'GENERIC' | 'OUTSIDE' | 'CORNER' | 'BACKSTRAIGHT' | 'GAP' | 'TIGHT' | 'COUNTDOWN' | 'PHOTO';
 
 const BANKS: Record<BankKey, string[]> = {
-  START: ['출발했습니다!', '게이트가 열렸습니다! 일제히 뛰쳐나갑니다!', '스타트! 8두... 아니, 8명의 선수가 출발합니다!'],
-  COUNTDOWN: ['게이트 인 완료. 모든 선수 대기 중입니다.', '출발 준비. 관중 여러분 주목해 주십시오.'],
+  START: ['10명의 선수가 힘차게 출발합니다!', '게이트가 열렸습니다! 10명의 선수가 일제히 뛰쳐나갑니다!', '스타트! 열 마리... 아니, 10명의 선수가 출발합니다!'],
+  COUNTDOWN: ['게이트 인 완료. 10명의 선수가 출발을 기다립니다.', '출발 준비가 끝났습니다. 관중 여러분, 주목해 주십시오.'],
   COSTUME_COLLAPSE: [
     '아아아아아!! {n}번 선수가 무너집니다!!',
     '말탈이... 말탈이 벗겨졌습니다!',
@@ -28,7 +29,7 @@ const BANKS: Record<BankKey, string[]> = {
   ENGINE_FAILURE: ['엔진이... 엔진이 멈췄습니다!', '{n}번 선수, 연기가 납니다!', '고장입니다! 모터 스탤리온 정지!'],
   ENGINE_RESTART: ['재시동 성공! 다시 달립니다!', '엔진이 다시 돌아갑니다!'],
   HUMAN_EXHAUSTED: ['{n}번 휴먼 러너, 완전히 지쳤습니다...', '인간에게 이 거리는 무리였을까요!', '네 발로 뛰는 건 역시 힘듭니다!'],
-  HUMAN_BIPEDAL: ['일어섰습니다! 두 발로 뜁니다!!', '{n}번 선수, 규정 위반 아닙니까?! ...문제없답니다!', '인간의 본능입니다! 두 발 전력질주!'],
+  HUMAN_BIPEDAL: ['일어섰습니다! 기수를 업고 두 다리로 전력 질주합니다!!', '{n}번 선수, 기수를 등에 업은 채 달립니다! 규정상 문제없습니다!', '인간의 본능입니다! 기수와 함께 두 발 전력 질주!'],
   GIRAFFE_NECK_ATTACK: ['{n}번 기린의 목이 옆 선수를 쳤습니다!', '롱넥 미라클, 목으로 공격!! {tn}번 선수 휘청!', '이건 반칙 아닙니까! 목 공격입니다!'],
   GIRAFFE_PHOTO_FINISH: ['목을 뻗습니다!! 사진 판정입니다!', '기린의 목이 먼저 들어갔습니다!'],
   PHOTO: ['접전입니다!! 사진 판정으로 갑니다!', '나란히!! 나란히 들어옵니다!!'],
@@ -45,9 +46,9 @@ const BANKS: Record<BankKey, string[]> = {
   TWIST_ROCKET: ['잠깐만요!! 뒤에서 뭔가 옵니다!! {n}번!!', '{name}, 로켓입니까?! 전부 제칩니다!!!', '후방에서 총알처럼!! {n}번 {name}!!'],
   TWIST_SHOELACE: ['{n}번 휴먼 러너, 멈춰서... 신발끈을 묶습니다?!', '지금 신발끈 묶을 때가 아닙니다!!', '결승선 앞에서 신발끈! 인간적입니다!'],
   TWIST_NECK_DANCE: ['{n}번 기린이... 멈춰서 목을 흔듭니다!! 춤입니다!!', '롱넥 미라클, 결승선 앞에서 목 댄스!! 물결처럼!!', '지금 춤출 때입니까?! 목이 ~~~ 흔들립니다!'],
-  TWIST_STUBBORN: ['{n}번이 멈춰서 풀을 뜯습니다!!', '{name}, 결승선보다 잔디가 더 중요했나 봅니다!', '여기서 식사를?! 기수가 울부짖습니다!'],
+  TWIST_STUBBORN: ['{n}번이 갑자기 멈춰 풀을 뜯습니다!!', '{name}, 결승선보다 눈앞의 잔디를 택했습니다!', '결승선 코앞에서 느긋한 식사라니요!'],
   LAUNCHED: ['날아갑니다!!! {n}번이 하늘로 날아갑니다!!!', '코끼리에게 받혔습니다!! {name}, 공중 3회전!!', '아아아!! {n}번 선수, 하늘 높이!!'],
-  PLANTED: ['꽂혔습니다... 머리부터 땅에 꽂혔습니다.', '{name}, 경기 속행 불가. 다리만 허우적댑니다.', '착지... 라기보다는 착근입니다. {n}번 기권.'],
+  PLANTED: ['꽂혔습니다... 머리부터 땅에 꽂혔습니다.', '{name}, 다리만 허우적댑니다! 곧 구조해 다시 달립니다.', '착지... 라기보다는 착근입니다. {n}번, 구조 중!'],
   COMEBACK: ['{n}번 선수 후방에서 올라옵니다!!', '기적입니다! {name}{iga} 추격을 시작합니다!', '포기하지 않았습니다! {n}번!'],
   BUMP: ['{n}번이 {tn}번을 밀어냅니다!', '접촉이 있었습니다!', '몸싸움입니다!'],
   LEAD_CHANGE: ['{n}번 {name}{iga} 선두로 나섭니다!', '선두 교체! {n}번!', '{name}, 앞으로 나옵니다!'],
@@ -132,7 +133,7 @@ export class CommentaryManager {
       .replace(/\{name\}/g, r ? (ja ? r.def.nameJa : r.def.name) : '')
       .replace(/\{iga\}/g, r ? iga(r.def.name) : '')
       .replace(/\{tn\}/g, t ? String(t.def.number) : '')
-      .replace(/\{tname\}/g, t ? t.def.name : '')
+      .replace(/\{tname\}/g, t ? (ja ? t.def.nameJa : t.def.name) : '')
       .replace(/\{n2\}/g, second ? String(second.def.number) : '');
   }
 
@@ -147,11 +148,14 @@ export class CommentaryManager {
 
   private push(text: string, major: boolean, ja: string): void {
     if (major) {
-      this.queue = this.queue.filter((q) => q.major);
-      this.queue.unshift({ text, ja, major });
-      this.showTimer = 0; // 즉시 교체
+      // 지난 사건 멘트는 모두 폐기하고 지금 일어난 장면으로 즉시 교체한다.
+      // 큰 사건이 연속될 때 오래된 해설이 뒤늦게 재생되던 싱크 문제를 막는다.
+      this.queue = [{ text, ja, major }];
+      this.showTimer = 0;
     } else {
-      if (this.queue.length > 2) return;
+      // 일반 멘트는 실시간성이 중요하므로 현재 발화 뒤로 한 줄만 예약한다.
+      // 시작 멘트 직후의 시나리오 복선은 허용하되 긴 백로그는 만들지 않는다.
+      if (this.queue.length >= 2 || (this.showTimer > 0 && this.queue.length > 0)) return;
       this.queue.push({ text, ja, major });
     }
   }
@@ -192,7 +196,10 @@ export class CommentaryManager {
       const next = this.queue.shift();
       if (next) {
         this.current = next;
-        this.showTimer = next.major ? 2.6 : 2.0;
+        // 일본어 음성 길이에 맞춰 자막 유지 시간을 잡는다. 고정 2초였을 때
+        // 긴 문장은 음성이 끝나기 전에 자막이 다음 줄로 넘어갔다.
+        const spoken = 1.25 + next.ja.length * (next.major ? 0.075 : 0.082);
+        this.showTimer = THREE.MathUtils.clamp(spoken, next.major ? 2.7 : 2.1, next.major ? 5.2 : 4.2);
         this.onLine?.(next);
         this.onSpeak?.(next.ja, next.major);
       } else if (this.current) {

@@ -37,8 +37,11 @@ export class RaceTrack {
   private screenCtx!: CanvasRenderingContext2D;
   private screenTex!: THREE.CanvasTexture;
   private crowdMesh?: THREE.InstancedMesh;
+  private crowdHeadMesh?: THREE.InstancedMesh;
+  private crowdArmMeshes: THREE.InstancedMesh[] = [];
   private crowdBase: Float32Array = new Float32Array(0);
   private crowdPhase: Float32Array = new Float32Array(0);
+  private crowdScale: Float32Array = new Float32Array(0);
   private lightTowers: THREE.Mesh[] = [];
   private clouds: THREE.Group[] = [];
   sky!: Sky;
@@ -482,17 +485,26 @@ export class RaceTrack {
       col.position.set((i * len) / 8.5, (tiers * 1.4 + 6) / 2, zBase - 0.5);
       stand.add(col);
     }
-    // 관중 — InstancedMesh, 색상 랜덤, 응원 시 상하 진동
+    // 관중 — 몸/머리/팔을 분리한 저폴리 사람 실루엣. 멀리서도 상자보다
+    // 자연스럽고, 팔을 서로 다른 박자로 흔들 수 있게 인스턴스를 나눈다.
     const perTier = 150;
     const total = tiers * perTier;
-    const crowdGeo = new THREE.BoxGeometry(0.5, 0.9, 0.4);
-    crowdGeo.translate(0, 0.45, 0);
+    const crowdGeo = new THREE.CapsuleGeometry(0.17, 0.45, 4, 8);
+    crowdGeo.translate(0, 0.42, 0);
+    const headGeo = new THREE.SphereGeometry(0.155, 10, 8);
+    const armGeo = new THREE.CapsuleGeometry(0.052, 0.3, 3, 6);
     const crowdMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 });
     const crowd = new THREE.InstancedMesh(crowdGeo, crowdMat, total);
+    const heads = new THREE.InstancedMesh(headGeo, skinMat, total);
+    const armL = new THREE.InstancedMesh(armGeo, crowdMat, total);
+    const armR = new THREE.InstancedMesh(armGeo, crowdMat, total);
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
+    const skin = new THREE.Color();
     this.crowdBase = new Float32Array(total * 3);
     this.crowdPhase = new Float32Array(total);
+    this.crowdScale = new Float32Array(total);
     let idx = 0;
     for (let t = 0; t < tiers; t++) {
       for (let i = 0; i < perTier; i++) {
@@ -503,17 +515,28 @@ export class RaceTrack {
         this.crowdBase[idx * 3 + 1] = y;
         this.crowdBase[idx * 3 + 2] = z;
         this.crowdPhase[idx] = Math.random() * Math.PI * 2;
+        this.crowdScale[idx] = 0.85 + Math.random() * 0.3;
         dummy.position.set(x, y, z);
+        dummy.scale.set(this.crowdScale[idx], this.crowdScale[idx], this.crowdScale[idx]);
         dummy.updateMatrix();
         crowd.setMatrixAt(idx, dummy.matrix);
         color.setHSL(Math.random(), 0.6 + Math.random() * 0.3, 0.45 + Math.random() * 0.25);
         crowd.setColorAt(idx, color);
+        armL.setColorAt(idx, color);
+        armR.setColorAt(idx, color);
+        skin.setHSL(0.07, 0.28 + Math.random() * 0.22, 0.55 + Math.random() * 0.28);
+        heads.setColorAt(idx, skin);
         idx++;
       }
     }
-    crowd.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    stand.add(crowd);
+    for (const mesh of [crowd, heads, armL, armR]) {
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+    for (const mesh of [crowd, heads, armL, armR]) mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    stand.add(crowd, heads, armL, armR);
     this.crowdMesh = crowd;
+    this.crowdHeadMesh = heads;
+    this.crowdArmMeshes = [armL, armR];
     this.group.add(stand);
   }
 
@@ -527,18 +550,44 @@ export class RaceTrack {
 
   /** 관중 응원 강도 0..1 */
   updateCrowd(time: number, excitement: number): void {
-    if (!this.crowdMesh) return;
+    if (!this.crowdMesh || !this.crowdHeadMesh || this.crowdArmMeshes.length !== 2) return;
     const dummy = new THREE.Object3D();
     const n = this.crowdPhase.length;
     const amp = 0.05 + excitement * 0.45;
     for (let i = 0; i < n; i++) {
       const ph = this.crowdPhase[i];
+      const scale = this.crowdScale[i];
       const jump = Math.max(0, Math.sin(time * (6 + excitement * 6) + ph)) * amp;
       dummy.position.set(this.crowdBase[i * 3], this.crowdBase[i * 3 + 1] + jump, this.crowdBase[i * 3 + 2]);
+      dummy.rotation.set(0, 0, Math.sin(time * 2.2 + ph) * 0.035 * excitement);
+      dummy.scale.set(scale, scale, scale);
       dummy.updateMatrix();
       this.crowdMesh.setMatrixAt(i, dummy.matrix);
+
+      dummy.position.y = this.crowdBase[i * 3 + 1] + jump + 0.92 * scale;
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(scale);
+      dummy.updateMatrix();
+      this.crowdHeadMesh.setMatrixAt(i, dummy.matrix);
+
+      const wave = Math.sin(time * (3.5 + excitement * 4) + ph) * (0.25 + excitement * 0.7);
+      for (let side = 0; side < 2; side++) {
+        const sign = side === 0 ? -1 : 1;
+        dummy.position.set(
+          this.crowdBase[i * 3] + sign * 0.23 * scale,
+          this.crowdBase[i * 3 + 1] + jump + 0.62 * scale,
+          this.crowdBase[i * 3 + 2],
+        );
+        dummy.rotation.set(0, 0, sign * (0.45 + wave));
+        dummy.scale.setScalar(scale);
+        dummy.updateMatrix();
+        this.crowdArmMeshes[side].setMatrixAt(i, dummy.matrix);
+      }
     }
     this.crowdMesh.instanceMatrix.needsUpdate = true;
+    this.crowdHeadMesh.instanceMatrix.needsUpdate = true;
+    this.crowdArmMeshes[0].instanceMatrix.needsUpdate = true;
+    this.crowdArmMeshes[1].instanceMatrix.needsUpdate = true;
   }
 
   private buildBillboards(): void {

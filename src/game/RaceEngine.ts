@@ -6,6 +6,9 @@ import type { RaceEvent, RaceEventType, ScheduledEvent } from '../events/RaceEve
 import type { RankingEntry, RacerState, RacerStatus } from './RaceState';
 import { pickScenario, SCENARIOS, type Scenario } from '../events/Scenarios';
 
+/** 몸통까지 결승선을 지난 뒤 카메라 프레임 밖으로 빠져나가는 거리. */
+export const FINISH_EXIT_DISTANCE = 58;
+
 /**
  * 레이스 시뮬레이션. Three.js 와 무관한 순수 계산.
  * distance / currentSpeed / lane 을 갱신하고, 이벤트를 적용하며, 순위를 계산한다.
@@ -29,9 +32,9 @@ export class RaceEngine {
   /** 디버그: 특정 시나리오 강제 */
   forcedScenarioId: string | null = null;
   private finaleFired = false;
-  private twistFired = false;
+  private twistCount = 0;
+  private twistDistances: [number, number] = [125, 52];
   private carryDuration = 12;
-  private twistDistance = 100;
 
   constructor(racers: Racer[], track: RaceTrack, events: RaceEventManager) {
     this.racers = racers;
@@ -54,8 +57,8 @@ export class RaceEngine {
     this.pairCooldown.clear();
     this.longbodyFinishTried = false;
     this.finaleFired = false;
-    this.twistFired = false;
-    this.twistDistance = 70 + Math.random() * 60;
+    this.twistCount = 0;
+    this.twistDistances = [110 + Math.random() * 35, 42 + Math.random() * 20];
     this.scenario = null;
     this.lastRankTime = -1;
     this.events.clear();
@@ -87,6 +90,7 @@ export class RaceEngine {
     this.time += dt;
     this.leadChangeCooldown -= dt;
     for (const due of this.events.popDue(this.time)) this.fireScheduled(due);
+    this.releaseTrailingPack();
     for (const r of this.racers) this.updateRacer(r, dt);
     this.interactions(dt);
     this.longbodyFinishCheck();
@@ -98,6 +102,26 @@ export class RaceEngine {
       this.lastRankTime = this.time;
     }
     this.checkRaceOver();
+  }
+
+  /**
+   * 첫 골인 뒤에도 사고 상태에 영구히 묶인 선수가 없도록 한다.
+   * 연출은 충분히 보여준 뒤 마지막 선수까지 실제 결승선을 통과시킨다.
+   */
+  private releaseTrailingPack(): void {
+    if (this.firstFinishTime === null || this.time - this.firstFinishTime < 18) return;
+    const stopped: RacerStatus[] = ['COLLAPSED', 'ENGINE_FAILURE', 'FALLEN', 'BROKEN', 'SLEEPING', 'STUBBORN', 'SHOELACE', 'PLANTED', 'DANCING'];
+    for (const r of this.racers) {
+      const s = r.state;
+      if (s.finishTime !== null || s.state === 'IDLE') continue;
+      if (stopped.includes(s.state)) {
+        s.state = 'RUNNING';
+        s.stateTimer = 0;
+      }
+      s.speedMultiplier = Math.max(s.speedMultiplier, 1.12);
+      s.accelMultiplier = Math.max(s.accelMultiplier, 2);
+      s.currentSpeed = Math.max(s.currentSpeed, r.def.speed * 0.78);
+    }
   }
 
   // ---------------------------------------------------------------- per racer
@@ -319,20 +343,20 @@ export class RaceEngine {
         s.state = 'RUNNING';
         return;
       case 'BROKEN':
-        // 바퀴 빠짐: 레이스 끝까지 못 감
-        s.state = 'BROKEN';
-        s.stateTimer = 999;
+        // 병사들이 바퀴를 다시 끼운 뒤 레이스에 복귀
+        s.state = 'RECOVERING';
+        s.stateTimer = 1.4;
         return;
       case 'LAUNCHED':
-        // 착지: 머리부터 땅에 꽂혀 기권
+        // 착지: 잠시 머리부터 박혔다가 구조되어 다시 출발
         s.state = 'PLANTED';
-        s.stateTimer = 999;
+        s.stateTimer = 4.8;
         s.currentSpeed = 0;
-        this.events.emit({ time: this.time, racerId: r.def.id, event: 'PLANTED', major: false, label: `${r.def.name} 머리부터 땅에 꽂힘 (기권)` });
+        this.events.emit({ time: this.time, racerId: r.def.id, event: 'PLANTED', major: false, label: `${r.def.name} 머리부터 땅에 꽂힘` });
         return;
       case 'PLANTED':
-        s.state = 'PLANTED';
-        s.stateTimer = 999;
+        s.state = 'RECOVERING';
+        s.stateTimer = 1.6;
         return;
       default:
         s.state = 'RUNNING';
@@ -565,7 +589,7 @@ export class RaceEngine {
         label = `${r.def.name} 결승 직전 뒷걸음질`;
         break;
       case 'TWIST_WHEEL_OFF':
-        this.setState(r, 'BROKEN', 999);
+        this.setState(r, 'BROKEN', dur ?? 5.8);
         label = `${r.def.name} 바퀴가 빠져 결승선 앞에서 정지`;
         break;
       case 'TWIST_SLEEP':
@@ -741,32 +765,36 @@ export class RaceEngine {
 
   /** 결승 직전 반전: 선두(또는 우승 예정자 앞의 선수)에게 황당한 사고, 가끔 후방 로켓 */
   private twistCheck(): void {
-    if (this.twistFired) return;
+    if (this.twistCount >= this.twistDistances.length) return;
     const lead = this.ranking.find((e) => !e.finished);
     if (!lead) return;
-    if (lead.distance < this.track.raceDistance - this.twistDistance) return;
-    this.twistFired = true;
+    if (lead.distance < this.track.raceDistance - this.twistDistances[this.twistCount]) return;
+    this.twistCount++;
     const winnerId = this.scenario?.winnerId ?? null;
     const leader = this.byId(lead.id)!;
     let victim: Racer | null = null;
-    if (!winnerId) victim = Math.random() < 0.85 ? leader : null;
+    if (!winnerId) victim = leader;
     else if (lead.id !== winnerId) victim = leader;
     else {
-      const second = this.ranking.find((e) => !e.finished && e.id !== lead.id);
-      if (second && second.gapToLeader < 18 && Math.random() < 0.6) victim = this.byId(second.id)!;
+      // 우승 예정자는 보호하되 바로 뒤의 달리는 선수에게 확실한 반전을 준다.
+      const next = this.ranking.find((e) => {
+        if (e.finished || e.id === winnerId) return false;
+        return this.byId(e.id)?.state.state === 'RUNNING';
+      });
+      if (next) victim = this.byId(next.id)!;
     }
     if (victim && victim.state.state === 'RUNNING') {
       const byType: Record<string, RaceEventType[]> = {
         TROJAN: ['TWIST_WHEEL_OFF'],
-        CIRCUS: ['TWIST_SLEEP'],
+        CIRCUS: ['TWIST_SLEEP', 'TWIST_STUBBORN'],
         MOTORCYCLE: ['ENGINE_FAILURE'],
-        COSTUME: ['COSTUME_COLLAPSE'],
-        HUMAN: ['TWIST_SHOELACE'],
-        COW: ['TWIST_STUBBORN', 'TWIST_REVERSE'],
+        COSTUME: ['COSTUME_COLLAPSE', 'TWIST_SLEEP'],
+        HUMAN: ['TWIST_SHOELACE', 'TWIST_SLEEP'],
+        COW: ['TWIST_STUBBORN', 'TWIST_REVERSE', 'TWIST_SLEEP'],
         ELEPHANT: ['TWIST_STUBBORN', 'TWIST_SLEEP'],
-        LONGBODY: ['TWIST_REVERSE', 'TWIST_FALL'],
-        GIRAFFE: ['TWIST_NECK_DANCE'],
-        CLASSIC: ['TWIST_FALL', 'TWIST_REVERSE'],
+        LONGBODY: ['TWIST_REVERSE', 'TWIST_FALL', 'TWIST_SLEEP'],
+        GIRAFFE: ['TWIST_NECK_DANCE', 'TWIST_STUBBORN'],
+        CLASSIC: ['TWIST_FALL', 'TWIST_REVERSE', 'TWIST_SLEEP', 'TWIST_STUBBORN'],
       };
       const pool = byType[victim.def.specialAbility] ?? ['TWIST_FALL', 'TWIST_REVERSE'];
       const ev = pool[Math.floor(Math.random() * pool.length)];
@@ -895,9 +923,10 @@ export class RaceEngine {
   }
 
   private checkRaceOver(): void {
-    const allDone = this.racers.every((r) => r.state.state === 'FINISHED');
-    const timeout = this.firstFinishTime !== null && this.time - this.firstFinishTime > 20;
-    if (allDone || timeout) {
+    const allExited = this.racers.every(
+      (r) => r.state.finishTime !== null && r.state.distance >= this.track.raceDistance + FINISH_EXIT_DISTANCE,
+    );
+    if (allExited) {
       this.over = true;
       this.running = false;
       this.computeRanking();

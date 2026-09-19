@@ -1175,11 +1175,35 @@ class HumanVisual extends PlaceholderVisual {
     }
     this.tired = damp(this.tired, ctx.state === 'EXHAUSTED' ? 1 : 0, 3, dt);
     const u = this.upright;
-    this.torso.position.set(-0.55 * u, u * 0.6, 0);
-    this.torso.rotation.z = u * 1.3;
+    const run = Math.sin(time * 11.5);
+    const runLift = Math.abs(Math.sin(time * 11.5)) * 0.1 * u * speedNorm;
+    this.torso.position.set(-0.52 * u, u * (0.62 + runLift), 0);
+    this.torso.rotation.z = u * 1.38;
     if (u > 0.05) {
-      this.legs[0].rotation.z = Math.sin(time * 16) * 1.3 * u + this.legs[0].rotation.z * (1 - u);
-      this.legs[1].rotation.z = -Math.sin(time * 16) * 1.3 * u + this.legs[1].rotation.z * (1 - u);
+      // 앞의 두 팔다리는 팔로 접어 균형을 잡고, 뒤의 두 다리만 사람처럼 교차한다.
+      this.legs[0].rotation.z = THREE.MathUtils.lerp(this.legs[0].rotation.z, -0.78 - run * 0.22, u);
+      this.legs[1].rotation.z = THREE.MathUtils.lerp(this.legs[1].rotation.z, -0.78 + run * 0.22, u);
+      this.legs[2].rotation.z = THREE.MathUtils.lerp(this.legs[2].rotation.z, run * 0.9 - 0.12, u);
+      this.legs[3].rotation.z = THREE.MathUtils.lerp(this.legs[3].rotation.z, -run * 0.9 - 0.12, u);
+      this.legs.forEach((leg, i) => {
+        const lower = leg.children.find((c) => c.name.endsWith('_lower'));
+        if (!lower) return;
+        const bend = i < 2 ? -0.85 : -Math.max(0, (i === 2 ? run : -run)) * 1.15 - 0.08;
+        lower.rotation.z = THREE.MathUtils.lerp(lower.rotation.z, bend, u);
+      });
+
+      // 기수를 버리지 않고 등에 업는다. 상체 회전을 상쇄해 기수가 옆으로
+      // 눕지 않게 하고, 양팔 사이 등 위에 안정적으로 고정한다.
+      const rider = this.riders[0];
+      if (rider?.parent === this.torso) {
+        const mounted = this.riderBase[0];
+        rider.position.set(
+          THREE.MathUtils.lerp(mounted.x, 0.42, u),
+          THREE.MathUtils.lerp(mounted.y, 1.02, u) + runLift * 0.35,
+          mounted.z,
+        );
+        rider.rotation.z = THREE.MathUtils.lerp(rider.rotation.z, -1.12 + run * 0.04, u);
+      }
     }
     this.headMesh.position.y = 1.05 - this.tired * 0.28 + Math.sin(time * 14) * 0.03 * speedNorm;
     this.torso.rotation.y = Math.sin(time * 3.2) * 0.14 * this.tired;
