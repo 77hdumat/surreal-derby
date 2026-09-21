@@ -22,7 +22,7 @@ export function loft(points: LoftPoint[], segments = 36, sides = 24, closeStart 
   const indices: number[] = [];
   // 각 샘플의 반지름/타원비: 제어점 사이 선형 보간
   const radiusAt = (t: number): [number, number, number] => {
-    const f = t * (points.length - 1);
+    const f = curve.getUtoTmapping(t, 0) * (points.length - 1);
     const i = Math.min(points.length - 2, Math.floor(f));
     const k = f - i;
     const a = points[i];
@@ -60,7 +60,7 @@ export function loft(points: LoftPoint[], segments = 36, sides = 24, closeStart 
     for (let j = 0; j < sides; j++) {
       const a = i * ring + j;
       const b = a + ring;
-      indices.push(a, b, a + 1, b, b + 1, a + 1);
+      indices.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -84,27 +84,15 @@ export function loft(points: LoftPoint[], segments = 36, sides = 24, closeStart 
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
-  // 감김 방향 검사: 법선이 안쪽을 향하면 뒷면 컬링으로 구멍처럼 보이므로 인덱스를 뒤집는다
-  {
-    const nrm = geo.attributes.normal as THREE.BufferAttribute;
-    const pos = geo.attributes.position as THREE.BufferAttribute;
-    const mid = Math.floor(segments / 2) * ring;
-    const center = curve.getPointAt(0.5);
-    let dot = 0;
-    for (let j = 0; j < sides; j++) {
-      const k = mid + j;
-      dot += (pos.getX(k) - center.x) * nrm.getX(k) + (pos.getY(k) - center.y) * nrm.getY(k) + (pos.getZ(k) - center.z) * nrm.getZ(k);
-    }
-    if (dot < 0) {
-      const idx = geo.getIndex()!;
-      for (let i = 0; i < idx.count; i += 3) {
-        const a = idx.getX(i + 1);
-        idx.setX(i + 1, idx.getX(i + 2));
-        idx.setX(i + 2, a);
-      }
-      idx.needsUpdate = true;
-      geo.computeVertexNormals();
-    }
+  // UV seam vertices occupy the same position; share their lighting normal.
+  const normals = geo.getAttribute('normal');
+  const average = new THREE.Vector3();
+  for (let i = 0; i <= segments; i++) {
+    const a = i * ring;
+    const b = a + sides;
+    average.set(normals.getX(a) + normals.getX(b), normals.getY(a) + normals.getY(b), normals.getZ(a) + normals.getZ(b)).normalize();
+    normals.setXYZ(a, average.x, average.y, average.z);
+    normals.setXYZ(b, average.x, average.y, average.z);
   }
   return geo;
 }

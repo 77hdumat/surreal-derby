@@ -3,7 +3,10 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { RacerDefinition } from './Racer';
 import type { RacerStatus } from '../game/RaceState';
 import type { RaceEventType } from '../events/RaceEvent';
-import { furBumpTexture, loft } from './Loft';
+import { furBumpTexture } from './Loft';
+import { solveLeg, strideTarget } from './Gait';
+import { makeRider } from './RiderModel';
+export { makeRider } from './RiderModel';
 
 /**
  * 모델 로컬 좌표 규약: +x 전방, +y 위, +z 오른쪽.
@@ -67,10 +70,10 @@ export function toon(color: number, opts: Partial<THREE.MeshToonMaterialParamete
   // 미세 범프로 플라스틱 광택을 죽여 가죽/천 느낌
   const params: THREE.MeshStandardMaterialParameters = {
     color,
-    roughness: 0.78,
+    roughness: 0.64,
     metalness: 0.0,
     bumpMap: furBumpTexture(),
-    bumpScale: 0.012,
+    bumpScale: 0.003,
     side: THREE.DoubleSide,
   };
   if (opts.map) params.map = opts.map;
@@ -159,10 +162,12 @@ export function makeLeg(w: number, len: number, mat: THREE.Material, name: strin
   const upperLen = len * 0.52;
   const lowerLen = len - upperLen;
   // 허벅지: 위가 굵고 무릎 쪽으로 가늘어지는 원뿔대 + 무릎 관절 구
-  const geo = new THREE.CylinderGeometry(w * 0.34, w * 0.62, upperLen, 16);
+  const geo = new THREE.CylinderGeometry(w * 0.72, w * 0.34, upperLen, 16);
   geo.translate(0, -upperLen / 2, 0);
   const upper = new THREE.Mesh(geo, mat);
   upper.name = name;
+  upper.userData.upperLength = upperLen;
+  upper.userData.lowerLength = lowerLen;
   upper.castShadow = true;
   // 엉덩이/어깨 관절: 몸통 속에 파묻히도록 크게
   const hipCap = new THREE.Mesh(new THREE.SphereGeometry(w * 0.95, 16, 12), mat);
@@ -224,97 +229,6 @@ export function makeNumberCloths(n: number, cloth: number, size: number, halfWid
     m.userData.noOutline = true;
     g.add(m);
   }
-  return g;
-}
-
-/** 기수 (안장 위 피벗) — 둥근 몸, 헬멧, 고글, 채찍 */
-/** 기수 실크 무늬 (가로 줄무늬 + 소매 배색) */
-function silksTexture(silks: number, trim: number): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 128;
-  const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#' + silks.toString(16).padStart(6, '0');
-  ctx.fillRect(0, 0, 128, 128);
-  ctx.fillStyle = '#' + trim.toString(16).padStart(6, '0');
-  for (let y = 8; y < 128; y += 32) ctx.fillRect(0, y, 128, 10);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-export function makeRider(silks: number, helmet: number, scale = 1): THREE.Group {
-  const g = new THREE.Group();
-  const silk = new THREE.MeshStandardMaterial({ map: silksTexture(silks, helmet), roughness: 0.85, metalness: 0 });
-  const skin = toon(0xf0caad);
-  // 상체: 어깨 넓고 허리 좁은 몸통, 앞으로 깊이 숙인 경마 기수 자세
-  const torso = new THREE.Mesh(
-    loft([
-      { p: [0, -0.02, 0], r: 0.11, s: [1.1, 0.8] },
-      { p: [0.02, 0.14, 0], r: 0.14, s: [1.2, 0.85] },
-      { p: [0.05, 0.3, 0], r: 0.16, s: [1.35, 0.85] },
-      { p: [0.07, 0.4, 0], r: 0.12, s: [1.1, 0.8] },
-    ]),
-    silk,
-  );
-  torso.position.set(0.06, 0.34, 0);
-  torso.rotation.z = -0.95;
-  torso.castShadow = true;
-  g.add(torso);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.1, 8), skin);
-  neck.position.set(0.32, 0.6, 0);
-  neck.rotation.z = -0.9;
-  g.add(neck);
-  const head = sphere(0.14, skin, 0.95, 1.05, 0.9);
-  head.name = 'rider_head';
-  head.position.set(0.4, 0.66, 0);
-  g.add(head);
-  // 헬멧: 반구 + 챙 + 고글, 색 커버
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.165, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(helmet));
-  cap.position.set(0.39, 0.7, 0);
-  cap.rotation.z = -0.6;
-  cap.castShadow = true;
-  g.add(cap);
-  const peak = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 16, 1, false, -0.5, 1.6), toon(helmet));
-  peak.position.set(0.44, 0.7, 0);
-  peak.rotation.z = -0.6;
-  g.add(peak);
-  const goggles = box(0.05, 0.07, 0.26, toon(0x1b3a6b));
-  goggles.position.set(0.52, 0.66, 0);
-  g.add(goggles);
-  for (const s of [-1, 1]) {
-    // 팔: 어깨에서 앞으로 뻗어 고삐를 잡음 (팔꿈치 살짝 굽힘)
-    const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.2, 8), silk);
-    upperArm.position.set(0.28, 0.52, s * 0.19);
-    upperArm.rotation.z = Math.PI / 2 - 0.3;
-    g.add(upperArm);
-    const foreArm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.2, 8), silk);
-    foreArm.position.set(0.45, 0.42, s * 0.2);
-    foreArm.rotation.z = Math.PI / 2 + 0.35;
-    g.add(foreArm);
-    const glove = sphere(0.05, toon(0xf4f4f4));
-    glove.position.set(0.55, 0.34, s * 0.2);
-    g.add(glove);
-    // 다리: 무릎을 높이 올려 접은 몽키 자세
-    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 0.24, 8), toon(0xf6f6f6));
-    thigh.position.set(0.06, 0.2, s * 0.22);
-    thigh.rotation.x = s * 0.5;
-    thigh.rotation.z = -0.55;
-    g.add(thigh);
-    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.24, 8), toon(0x1c1c1c));
-    shin.position.set(0.05, 0.02, s * 0.3);
-    shin.rotation.z = 0.35;
-    g.add(shin);
-    const boot = box(0.18, 0.07, 0.08, toon(0x151515));
-    boot.position.set(0.1, -0.09, s * 0.31);
-    g.add(boot);
-  }
-  const whip = capsule(0.012, 0.5, toon(0x3a2a1a));
-  whip.position.set(0.5, 0.55, 0.28);
-  whip.rotation.z = 0.9;
-  g.add(whip);
-  g.scale.setScalar(scale);
-  g.name = 'rider';
   return g;
 }
 
@@ -419,6 +333,9 @@ export abstract class PlaceholderVisual implements RacerVisual {
   protected fallen: FallenRider[] = [];
   protected worldForward = new THREE.Vector3(1, 0, 0);
   protected stumble = 0;
+  private impactAge = 10;
+  private impactStrength = 0;
+  private impactSide = 1;
   protected seed = Math.random() * 100;
   protected legAmp = 0.72;
   protected kneeFold = 1.05;
@@ -596,7 +513,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
       // 기수 손 → parent 로컬
       const p2 = this.reinTmpB;
       if (riderAttached) {
-        p2.set(0.55, 0.35, s * 0.2).multiplyScalar(rider.scale.x);
+        p2.set(0.55, 0.35, s * 0.2);
         rider.localToWorld(p2);
         parent.worldToLocal(p2);
       } else {
@@ -628,6 +545,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
   update(ctx: VisualContext): void {
     const { dt, time, speedNorm } = ctx;
     const st = ctx.state;
+    this.impactAge += dt;
     const grounded =
       st === 'COLLAPSED' || st === 'ENGINE_FAILURE' || st === 'FALLEN' || st === 'SLEEPING' || st === 'STUBBORN' || st === 'SHOELACE' || st === 'BROKEN' || st === 'PLANTED' || st === 'DANCING';
     const animSpeed = grounded ? 0 : speedNorm;
@@ -649,15 +567,15 @@ export abstract class PlaceholderVisual implements RacerVisual {
     const gait = this.wheeled || !this.gaitBounce ? 0 : 1;
     // 뒷다리가 차고(ph≈0.1) 공중(ph≈0.3) → 앞다리 착지(ph≈0.5): 바운스 1회/보폭
     const air = Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.05))) * gait;
-    const bounce = air * this.bounceAmp * (0.5 + animSpeed * 0.9);
+    const bounce = air * Math.min(this.bounceAmp, 0.065) * animSpeed;
     const jitter = (Math.sin(time * 13.1 + this.seed) * 0.5 + Math.sin(time * 7.3 + this.seed * 2)) * 0.01 * animSpeed * gait;
     this.body.position.set(0, this.baseY + bounce + jitter, 0);
     // 코너 기울기: 속도가 아무리 높아도 최대 ~20° (부스트/폭주 때 옆으로 눕지 않게)
     const lean = -ctx.cornerWeight * THREE.MathUtils.clamp((ctx.speed * ctx.speed) / (60 * 9.8), 0, 1) * 0.35;
-    const roll = lean + Math.sin(time * 9 + this.seed) * 0.02 * animSpeed * gait + ctx.bump * ctx.bumpDir * 0.35 * Math.sin(ctx.bump * 20);
+    const roll = lean + Math.sin(time * 9 + this.seed) * 0.02 * animSpeed * gait + this.impactStrength * this.impactSide * Math.sin(this.impactAge * 12) * Math.exp(-this.impactAge * 7) * 0.13;
     // 차고 나갈 때 코가 들리고, 앞다리 착지 때 코가 내려감
-    const gallopPitch = Math.cos(Math.PI * 2 * (ph - 0.15)) * 0.085 * (0.3 + animSpeed) * gait;
-    const pitch = gallopPitch - THREE.MathUtils.clamp(ctx.accel, -8, 8) * 0.012 - this.stumble * 0.6;
+    const gallopPitch = Math.cos(Math.PI * 2 * (ph - 0.15)) * 0.025 * animSpeed * gait;
+    const pitch = gallopPitch - THREE.MathUtils.clamp(ctx.accel, -8, 8) * 0.003 - this.stumble * 0.12;
     // 넘어짐/잠듦: 옆으로 누움 (원점이 발밑이라 몸이 바닥에 눕는다), 뒷걸음질: 몸이 뒤로 젖힘
     const dp = this.downPose;
     const reverse = st === 'REVERSING' ? 1 : 0;
@@ -686,7 +604,7 @@ export abstract class PlaceholderVisual implements RacerVisual {
       });
     }
     if (this.neckBob) {
-      const bob = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.12 * (0.3 + animSpeed);
+      const bob = this.neckBase - Math.cos(Math.PI * 2 * (ph - 0.35)) * 0.055 * animSpeed;
       // 풀 뜯기: +회전은 하늘을 향한다. 목을 아래로 접도록 기준각에서
       // 음의 방향으로 내리고, 씹는 박자에 맞춰 코를 작게 끄덕인다.
       const grazeNod = Math.sin(time * 6.5) * 0.055 * this.grazePose;
@@ -711,9 +629,20 @@ export abstract class PlaceholderVisual implements RacerVisual {
       const b = this.riderBase[i];
       // 기수는 말보다 살짝 늦게 따라 오르내림
       const lag = Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.18))) * gait;
-      r.position.set(b.x + Math.cos(Math.PI * 2 * ph) * 0.03 * animSpeed * gait, b.y + lag * 0.07 * animSpeed, b.z);
-      r.rotation.z = this.riderTilt[i] - Math.cos(Math.PI * 2 * (ph - 0.2)) * 0.1 * animSpeed * gait - ctx.accel * 0.02;
+      r.position.set(b.x + Math.cos(Math.PI * 2 * ph) * 0.03 * animSpeed * gait, b.y + lag * 0.025 * animSpeed, b.z);
+      r.rotation.z = this.riderTilt[i] - Math.cos(Math.PI * 2 * (ph - 0.2)) * 0.045 * animSpeed * gait - THREE.MathUtils.clamp(ctx.accel, -8, 8) * 0.004;
     });
+    // Animal legs solve toward ground contacts; human/costume gaits retain their own rig.
+    if (this.gaitBounce && !this.wheeled && dp < 0.05 && this.planted < 0.05 && st !== 'LAUNCHED') {
+      const phases = this.gaitPhases();
+      this.legs.forEach((leg, i) => {
+        const length = (leg.userData.upperLength + leg.userData.lowerLength) as number;
+        const target = strideTarget(ph - phases[i % phases.length], length, Math.min(1, Math.abs(animSpeed)));
+        const lift = grounded ? 0 : target.lift;
+        leg.rotation.x = 0;
+        solveLeg(leg, grounded ? 0 : target.x, length * 0.94 + bounce - lift, i % 4 < 2 ? -1 : 1);
+      });
+    }
     this.updateFallen(dt);
     this.updateSpecial(ctx);
     const sleeping = st === 'SLEEPING';
@@ -726,6 +655,16 @@ export abstract class PlaceholderVisual implements RacerVisual {
     }
     this.updateMane(time, animSpeed);
     this.updateReins();
+    // Sample actual animated hooves, including elongated and rearing rigs.
+    this.root.updateWorldMatrix(true, true);
+    this.legs.forEach((leg, i) => {
+      const knee = leg.getObjectByName(leg.name + '_lower');
+      if (!knee) return;
+      const point = this.hoofPoints[i];
+      point.set(0, -leg.userData.lowerLength, 0);
+      knee.localToWorld(point);
+      this.root.worldToLocal(point);
+    });
   }
 
   /** 갈기 흩날림 */
@@ -778,7 +717,12 @@ export abstract class PlaceholderVisual implements RacerVisual {
 
   onEvent(type: RaceEventType, _ctx: VisualContext): void {
     if (type === 'RIDER_FALL' || type === 'TWIST_FALL' || type === 'LAUNCHED') this.dropRider(0);
-    if (type === 'TRIP' || type === 'COLLISION' || type === 'BUMP') this.stumble = type === 'BUMP' ? 0.4 : 1;
+    if (type === 'TRIP' || type === 'COLLISION' || type === 'BUMP') {
+      this.impactAge = 0;
+      this.impactStrength = type === 'BUMP' ? 0.45 : 1;
+      this.impactSide = _ctx.bumpDir || _ctx.sideHint || 1;
+      this.stumble = type === 'TRIP' ? 0.8 : 0.18;
+    }
   }
 
   reset(): void {
@@ -792,6 +736,9 @@ export abstract class PlaceholderVisual implements RacerVisual {
       }
     });
     this.stumble = 0;
+    this.downPose = this.grazePose = this.planted = this.stridePhase = 0;
+    this.impactAge = 10;
+    this.mixer?.setTime(0);
     this.body.rotation.set(0, 0, 0);
     this.body.scale.set(1, 1, 1);
     this.body.position.set(0, this.baseY, 0);

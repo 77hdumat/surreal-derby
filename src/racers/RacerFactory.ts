@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { RacerDefinition } from './Racer';
 import type { RaceEventType } from '../events/RaceEvent';
 import { loft } from './Loft';
+import { solveLeg } from './Gait';
 import {
   PlaceholderVisual,
   box,
@@ -17,7 +18,6 @@ import {
   type VisualContext,
 } from './RacerVisual';
 
-const clamp01 = (v: number) => THREE.MathUtils.clamp(v, 0, 1);
 const damp = (cur: number, target: number, k: number, dt: number) => THREE.MathUtils.lerp(cur, target, 1 - Math.exp(-k * dt));
 
 function canvasTex(w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
@@ -72,6 +72,14 @@ function buildHorse(parent: THREE.Object3D, o: HorseOpts): HorseParts {
   );
   barrel.castShadow = true;
   parent.add(barrel);
+  for (const side of [-1, 1]) {
+    for (const [x, ry, rx] of [[L + 0.12, 0.47, 0.3], [-L - 0.08, 0.46, 0.36]]) {
+      const muscle = sphere(1, o.hide, rx, ry, R * 0.47);
+      muscle.position.set(x, y - 0.15, side * R * 0.57);
+      muscle.rotation.z = x > 0 ? -0.22 : 0.18;
+      barrel.add(muscle);
+    }
+  }
   const chest = barrel;
   const rump = barrel;
   // 목: 밑동은 굵고 머리 쪽으로 가늘어짐 (그룹 로컬 +y 방향, 그룹을 앞으로 기울임)
@@ -628,33 +636,41 @@ class LongbodyVisual extends PlaceholderVisual {
   }
 
   protected updateSpecial(ctx: VisualContext): void {
-    const { time, dt, speedNorm } = ctx;
-    this.ext = damp(this.ext, ctx.extension, 12, dt);
-    const L = this.ext * (ctx.extensionMax > 0 ? ctx.extensionMax : LB_MAX_EXT);
-    // 앞부분이 앞으로 쭉, 중간 몸통이 늘어남
+    const { dt } = ctx;
+    this.ext = damp(this.ext, ctx.extension * (ctx.extensionMax > 0 ? ctx.extensionMax : LB_MAX_EXT), 5, dt);
+    const L = this.ext;
     this.front.position.x = LB_HALF + L;
-    const midLen = LB_HALF * 2 + L;
-    this.mid.scale.x = midLen / 2.0;
+    this.mid.scale.set((LB_HALF * 2 + L) / 2, 1, 1);
     this.mid.position.x = (this.front.position.x + this.rear.position.x) / 2;
-    // 늘어나는 중엔 몸통이 출렁 (스프링)
-    const spring = Math.sin(time * 14) * 0.08 * clamp01(ctx.extension - this.ext + 0.2) * (ctx.extension > 0.05 ? 1 : 0);
-    this.mid.scale.y = 1 + spring;
-    this.mid.scale.z = 1 - spring * 0.5;
-    // 코너에서 뒤쪽이 바깥으로 휘청 (좌회전 → +z)
-    const swing = ctx.cornerWeight * 0.3 * (1 + this.ext * 0.5) + Math.sin(time * 3.1 + this.seed) * 0.05 * speedNorm;
-    this.rear.rotation.y = damp(this.rear.rotation.y, swing, 3, dt);
-    this.rear.rotation.z = Math.sin(time * 7 + 1) * 0.04 * speedNorm;
-    this.front.rotation.z = -Math.sin(time * 7) * 0.03 * speedNorm - this.ext * 0.1;
-    // 늘어난 상태에서 뒷기수는 매달리다시피
-    const rr = this.riders[1];
-    if (rr.parent === this.rear) rr.rotation.z += -this.ext * 0.9;
-    const fr = this.riders[0];
-    if (fr.parent === this.front) fr.rotation.z += this.ext * 0.4;
+    // A long rigid spine magnifies even tiny pitch/roll into metres of hoof lift.
+    // Keep all three sections on one plane; gait lives in the limbs and neck.
+    this.body.rotation.z *= 1 / (1 + L * 2);
+    this.body.rotation.y = 0;
+    this.front.rotation.set(0, 0, 0);
+    this.rear.rotation.set(0, 0, 0);
+  }
+
+  reset(): void {
+    super.reset();
+    this.ext = 0;
+    this.front.position.x = LB_HALF;
+    this.rear.position.x = -LB_HALF;
+    this.front.rotation.set(0, 0, 0);
+    this.rear.rotation.set(0, 0, 0);
+    this.mid.scale.set(LB_HALF, 1, 1);
+    this.mid.position.x = 0;
   }
 }
 
 // ================================================================ 3. 코끼리
 class ElephantVisual extends PlaceholderVisual {
+  /** 코끼리는 갤럽하지 않는다 — 측대 보행(같은 쪽 앞·뒤 다리가 이어서), 네 발이 4분의 1 보폭씩 어긋남 */
+  protected gaitPhases(): number[] {
+    return [0.25, 0.75, 0.0, 0.5];
+  }
+  protected gaitAmps(): number[] {
+    return [0.75, 0.75, 0.8, 0.8];
+  }
   private declare trunk: THREE.Group[];
   private declare head: THREE.Group;
   private declare ears: THREE.Mesh[];
@@ -786,6 +802,10 @@ class ElephantVisual extends PlaceholderVisual {
 
 // ================================================================ 4. 소
 class CowVisual extends PlaceholderVisual {
+  /** 소: 무거운 갤럽 — 뒷다리 쌍이 거의 함께 차고, 앞다리는 반 보폭 뒤에 번갈아 착지 */
+  protected gaitPhases(): number[] {
+    return [0.5, 0.68, 0.0, 0.1];
+  }
   private declare head: THREE.Group;
   private declare eyes: THREE.Mesh[];
   private declare bell: THREE.Mesh;
@@ -1148,16 +1168,69 @@ class MotorcycleVisual extends PlaceholderVisual {
     });
     // 리젠트는 바람에 살짝 출렁
     this.pompadour.rotation.z = Math.sin(time * 6) * 0.05 * ctx.speedNorm - this.wheelie * 0.2;
+    this.updateEngineFailure(ctx);
+    // 엔진 드르릉 (말인데 엔진 소리가 남) — 고장 중엔 멈춘다
+    this.frame.position.y += Math.sin(time * 52) * 0.008 * (0.4 + ctx.speedNorm * 0.6) * (1 - this.failShake);
+  }
+
+  /** 역화 불꽃 파티클을 뿜어야 하는 순간 (RacerManager 가 읽음) */
+  backfiring = false;
+
+  /**
+   * 엔진 고장 4.5초 연출:
+   *  0.0~1.1s 털털거림 — 격렬한 덜컹·역화·앞으로 고꾸라짐
+   *  1.1~3.9s 시동 꺼짐 — 축 처짐, 고개 떨굼, 기수가 1초마다 킥스타트 시도(꿈틀)
+   *  3.9~4.5s 재시동 — 진동 커지고 불꽃 터지며 뒤로 살짝 눌림
+   */
+  private updateEngineFailure(ctx: VisualContext): void {
+    const { dt, time } = ctx;
     const fail = ctx.state === 'ENGINE_FAILURE';
-    this.failShake = damp(this.failShake, fail ? 1 : 0, 8, dt);
-    if (this.failShake > 0.01) {
-      this.frame.rotation.z += (Math.random() - 0.5) * 0.08 * this.failShake;
-      this.frame.rotation.x += (Math.random() - 0.5) * 0.1 * this.failShake;
-      const r = this.riders[0];
-      if (r.parent === this.frame) r.position.y += Math.abs(Math.sin(time * 6)) * 0.25 * this.failShake;
+    this.failShake = damp(this.failShake, fail ? 1 : 0, fail ? 12 : 5, dt);
+    this.backfiring = false;
+    if (this.failShake < 0.01) return;
+    const k = this.failShake;
+    const elapsed = fail ? 4.5 - ctx.stateTimer : 4.5;
+    const sputter = THREE.MathUtils.clamp(1 - elapsed / 1.1, 0, 1);
+    const restart = THREE.MathUtils.clamp((elapsed - 3.9) / 0.6, 0, 1);
+    const stalled = THREE.MathUtils.clamp((elapsed - 0.9) / 0.5, 0, 1) * (1 - restart);
+    // 킥스타트: 1초 주기로 짧은 충격
+    const kick = Math.pow(Math.max(0, Math.sin(elapsed * Math.PI * 2)), 12) * stalled;
+    const jolt = (sputter + restart * 0.8 + kick * 0.6) * k;
+    // 실린더 미스파이어: 불규칙한 저주파 덜컹 + 고주파 진동
+    const miss = Math.sin(time * 17) * Math.sin(time * 5.3) * 0.5 + Math.sin(time * 41) * 0.5;
+    this.frame.rotation.z += miss * 0.09 * jolt + sputter * 0.12 * k; // 고꾸라짐(코 아래)
+    this.frame.rotation.x += Math.sin(time * 23) * 0.06 * jolt;
+    this.frame.position.y += Math.abs(Math.sin(time * 31)) * 0.05 * jolt - stalled * k * 0.12;
+    // 시동 꺼짐: 고개 축 처지고 폼파도르가 앞으로 흘러내림
+    this.parts.neck.rotation.z += -0.55 * stalled * k;
+    this.parts.head.rotation.z = -0.25 * stalled * k + Math.sin(time * 2.1) * 0.05 * stalled * k;
+    this.pompadour.rotation.z += -0.35 * stalled * k;
+    // 다리: 앞다리 살짝 벌리고(버팀), 뒷다리 굽혀 주저앉음
+    if (stalled > 0.01) {
+      const lr = stalled * k;
+      this.legs[0].rotation.z = THREE.MathUtils.lerp(this.legs[0].rotation.z, 0.22, lr);
+      this.legs[1].rotation.z = THREE.MathUtils.lerp(this.legs[1].rotation.z, 0.22, lr);
+      for (const i of [2, 3]) {
+        this.legs[i].rotation.z = THREE.MathUtils.lerp(this.legs[i].rotation.z, -0.35, lr);
+        const knee = this.legs[i].getObjectByName(this.legs[i].name + '_lower');
+        if (knee) knee.rotation.z = THREE.MathUtils.lerp(knee.rotation.z, 0.45, lr);
+      }
     }
-    // 엔진 드르릉 (말인데 엔진 소리가 남)
-    this.frame.position.y += Math.sin(time * 52) * 0.008 * (0.4 + ctx.speedNorm * 0.6);
+    // 기수: 털털거릴 때 튕기고, 꺼지면 앞으로 숙여 핸들 흔들고, 킥스타트 때 몸 들썩
+    const r = this.riders[0];
+    if (r.parent === this.frame) {
+      r.position.y += Math.abs(Math.sin(time * 19)) * 0.12 * jolt + kick * 0.16 * k;
+      r.rotation.z += -0.45 * stalled * k + Math.sin(time * 9) * 0.06 * stalled * k;
+    }
+    // 역화: 털털거림·재시동 때 불규칙하게 불꽃, 킥스타트 순간 펑
+    const flash = (sputter > 0.05 && Math.random() < 0.18) || (restart > 0.2 && Math.random() < 0.35) || kick > 0.85;
+    this.backfiring = flash;
+    this.flames.forEach((f) => {
+      if (!flash) return;
+      f.visible = true;
+      const sc = 0.4 + Math.random() * 0.5;
+      f.scale.set(sc, sc * 0.8, sc);
+    });
   }
 }
 
@@ -1337,6 +1410,10 @@ class HumanVisual extends PlaceholderVisual {
 
 // ================================================================ 7. 기린
 class GiraffeVisual extends PlaceholderVisual {
+  /** 기린 특유의 측대 페이스: 같은 쪽 앞·뒤 다리가 함께, 좌우가 반 보폭 어긋남 */
+  protected gaitPhases(): number[] {
+    return [0.1, 0.6, 0.0, 0.5];
+  }
   private declare neck: THREE.Group;
   private declare neckSegs: THREE.Group[];
   private dance = 0;
@@ -1551,6 +1628,7 @@ class CircusVisual extends PlaceholderVisual {
   private declare parts: HorseParts;
   private declare plume: THREE.Group;
   private perform = 0;
+  private beat = 0;
 
   private sequinTexture(): THREE.CanvasTexture {
     return canvasTex(128, 128, (ctx) => {
@@ -1621,34 +1699,59 @@ class CircusVisual extends PlaceholderVisual {
     const { dt, time, speedNorm } = ctx;
     this.perform = damp(this.perform, ctx.state === 'PERFORMING' ? 1 : 0, 4, dt);
     const p = this.perform;
-    // 부스트 공연: 몸은 트랙을 옆으로 게걸음하고 앞·뒷다리는 좌우로
-    // 과장되게 벌렸다 오므리며 달린다.
-    const sideStep = Math.sin(time * 6.2);
-    const hop = Math.abs(Math.cos(time * 6.2)) * p;
-    this.body.position.z += sideStep * 0.82 * p;
-    this.body.position.y += hop * 0.2;
-    this.body.rotation.x += -sideStep * 0.28 * p;
-    this.body.rotation.y += Math.sin(time * 3.1) * 0.16 * p;
-    this.body.rotation.z += Math.sin(time * 6.2 + 0.8) * 0.1 * p;
-    if (p > 0.05) {
-      this.legs.forEach((leg, i) => {
-        const side = i % 2 === 0 ? -1 : 1;
-        const pairPhase = i < 2 ? 0 : Math.PI;
-        leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, side * (0.78 + Math.sin(time * 8 + pairPhase) * 0.18), p);
-        leg.rotation.z = THREE.MathUtils.lerp(leg.rotation.z, Math.sin(time * 10 + i * Math.PI * 0.5) * 0.52, p);
-        const knee = leg.children.find((ch) => ch.name.endsWith('_lower'));
-        if (knee) knee.rotation.z = THREE.MathUtils.lerp(knee.rotation.z, -0.55 - Math.abs(Math.sin(time * 10 + i)) * 0.5, p);
-      });
-    }
-    // 깃털 흔들림, 머리 흔들며 인사
-    this.plume.rotation.z = Math.sin(time * 5) * 0.2 * (0.3 + speedNorm) + p * 0.3;
-    this.parts.head.rotation.y = Math.sin(time * 3) * 0.5 * p;
-    // 기수는 한 손 들어 관중 인사
+    // 서커스 퍼포먼스: 뒷발로 일어서서 두 발로 깡충깡충 춤추며 빠르게 전진.
+    // 박자(hop)는 속도에 비례하되 1.5~4Hz 로 제한해 춤처럼 보이게 한다.
+    const hopHz = THREE.MathUtils.clamp(ctx.speed / 4.5, 1.5, 4);
+    this.beat += hopHz * dt * p;
+    const beat = this.beat;
+    const hop = Math.abs(Math.sin(Math.PI * beat)); // 0(착지)…1(공중), 1회/박자
+    const angle = p * 1.05;
+    const pivotX = -0.85;
+    // Rear around the hind-hoof contact instead of rotating around the body origin.
+    this.body.rotation.set(
+      Math.sin(Math.PI * beat) * 0.09 * p, // 좌우 흔들기
+      Math.sin(Math.PI * beat * 0.5) * 0.05 * p,
+      angle + Math.sin(Math.PI * 2 * beat) * 0.04 * p,
+    );
+    this.body.position.set(pivotX * (1 - Math.cos(angle)), -pivotX * Math.sin(angle) + hop * 0.24 * p, 0);
+    this.legs.forEach((leg, i) => {
+      leg.rotation.x = 0;
+      const knee = leg.getObjectByName(leg.name + '_lower');
+      if (i < 2) {
+        // 앞다리: 번갈아 허공을 긁듯 흔들기 (i=0 왼쪽, i=1 오른쪽 반박자 차이)
+        const ph = Math.PI * beat + i * Math.PI;
+        leg.rotation.z = THREE.MathUtils.lerp(leg.rotation.z, 0.55 + Math.sin(ph) * 0.5, p);
+        if (knee) knee.rotation.z = THREE.MathUtils.lerp(knee.rotation.z, -1.55 + Math.cos(ph) * 0.35, p);
+      } else {
+        // 뒷다리: 한 발씩 번갈아 뛰는 프랜스 — 든 발은 무릎을 접고, 딛는 발은 골반을 받친다.
+        const ph = Math.PI * 2 * (beat * 0.5 + (i === 2 ? 0 : 0.5));
+        const lift = Math.max(0, Math.sin(ph));
+        const startZ = leg.rotation.z;
+        const startKnee = knee?.rotation.z ?? 0;
+        solveLeg(leg, 0.12 * Math.cos(ph) * p, 1.17 - lift * 0.3 * p, 1);
+        leg.rotation.z = THREE.MathUtils.lerp(startZ, leg.rotation.z - angle, p);
+        if (knee) knee.rotation.z = THREE.MathUtils.lerp(startKnee, knee.rotation.z, p);
+      }
+    });
+    // 머리: 좌우로 까딱, 목은 자랑스럽게 세움. 꼬리는 박자 맞춰 흔들기.
+    this.parts.head.rotation.y = Math.sin(Math.PI * beat) * 0.32 * p;
+    this.parts.neck.rotation.z = THREE.MathUtils.lerp(this.parts.neck.rotation.z, this.neckBase + 0.4 + Math.sin(Math.PI * 2 * beat) * 0.1, p);
+    this.parts.tail.rotation.z = Math.sin(Math.PI * 2 * beat) * 0.35 * p;
+    this.plume.rotation.z = Math.sin(time * 5) * 0.07 * speedNorm + Math.sin(Math.PI * 2 * beat) * 0.25 * p;
     const r = this.riders[0];
     if (r.parent === this.body) {
-      r.rotation.x += sideStep * 0.22 * p;
-      r.rotation.z += -sideStep * 0.18 * p;
+      r.rotation.z -= angle * 0.6;
+      r.position.y += hop * 0.05 * p;
     }
+  }
+
+  reset(): void {
+    super.reset();
+    this.perform = 0;
+    this.beat = 0;
+    this.legs.forEach((leg) => { leg.rotation.x = 0; });
+    this.parts.head.rotation.y = 0;
+    this.parts.tail.rotation.z = 0;
   }
 }
 
@@ -2048,6 +2151,10 @@ export class RacerFactory {
 
   static exhaustPoints(v: RacerVisual): THREE.Vector3[] {
     return v instanceof MotorcycleVisual ? v.exhaustPoints : [];
+  }
+
+  static backfiring(v: RacerVisual): boolean {
+    return v instanceof MotorcycleVisual && v.backfiring;
   }
 
   /** 소 콧구멍 (분노 시 김) — body 로컬 */

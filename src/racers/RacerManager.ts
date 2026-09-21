@@ -212,7 +212,8 @@ export class RacerManager {
 
       // 파티클 — 카메라 근처 선수만
       const distToCam = v.root.position.distanceTo(cameraPos);
-      if (distToCam > 140 || s.currentSpeed < 2) continue;
+      // 엔진 고장은 멈춰 있어도 연기가 나야 한다.
+      if (distToCam > 140 || (s.currentSpeed < 2 && s.state !== 'ENGINE_FAILURE')) continue;
       this.track.getTangent(s.distance, this.tmpTan);
       this.tmpBack.copy(this.tmpTan).negate();
       const strength = THREE.MathUtils.clamp(s.currentSpeed / 18, 0, 1.5) * (s.state === 'CHARGING' ? 2 : 1);
@@ -224,8 +225,12 @@ export class RacerManager {
           }
         }
         if (doExhaust && s.state === 'ENGINE_FAILURE') {
-          this.tmpHoof.set(0, 1, 0).applyMatrix4(v.root.matrixWorld);
-          this.particles.blackSmoke(this.tmpHoof);
+          // 배기관에서 검은 연기 + 시동 걸 때마다 역화 불꽃
+          for (const ep of RacerFactory.exhaustPoints(v)) {
+            this.tmpHoof.copy(ep).applyMatrix4(v.root.matrixWorld);
+            if (Math.random() < 0.5) this.particles.blackSmoke(this.tmpHoof);
+            if (RacerFactory.backfiring(v)) this.particles.exhaust(this.tmpHoof, this.tmpBack, true);
+          }
         }
         if (s.state === 'BOOSTING' && doExhaust) {
           this.tmpHoof.set(-1, 0.2, 0).applyMatrix4(v.root.matrixWorld);

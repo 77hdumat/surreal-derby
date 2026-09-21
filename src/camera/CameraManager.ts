@@ -49,6 +49,8 @@ export class CameraManager {
   private finishLocked = false;
   private finishPending = false;
   private finishSideTimer = 0;
+  /** 결승선을 가장 먼저 통과한 선수 — 골인 후에도 카메라가 잠시 따라간다 */
+  private winnerId: string | null = null;
   private lastCamPos = new THREE.Vector3();
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
@@ -93,6 +95,7 @@ export class CameraManager {
     this.fovBoost = 0;
     this.raceTime = 0;
     this.finishSideTimer = 0;
+    this.winnerId = null;
     this.setMode('START_CAMERA', true);
     this.computeDesired(0);
     this.smoothPos.copy(this.desiredPos);
@@ -141,8 +144,11 @@ export class CameraManager {
     }
     if (ev.event === 'FINISH_LINE' && !this.finishSideTimer) {
       this.finishSideTimer = 0.01;
+      this.winnerId = ev.racerId ?? null;
       this.shake(0.3);
     }
+    // 우승마가 골인한 뒤에는 이벤트 카메라가 결승 장면을 빼앗지 않는다.
+    if (this.winnerId) return;
     if (ev.event === 'PLANTED') this.shake(0.7);
     if (ev.event === 'LEAD_CHANGE' && !this.finishLocked && this.mode !== 'EVENT_CAMERA' && Math.random() < 0.5) {
       this.setMode('LEADER_CAMERA', true);
@@ -288,6 +294,14 @@ export class CameraManager {
         // 결승선 근처에서는 라인을 옆에서 보며 말들이 화면을 가로질러 지나가게 한다.
         const fs = t.finishS;
         P(fs + 1.5, -half - 11, 2.4, this.desiredPos);
+        const winner = this.winnerId ? this.racers.byId(this.winnerId) : undefined;
+        if (winner && this.finishSideTimer < 3.2) {
+          // 골인 직후 3초: 우승마를 계속 팬으로 따라가 화면에서 사라지지 않게 한다.
+          const ws = winner.state.distance;
+          const follow = THREE.MathUtils.clamp((this.finishSideTimer - 1.6) / 1.6, 0, 1);
+          P(THREE.MathUtils.lerp(ws + 1, fs + 6, follow * 0.35), THREE.MathUtils.lerp(winner.state.lane, 0, 0.35), 1.35, this.desiredLook);
+          break;
+        }
         const approach = THREE.MathUtils.clamp((fs - pack.leaderS) / 90, 0, 1); // 1 = 멀리, 0 = 결승선
         const lookS = fs - approach * 70 - 2 + (1 - approach) * 1.5;
         P(lookS, THREE.MathUtils.lerp(pack.leaderLat, 0, 0.5), 1.35, this.desiredLook);

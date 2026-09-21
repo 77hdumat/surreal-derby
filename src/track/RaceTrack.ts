@@ -343,7 +343,7 @@ export class RaceTrack {
     const banner = new THREE.Mesh(
       new THREE.PlaneGeometry(this.width + 15.2, 1.6),
       new THREE.MeshBasicMaterial({
-        map: this.makeTextTexture('GOAL  결승선  GOAL', 1024, 128, '#d81e1e', '#ffffff', 'bold 80px sans-serif'),
+        map: this.makeTextTexture('GOAL  결승선  GOAL  ·  presented by SIXSHOP', 1024, 128, '#d81e1e', '#ffffff', 'bold 58px sans-serif'),
         side: THREE.DoubleSide,
       }),
     );
@@ -590,18 +590,61 @@ export class RaceTrack {
     this.crowdArmMeshes[1].instanceMatrix.needsUpdate = true;
   }
 
+  /** 식스샵(sixshop.com) 광고 간판 텍스처: 헤드라인 + 서브카피 + 로고 워드마크 */
+  private makeAdTexture(headline: string, sub: string, bg: string, fg: string, accent: string): THREE.CanvasTexture {
+    const w = 1024;
+    const h = 240;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+    // 좌측 워드마크 블록
+    ctx.fillStyle = accent;
+    ctx.fillRect(0, 0, 250, h);
+    ctx.fillStyle = bg;
+    ctx.font = '900 54px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SIXSHOP', 125, h / 2 - 22);
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillText('식스샵', 125, h / 2 + 30);
+    // 우측 카피
+    ctx.fillStyle = fg;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 74px sans-serif';
+    ctx.fillText(headline, 290, sub ? 88 : h / 2);
+    if (sub) {
+      ctx.font = '500 38px sans-serif';
+      ctx.globalAlpha = 0.85;
+      ctx.fillText(sub, 292, 168);
+      ctx.globalAlpha = 1;
+    }
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.globalAlpha = 0.7;
+    ctx.fillText('sixshop.com', w - 24, h - 26);
+    ctx.globalAlpha = 1;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }
+
   private buildBillboards(): void {
-    const ads: [string, string, string][] = [
-      ['달려라 두부', '#fff5d6', '#c0392b'],
-      ['롱넥 생명보험', '#1a4fa0', '#ffffff'],
-      ['미라클 골판지 공업', '#c9964f', '#3b2200'],
-      ['슈퍼 당근 에너지', '#ff7a00', '#ffffff'],
-      ['코끼리 이삿짐센터', '#e8e8e8', '#333333'],
-      ['레이지 우유', '#ffffff', '#1d8a3c'],
-      ['스탤리온 모터스', '#111111', '#ff6a00'],
-      ['휴먼 러닝 아카데미', '#b02a8f', '#ffe14d'],
-      ['초현실 경마 그랑프리', '#f5c400', '#111111'],
-      ['정상적인 말 협회', '#8a2be2', '#ffffff'],
+    // [헤드라인, 서브카피, 배경, 글자, 워드마크 블록]
+    const ads: [string, string, string, string, string][] = [
+      ['쉽고 빠른 쇼핑몰·홈페이지 제작', '코딩 없이, 오늘 바로 오픈', '#111111', '#ffffff', '#ffffff'],
+      ['프롬프트 한 줄로 쇼핑몰 완성', 'AI 웹사이트 제작', '#ffffff', '#111111', '#111111'],
+      ['웹빌더의 한계를 없애다', '식스샵 프로', '#111111', '#ffffff', '#f5c400'],
+      ['20만 브랜드가 선택한 식스샵', '지금 무료로 시작하세요', '#ffffff', '#111111', '#111111'],
+      ['말보다 빠른 쇼핑몰 오픈', '결승선까지 3분, 사이트는 1분', '#1a1a1a', '#ffffff', '#ff4d2e'],
+      ['AI 에이전트가 쇼핑몰 운영 자동화', '주문·CS·마케팅을 한 번에', '#ffffff', '#111111', '#111111'],
+      ['몇 번의 클릭으로 마케팅 캠페인', '마케팅 자동화', '#111111', '#ffffff', '#ffffff'],
+      ['60개 이상의 앱·마켓 연동', '네이버·쿠팡·인스타 한 곳에서', '#f7f7f5', '#111111', '#111111'],
+      ['200개 이상의 전문가 디자인 블록', '블록 마켓플레이스', '#111111', '#ffffff', '#4d8dff'],
+      ['외부 디자인도 그대로 가져오기', 'Figma·이미지 → 사이트', '#ffffff', '#111111', '#111111'],
     ];
     const boardW = 14;
     const positions: number[] = [];
@@ -616,7 +659,7 @@ export class RaceTrack {
       const board = new THREE.Mesh(
         new THREE.PlaneGeometry(boardW, 3.2),
         new THREE.MeshBasicMaterial({
-          map: this.makeTextTexture(ad[0], 1024, 240, ad[1], ad[2], 'bold 110px sans-serif'),
+          map: this.makeAdTexture(ad[0], ad[1], ad[2], ad[3], ad[4]),
           side: THREE.DoubleSide,
         }),
       );
