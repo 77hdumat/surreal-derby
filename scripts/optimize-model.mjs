@@ -8,7 +8,7 @@
  */
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, prune, resample, textureCompress } from '@gltf-transform/functions';
+import { dedup, prune, resample, textureCompress, metalRough } from '@gltf-transform/functions';
 import sharp from 'sharp';
 import { rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,6 +39,7 @@ if (drop) {
   }
 }
 await doc.transform(
+  metalRough(), // KHR_materials_pbrSpecularGlossiness → metal/rough (three 미지원 확장)
   dedup(),
   prune(),
   resample(),

@@ -5,7 +5,7 @@ import { loft } from '../Loft';
 import { AnimalVisual, type AnimalAssetConfig } from './AnimalVisual';
 import { AXIS_X, AXIS_Y, AXIS_Z, rotateBoneModelSpace } from './BoneTools';
 import { CHOPPER_POSE, RiderRig } from './RiderRig';
-import { HORSE_ASSET, ELEPHANT_ASSET, COW_ASSET, GIRAFFE_ASSET, RIDER_ASSET_CFG } from './AssetConfigs';
+import { HORSE_ASSET, ELEPHANT_ASSET, COW_ASSET, GIRAFFE_ASSET, ZEBRA_ASSET, RIDER_ASSET_CFG } from './AssetConfigs';
 
 const damp = (cur: number, target: number, k: number, dt: number) => THREE.MathUtils.lerp(cur, target, 1 - Math.exp(-k * dt));
 
@@ -28,6 +28,22 @@ export class HorseRig extends AnimalVisual {
   constructor(def: RacerDefinition, fallback: RacerVisual, cfg: AnimalAssetConfig = HORSE_ASSET) {
     super(def, cfg, fallback);
   }
+  protected updateSpecial(_ctx: VisualContext, _ph: number): void {}
+}
+
+// ================================================================ 8. 제브라 다니오 (얼룩말)
+export class ZebraRig extends AnimalVisual {
+  constructor(def: RacerDefinition, fallback: RacerVisual) {
+    super(def, ZEBRA_ASSET, fallback);
+  }
+
+  protected buildDecor(): void {
+    // 경주용 안장 (작은 가죽 안장)
+    const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.34), std(0x3a2416, { roughness: 0.5 }));
+    saddle.castShadow = true;
+    this.socket('chest', saddle, [-0.1, 0.18, 0]);
+  }
+
   protected updateSpecial(_ctx: VisualContext, _ph: number): void {}
 }
 

@@ -158,7 +158,7 @@ export const SCENARIOS: Scenario[] = [
     ],
     finale: { event: 'SUPER_SPRINT', distance: 200, duration: 40 },
     fillers: 1,
-    teaser: '8번 클래식 호스, 오늘만큼은 평범하게 달리고 싶다고 합니다.',
+    teaser: '8번 제브라 다니오, 줄무늬만 빼면 평범하게 달리고 싶다고 합니다.',
   },
   {
     id: 'chaos',

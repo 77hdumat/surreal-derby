@@ -19,7 +19,7 @@ import {
 } from './RacerVisual';
 import { RIDER_ASSET } from './rig/AnimalVisual';
 import { RIDER_ASSET_CFG } from './rig/AssetConfigs';
-import { HorseRig, CircusRig, MotorRig, LongbodyRig, ElephantRig, CowRig, GiraffeRig } from './rig/RigVisuals';
+import { CircusRig, MotorRig, LongbodyRig, ElephantRig, CowRig, GiraffeRig, ZebraRig } from './rig/RigVisuals';
 import { CostumeRig, HumanRig, TrojanRig } from './rig/CrewVisuals';
 
 /** 리깅 GLB 캐릭터 사용 (false 면 절차 생성 placeholder 만) */
@@ -2158,7 +2158,7 @@ export class RacerFactory {
     // 리깅 GLB 가 있는 캐릭터는 로드 전/실패 시 placeholder 를 폴백으로 쓴다
     switch (def.specialAbility) {
       case 'CLASSIC':
-        return new HorseRig(def, placeholder);
+        return new ZebraRig(def, placeholder);
       case 'CIRCUS':
         return new CircusRig(def, placeholder);
       case 'MOTORCYCLE':

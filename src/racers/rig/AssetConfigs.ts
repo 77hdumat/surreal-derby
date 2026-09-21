@@ -180,6 +180,46 @@ export const GIRAFFE_ASSET: AnimalAssetConfig = {
   numberCloth: { bone: 'spine', offset: [0, -0.1, 0], size: 0.5, halfWidth: 0.5 },
 };
 
+/** "Zebra - Rigged" by Noa Seller — Gallop/Trot/Idle/Eating/Attack 클립. 모델 +z 전방 */
+export const ZEBRA_ASSET: AnimalAssetConfig = {
+  url: `${BASE}/models/zebra.glb`,
+  fitHeight: 1.75,
+  yaw: Math.PI / 2,
+  clips: { run: 'Gallop', walk: 'Trot', idle: 'Idle01', eat: 'Eating', rear: 'Attack01' },
+  runStride: 5.6,
+  walkStride: 2.2,
+  bones: {
+    root: 'bind_pelvis01_01_8',
+    hips: 'bind_pelvis01_01_8',
+    spine: 'vertebrae_bind_b01_016_23',
+    chest: 'vertebrae_bind_d01_018_25',
+    neck0: 'neck_bind_a01_028_36',
+    neck1: 'neck_bind_c01_030_38',
+    neck2: 'neck_bind_e01_032_40',
+    head: 'bind_head01_033_41',
+    tail0: 'bind_tail_01_011_18',
+    tail1: 'bind_tail_03_013_20',
+    legFL_upper: 'bind_l_humerus01_021_28',
+    legFL_lower: 'bind_l_raduis01_00_29',
+    legFL_foot: 'bind_l_finger01_022_30',
+    legFR_upper: 'bind_r_humerus01_024_32',
+    legFR_lower: 'bind_r_raduis01_025_33',
+    legFR_foot: 'bind_r_finger01_026_34',
+    legBL_upper: 'bind_l_femur01_02_9',
+    legBL_lower: 'bind_l_tibia01_03_10',
+    legBL_foot: 'bind_l_metatarsus01_04_11',
+    legBR_upper: 'bind_r_femur01_06_13',
+    legBR_lower: 'bind_r_tibia01_07_14',
+    legBR_foot: 'bind_r_metatarsus01_08_15',
+  },
+  feetTips: ['bind_l_finger01a_023_31', 'bind_r_finger01a_027_35', 'bind_l_toe01_05_12', 'bind_r_toe01_09_16'],
+  height: 1.9,
+  seat: { bone: 'chest', offset: [-0.1, 0.22, 0] },
+  bit: [0.4, -0.3, 0.1],
+  neckBob: 0.05,
+  numberCloth: { bone: 'spine', offset: [0, -0.05, 0], size: 0.5, halfWidth: 0.42 },
+};
+
 /** "Male Character Base - Rigged" by Braingapps — CMU 골격, A 포즈 */
 export const RIDER_ASSET_CFG: RiderAssetConfig = {
   url: `${BASE}/models/rider.glb`,

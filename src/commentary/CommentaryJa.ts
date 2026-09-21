@@ -68,7 +68,7 @@ export const TEASERS_JA: Record<string, string> = {
   'giraffe-neck': '7番ロングネック・ミラクル、首のストレッチがやけに長かったです。',
   'cow-stampede': '4番レイジ・ブル、朝の餌を抜いたことが確認されました。',
   'trojan-army': '10番トロイの木馬、中から人数確認の声が聞こえたそうです。',
-  'classic-justice': '8番クラシック・ホース、今日だけは普通に走りたいそうです。',
+  'classic-justice': '8番ゼブラ・ダニオ、縞模様以外は普通に走りたいそうです。',
 };
 
 export const DESTINY_JA = '信じられない大逆転が始まります！！';

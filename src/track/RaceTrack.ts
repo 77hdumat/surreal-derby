@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeGrassField, makeTree, applyCloudShadow } from './Vegetation';
-import { grassMaterial, buildMountainRing } from './Environment';
+import { grassMaterial } from './Environment';
 import { loadTreePrototypes, cloneTree, loadMountains, loadGrandstand, makeLake } from './SceneAssets';
 import type { Water } from 'three/examples/jsm/objects/Water.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
@@ -307,9 +307,7 @@ export class RaceTrack {
       top.position.set(-lat, 2.8, -1.6);
       this.gate.add(top);
     }
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(this.width + 0.6, 0.12, 3.4), frameMat);
-    roof.position.set(0, 2.9, -1.6);
-    this.gate.add(roof);
+    // 지붕 없음 — 칸막이 위가 트여 있어 출발 장면에서 말이 가려지지 않는다
     for (let i = 0; i < this.laneCount; i++) {
       const lat = this.laneToLat(i);
       // 양문형 도어 — 힌지가 좌우 포스트에 있음
@@ -411,17 +409,11 @@ export class RaceTrack {
     stand.add(roof);
     this.standGroup = stand;
     this.group.add(stand);
-    // 관중 좌석 (절차 스탠드 기준) — 실사 스탠드 로드 후 모듈 좌석으로 다시 만든다
-    const seats: THREE.Vector3[] = [];
-    for (let t = 0; t < tiers; t++) {
-      for (let i = 0; i < 150; i++) {
-        seats.push(new THREE.Vector3(-len / 2 + 2 + Math.random() * (len - 4), 1.4 + t * 1.4, zBase + 0.6 + t * 3.5 + Math.random() * 1.6));
-      }
-    }
-    this.buildCrowd(seats);
+    // 관중 없음 (스탠드만). 필요하면 buildCrowd(seats) 로 다시 채울 수 있다.
   }
 
   /** 관중 — 몸/머리/팔을 분리한 저폴리 실루엣 인스턴스. seats = 서 있는 발 위치(월드) */
+  // @ts-expect-error 관중을 다시 넣을 때를 위해 보관 (현재 미사용)
   private buildCrowd(seats: THREE.Vector3[]): void {
     if (this.crowdGroup) {
       this.group.remove(this.crowdGroup);
@@ -502,7 +494,7 @@ export class RaceTrack {
       loadGrandstand(this.radius + this.width / 2 + 6, this.straight + 40).then((stand) => {
         if (this.standGroup) this.group.remove(this.standGroup);
         this.group.add(stand.group);
-        this.buildCrowd(stand.seats);
+        void stand.seats; // 관중은 두지 않는다
       }),
     );
     // 호수: 반사 물
@@ -794,8 +786,7 @@ export class RaceTrack {
     this.sky = sky;
     this.group.add(sky);
     // 하늘·태양·구름은 HDRI(Game.applySky)가 담당한다. 먼 산은 능선 지형 링.
-    const mountains = buildMountainRing();
-    this.group.add(mountains);
+    // 절차 능선 링은 실사 DEM 타일이 대신한다 (buildMountainRing 은 폴백용으로 남김)
   }
 
   private buildLightTowers(): void {

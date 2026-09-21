@@ -104,7 +104,7 @@ export class EffectsManager {
   update(dt: number, cameraVelocity: number): void {
     this.afterCurrent = THREE.MathUtils.lerp(this.afterCurrent, this.afterTarget, Math.min(1, dt * 6));
     (this.afterimage.uniforms as { damp: { value: number } }).damp.value = this.afterCurrent;
-    this.bloom.strength = 0.22 + this.speedLines * 0.35;
+    this.bloom.strength = 0.22 + this.speedLines * 0.15;
     this.speedLines = THREE.MathUtils.lerp(this.speedLines, this.speedLinesTarget, Math.min(1, dt * 5));
     this.flash = Math.max(0, this.flash - dt * 3);
     this.drawOverlay(dt, cameraVelocity);
@@ -129,7 +129,7 @@ export class EffectsManager {
         const y1 = cy + Math.sin(l.a) * inner;
         const x2 = cx + Math.cos(l.a) * outer;
         const y2 = cy + Math.sin(l.a) * outer;
-        ctx.strokeStyle = `rgba(255,255,255,${0.35 * s})`;
+        ctx.strokeStyle = `rgba(255,255,255,${0.18 * s})`;
         ctx.lineWidth = l.w * s;
         ctx.beginPath();
         ctx.moveTo(x1, y1);

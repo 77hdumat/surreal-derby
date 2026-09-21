@@ -167,8 +167,8 @@ export class CameraManager {
     }
     switch (ev.event) {
       case 'MOTORCYCLE_BOOST':
-        this.shake(0.5);
-        this.fovBoost = 1;
+        this.shake(0.2);
+        this.fovBoost = 0.4;
         break;
       case 'ELEPHANT_CHARGE':
         this.shake(0.7);
@@ -190,8 +190,8 @@ export class CameraManager {
       case 'SUPER_SPRINT':
       case 'COMEBACK':
       case 'HUMAN_BIPEDAL':
-        this.shake(0.35);
-        this.fovBoost = 0.6;
+        this.shake(0.2);
+        this.fovBoost = 0.3;
         break;
       case 'COSTUME_COLLAPSE':
       case 'COLLISION':
@@ -384,13 +384,14 @@ export class CameraManager {
     this.fovBoost = Math.max(0, this.fovBoost - dt * 0.35);
     const eventZoom = this.mode === 'EVENT_CAMERA' ? -8 * THREE.MathUtils.clamp(this.eventTimer / 3.2, 0, 1) : 0;
     const aerial = this.mode === 'AERIAL_CAMERA' ? 8 : this.mode === 'FINISH_CAMERA' ? 10 : 0;
-    this.fovTarget = BASE_FOV + this.boostNearby * 22 + this.fovBoost * 10 + eventZoom + aerial;
+    // 부스트 중 화면 흔들림·FOV 변화는 멀미가 나지 않게 약하게
+    this.fovTarget = BASE_FOV + this.boostNearby * 8 + this.fovBoost * 6 + eventZoom + aerial;
     this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, this.fovTarget, Math.min(1, dt * 5));
     this.camera.updateProjectionMatrix();
 
     // 쉐이크 (trauma²)
     this.trauma = Math.max(0, this.trauma - dt * 1.2);
-    const sh = this.trauma * this.trauma + this.boostNearby * 0.12;
+    const sh = this.trauma * this.trauma * 0.7 + this.boostNearby * 0.025;
     const t = performance.now() * 0.001;
     this.tmp2.set(
       Math.sin(t * 37.1) * sh * 0.45,

@@ -8,6 +8,7 @@ import { FINISH_EXIT_DISTANCE } from '../game/RaceEngine';
 import type { RaceEvent } from '../events/RaceEvent';
 import type { ParticleManager } from '../effects/ParticleManager';
 import { whenAssetsIdle } from './rig/Assets';
+import type { Footprints } from '../effects/Footprints';
 
 /**
  * RaceEngine 결과(distance/lane/state) → 트랙 위 월드 좌표 → RacerVisual 애니메이션.
@@ -26,6 +27,9 @@ export class RacerManager {
   private tmpHoof = new THREE.Vector3();
   private ctxCache = new Map<string, VisualContext>();
   private prevLane = new Map<string, number>();
+  /** 발자국 데칼 (Game 이 주입) */
+  footprints: Footprints | null = null;
+  private tmpFoot = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, track: RaceTrack, particles: ParticleManager) {
     this.scene = scene;
@@ -271,6 +275,18 @@ export class RacerManager {
       if (sweat && Math.random() < 0.5) {
         this.tmpHoof.copy(sweat).applyMatrix4(v.root.matrixWorld);
         this.particles.sweat(this.tmpHoof);
+      }
+      // 발자국: 발굽/발이 땅에 닿는 순간 자국
+      if (this.footprints && distToCam < 120) {
+        const size = r.def.specialAbility === 'ELEPHANT' ? 2.6 : r.def.specialAbility === 'TROJAN' ? 0 : r.def.specialAbility === 'HUMAN' || r.def.specialAbility === 'COSTUME' ? 0.9 : r.def.specialAbility === 'GIRAFFE' ? 1.3 : 1;
+        if (size > 0) {
+          v.hoofPoints.forEach((hp, i) => {
+            this.tmpFoot.copy(hp).applyMatrix4(v.root.matrixWorld);
+            // root 로컬 높이로 착지 판정 (root 원점 = 지면)
+            this.tmpFoot.y = hp.y;
+            this.footprints!.track(`${r.def.id}:${i}`, this.tmpFoot, this.tmpTan, dt, size, s.currentSpeed);
+          });
+        }
       }
       let phase = this.dustPhase.get(r.def.id)! + (s.currentSpeed * dt) / Math.max(1, r.def.strideLength);
       if (phase >= 1) {

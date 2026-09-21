@@ -92,10 +92,16 @@ export async function loadMountains(): Promise<THREE.Group> {
     const mat = m.material as THREE.MeshStandardMaterial;
     mat.roughness = 1;
     mat.metalness = 0;
+    // 위성 텍스처는 어두운 편이라 밝기를 올리고, 먼 산의 대기 산란 느낌으로 약한 하늘색 발광을 더한다
+    mat.color.setRGB(1.45, 1.45, 1.4);
+    mat.emissive.set(0x7d95b5);
+    mat.emissiveIntensity = 0.28;
+    mat.fog = false; // HSV 안개가 먼 산을 회색 실루엣으로 만들어서 끄고, 대기 산란은 발광 틴트로 대신
+    mat.needsUpdate = true;
   });
   const group = new THREE.Group();
-  const scale = 0.75;
-  const ring = 1500; // 타일 중심 거리
+  const scale = 0.6;
+  const ring = 1150; // 타일 중심 거리
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
     const tile = src.clone(true);

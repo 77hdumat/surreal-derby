@@ -15,6 +15,7 @@ import { TEASERS_JA } from '../commentary/CommentaryJa';
 import { updateWind } from '../track/Vegetation';
 import { onAssetProgress } from '../racers/rig/Assets';
 import { loadSky } from '../track/Environment';
+import { Footprints } from '../effects/Footprints';
 import { installHsvFog } from '../effects/HsvFog';
 import type { RacePhase } from './RaceState';
 import type { RaceEvent } from '../events/RaceEvent';
@@ -53,6 +54,7 @@ export class Game {
   private firstFinishHandled = false;
   private highQuality = false;
   private sun: THREE.DirectionalLight;
+  private footprints: Footprints;
   private sunOffset = new THREE.Vector3(70, 95, 50);
 
 
@@ -107,6 +109,9 @@ export class Game {
     this.particles = new ParticleManager(3000);
     this.scene.add(this.particles.points);
     this.racers = new RacerManager(this.scene, this.track, this.particles);
+    this.footprints = new Footprints(1600);
+    this.scene.add(this.footprints.mesh);
+    this.racers.footprints = this.footprints;
     this.events = new RaceEventManager();
     this.engine = new RaceEngine(this.racers.racers, this.track, this.events);
     this.camera = new CameraManager(this.track, this.racers, this.engine, window.innerWidth / window.innerHeight);
@@ -249,6 +254,7 @@ export class Game {
     this.engine.reset();
     this.racers.reset();
     this.particles.clear();
+    this.footprints.clear();
     this.track.resetGate();
     this.camera.reset();
     this.commentary.reset();
@@ -277,6 +283,7 @@ export class Game {
     this.engine.reset();
     this.racers.reset();
     this.particles.clear();
+    this.footprints.clear();
     this.track.resetGate();
     this.camera.reset();
     this.ui.showIntro();
@@ -602,7 +609,7 @@ export class Game {
     if (this.slowMo) after = Math.max(after, 0.35);
     this.effects.setAfterimage(after);
     this.effects.setSpeedLines(this.camera.boostNearby);
-    if (this.camera.boostNearby > 0.5) this.camera.shake(dt * 0.6);
+    if (this.camera.boostNearby > 0.5) this.camera.shake(dt * 0.12);
 
     // 선수별 근접 사운드 루프
     for (const r of this.racers.racers) {
