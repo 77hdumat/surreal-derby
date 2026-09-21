@@ -331,26 +331,7 @@ export class RaceTrack {
     line.rotation.z = Math.atan2(f.tan.x, f.tan.z) - Math.PI / 2;
     this.group.add(line);
 
-    // 결승 게이트(현수막)
-    const postMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.95, metalness: 0 });
-    // 안쪽 기둥은 결승 사이드 카메라 뒤로 빼서 시야를 가리지 않게 (카메라: lat -halfW-11)
-    for (const lat of [-(this.width / 2 + 14), this.width / 2 + 1.2]) {
-      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 7, 8), postMat);
-      p.position.copy(f.pos).addScaledVector(f.right, lat);
-      p.position.y = 3.5;
-      this.group.add(p);
-    }
-    const banner = new THREE.Mesh(
-      new THREE.PlaneGeometry(this.width + 15.2, 1.6),
-      new THREE.MeshBasicMaterial({
-        map: this.makeTextTexture('GOAL  결승선  GOAL  ·  presented by SIXSHOP', 1024, 128, '#d81e1e', '#ffffff', 'bold 58px sans-serif'),
-        side: THREE.DoubleSide,
-      }),
-    );
-    banner.position.copy(f.pos).addScaledVector(f.right, -6.4);
-    banner.position.y = 6.2;
-    banner.rotation.y = Math.atan2(f.tan.x, f.tan.z);
-    this.group.add(banner);
+    // 결승 게이트·현수막 없음 — 바닥 흰 선만 (카메라 시야를 가리지 않게)
   }
 
   private buildGate(): void {

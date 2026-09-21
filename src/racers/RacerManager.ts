@@ -7,6 +7,7 @@ import type { RaceTrack } from '../track/RaceTrack';
 import { FINISH_EXIT_DISTANCE } from '../game/RaceEngine';
 import type { RaceEvent } from '../events/RaceEvent';
 import type { ParticleManager } from '../effects/ParticleManager';
+import { whenAssetsIdle } from './rig/Assets';
 
 /**
  * RaceEngine 결과(distance/lane/state) → 트랙 위 월드 좌표 → RacerVisual 애니메이션.
@@ -58,6 +59,15 @@ export class RacerManager {
       r.reset(track.laneToLat(r.def.number - 1));
     }
     this.placeAll();
+  }
+
+  /** 리깅 에셋(모델·기수·병사)이 전부 인스턴스화될 때까지 대기 */
+  async whenReady(): Promise<void> {
+    // 로드 완료 콜백 안에서 새 인스턴스(기수 등)를 추가로 요청하므로, 큐가 비어도 한 번 더 확인한다
+    for (let i = 0; i < 6; i++) {
+      await whenAssetsIdle();
+      await new Promise((r) => setTimeout(r, 60));
+    }
   }
 
   byId(id: string): Racer | undefined {

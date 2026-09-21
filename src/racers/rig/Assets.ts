@@ -23,9 +23,60 @@ export function loadAsset(url: string): Promise<GLTF> {
   return p;
 }
 
-/** 스켈레톤·재질을 독립 복제한 인스턴스 */
-export async function instantiate(url: string): Promise<LoadedAsset> {
-  const gltf = await loadAsset(url);
+// ---------------------------------------------------------------- 로드 큐 / 진행률
+// 스켈레톤 복제·재질 복제는 메인 스레드를 수십 ms 씩 막는다. 인스턴스를 한 프레임에 하나씩만 만들어
+// 첫 진입 렉을 여러 프레임으로 분산하고, 전체 진행률을 UI 에 알린다.
+let pending = 0;
+let done = 0;
+let chain: Promise<void> = Promise.resolve();
+const progressListeners = new Set<(done: number, total: number) => void>();
+const idleResolvers: (() => void)[] = [];
+
+export function onAssetProgress(fn: (done: number, total: number) => void): () => void {
+  progressListeners.add(fn);
+  fn(done, done + pending);
+  return () => progressListeners.delete(fn);
+}
+
+/** 큐에 남은 작업이 없을 때 resolve (호출 시점에 비어 있으면 즉시) */
+export function whenAssetsIdle(): Promise<void> {
+  if (pending === 0) return Promise.resolve();
+  return new Promise((r) => idleResolvers.push(r));
+}
+
+function notify(): void {
+  for (const fn of progressListeners) fn(done, done + pending);
+  if (pending === 0) {
+    for (const r of idleResolvers.splice(0)) r();
+  }
+}
+
+const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+/** 스켈레톤·재질을 독립 복제한 인스턴스 (한 프레임에 하나씩) */
+export function instantiate(url: string): Promise<LoadedAsset> {
+  pending++;
+  notify();
+  void loadAsset(url).catch(() => undefined); // 다운로드는 큐와 무관하게 즉시 병렬 시작
+  const run = chain.then(async () => {
+    try {
+      const gltf = await loadAsset(url);
+      await nextFrame();
+      return instantiateNow(gltf);
+    } finally {
+      pending--;
+      done++;
+      notify();
+    }
+  });
+  chain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function instantiateNow(gltf: GLTF): LoadedAsset {
   const scene = skeletonClone(gltf.scene) as THREE.Group;
   scene.traverse((o) => {
     const m = o as THREE.Mesh;

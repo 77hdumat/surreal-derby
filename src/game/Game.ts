@@ -13,6 +13,7 @@ import { UIManager } from '../ui/UIManager';
 import { VoiceManager } from '../audio/VoiceManager';
 import { TEASERS_JA } from '../commentary/CommentaryJa';
 import { updateWind } from '../track/Vegetation';
+import { onAssetProgress } from '../racers/rig/Assets';
 import { installHsvFog } from '../effects/HsvFog';
 import type { RacePhase } from './RaceState';
 import type { RaceEvent } from '../events/RaceEvent';
@@ -147,6 +148,35 @@ export class Game {
     this.ui.showIntro();
     this.phase = 'INTRO';
     this.renderer.setAnimationLoop(() => this.loop());
+    void this.warmUp();
+  }
+
+  /**
+   * 첫 레이스 렉 방지: 리깅 에셋이 전부 인스턴스화될 때까지 시작 버튼을 잠그고,
+   * 셰이더를 미리 컴파일·텍스처를 GPU 에 올린 뒤에 연다.
+   */
+  private async warmUp(): Promise<void> {
+    this.ui.setLoading(true);
+    const off = onAssetProgress((d, t) => this.ui.setLoading(true, d, t));
+    await this.racers.whenReady();
+    off();
+    try {
+      await this.renderer.compileAsync(this.scene, this.camera.camera);
+    } catch (e) {
+      console.warn('[warmup] compile 실패', e);
+    }
+    // 화면 밖 텍스처까지 GPU 업로드
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      for (const mat of mats) {
+        const sm = mat as THREE.MeshStandardMaterial;
+        for (const tex of [sm.map, sm.normalMap, sm.roughnessMap, sm.metalnessMap, sm.bumpMap]) if (tex) this.renderer.initTexture(tex);
+      }
+    });
+    this.ui.setLoading(false);
+    if (import.meta.env.DEV) console.info(`[warmup] ready in ${(performance.now() / 1000).toFixed(1)}s`);
   }
 
   private resize(): void {

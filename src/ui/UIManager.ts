@@ -218,6 +218,14 @@ export class UIManager {
 
   // ---------------------------------------------------------------- phases
 
+  /** 에셋 로딩 상태: 시작 버튼 잠금 + 진행률 표시 */
+  setLoading(loading: boolean, doneCount = 0, total = 0): void {
+    const btn = $('btn-start') as HTMLButtonElement;
+    btn.disabled = loading;
+    btn.textContent = loading ? `모델 로딩 중… ${total ? Math.round((doneCount / total) * 100) : 0}%` : '레이스 시작';
+    btn.classList.toggle('loading', loading);
+  }
+
   showIntro(): void {
     this.intro.classList.remove('hidden');
     this.hud.classList.add('hidden');
