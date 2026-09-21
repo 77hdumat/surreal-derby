@@ -3,7 +3,7 @@ import type { RacerDefinition } from '../Racer';
 import type { RacerVisual, VisualContext } from '../RacerVisual';
 import { loft } from '../Loft';
 import { AnimalVisual, type AnimalAssetConfig } from './AnimalVisual';
-import { AXIS_X, AXIS_Y, AXIS_Z } from './BoneTools';
+import { AXIS_X, AXIS_Y, AXIS_Z, rotateBoneModelSpace } from './BoneTools';
 import { CHOPPER_POSE, RiderRig } from './RiderRig';
 import { HORSE_ASSET, ELEPHANT_ASSET, COW_ASSET, GIRAFFE_ASSET, RIDER_ASSET_CFG } from './AssetConfigs';
 
@@ -464,30 +464,75 @@ export class CowRig extends AnimalVisual {
 }
 
 // ================================================================ 7. 롱넥 미라클
+/** 채찍 프로파일: u 0..1 — 반대로 감았다가(0~0.28) 급히 휘두르고(0.28~0.5) 되돌아오며 출렁(0.5~1) */
+function whipProfile(u: number): number {
+  if (u <= 0) return 0;
+  if (u < 0.28) {
+    const t = u / 0.28;
+    return -0.4 * (t * t * (3 - 2 * t));
+  }
+  if (u < 0.5) {
+    const t = (u - 0.28) / 0.22;
+    return -0.4 + 1.4 * (1 - Math.pow(1 - t, 3));
+  }
+  if (u < 1) {
+    const t = (u - 0.5) / 0.5;
+    return Math.exp(-t * 3.2) * Math.cos(t * Math.PI * 2.2);
+  }
+  return 0;
+}
+
 export class GiraffeRig extends AnimalVisual {
   private stretch = 0;
   private dance = 0;
   private attack = 0;
   private attackSide = 1;
+  /** 골반 위 척추부터 머리까지 목 전체 뼈 체인 (채찍 웨이브용) */
+  private neckChain: THREE.Bone[] = [];
 
   constructor(def: RacerDefinition, fallback: RacerVisual) {
     super(def, GIRAFFE_ASSET, fallback);
   }
 
+  protected buildDecor(): void {
+    // 이 에셋의 목은 Bone033 → … → Bone005 로 이어진다 (머리 Bone006 은 별도)
+    for (const name of ['Bone033_13', 'Bone002_12', 'Bone034_11', 'Bone003_10', 'Bone035_9', 'Bone004_8', 'Bone036_7', 'Bone005_6']) {
+      const b = this.model?.getObjectByName(name) as THREE.Bone | undefined;
+      if (b) this.neckChain.push(b);
+    }
+  }
+
   protected updateSpecial(ctx: VisualContext, _ph: number): void {
     const { dt, time, speedNorm } = ctx;
     this.stretch = damp(this.stretch, ctx.extension, 5, dt);
-    this.attack = Math.max(0, this.attack - dt * 0.9);
-    const a = Math.sin(this.attack * Math.PI);
+    this.attack = Math.max(0, this.attack - dt * 0.8);
     const st = this.stretch;
     const neck: ['neck0', 'neck1', 'neck2'] = ['neck0', 'neck1', 'neck2'];
     // 목 뻗기: 수평까지 숙이고 마디를 앞으로 밀어 길이를 늘린다 (extensionMax m)
     const total = (ctx.extensionMax > 0 ? ctx.extensionMax : 6.5) * st;
     neck.forEach((b, i) => {
       this.rot(b, AXIS_Z, -st * 0.42 + Math.sin(time * 4.2 + this.seed + i) * 0.05 * speedNorm * (1 - st));
-      this.rot(b, AXIS_Y, a * this.attackSide * 0.4);
       if (total > 0.01) this.move(b, new THREE.Vector3(total / 3, 0, 0));
     });
+    // 목 공격: 채찍처럼 — 밑동부터 머리까지 파동이 지연되며 전달되고, 머리 쪽 마디가 가장 크게 휘어진다
+    if (this.attack > 0) {
+      const u = 1 - this.attack; // 0 → 1
+      const N = this.neckChain.length || 3;
+      const chain = this.neckChain.length ? this.neckChain : neck.map((n) => this.bones[n]).filter(Boolean) as THREE.Bone[];
+      const wsum = chain.reduce((acc, _b, i) => acc + (0.5 + (i / N) * 1.5), 0);
+      chain.forEach((b, i) => {
+        const w = (0.5 + (i / N) * 1.5) / wsum;
+        const f = whipProfile(u - i * 0.012); // 밑동→머리로 파동 전달 (짧은 지연)
+        // 목이 거의 수직이라 옆으로 휘려면 전방(X)축 회전 (+x 축 회전은 +y 를 +z 오른쪽으로 보낸다)
+        rotateBoneModelSpace(b, this.body, AXIS_X, this.attackSide * f * 3.1 * w);
+        rotateBoneModelSpace(b, this.body, AXIS_Z, -Math.abs(f) * 0.3 * w); // 휘두를 때 살짝 숙임
+      });
+      const fh = whipProfile(u - N * 0.012);
+      this.rot('head', AXIS_X, this.attackSide * fh * 0.8);
+      // 몸도 반동: 감을 때 반대로, 휘두를 때 공격 방향으로 기울고 살짝 웅크림
+      this.body.rotation.x += -this.attackSide * whipProfile(u) * 0.12;
+      this.body.position.y -= Math.max(0, whipProfile(u)) * 0.12;
+    }
     this.rot('head', AXIS_Z, st * 1.2 + Math.sin(time * 6) * 0.06 * speedNorm);
     // 목 댄스: 멈춰 서서 ~~~ 파형
     this.dance = damp(this.dance, ctx.state === 'DANCING' ? 1 : 0, 5, dt);
