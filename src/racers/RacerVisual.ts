@@ -639,8 +639,10 @@ export abstract class PlaceholderVisual implements RacerVisual {
         const length = (leg.userData.upperLength + leg.userData.lowerLength) as number;
         const target = strideTarget(ph - phases[i % phases.length], length, Math.min(1, Math.abs(animSpeed)));
         const lift = grounded ? 0 : target.lift;
+        // 뒷다리는 배 아래로 깊이 모이고, 앞다리는 몸 앞으로 뻗는다 (갤럽의 모임/뻗음)
+        const bias = i % 4 >= 2 ? length * 0.08 : -length * 0.03;
         leg.rotation.x = 0;
-        solveLeg(leg, grounded ? 0 : target.x, length * 0.94 + bounce - lift, i % 4 < 2 ? -1 : 1);
+        solveLeg(leg, grounded ? 0 : target.x + bias * Math.abs(animSpeed), length * 0.94 + bounce - lift, i % 4 < 2 ? -1 : 1);
       });
     }
     this.updateFallen(dt);
