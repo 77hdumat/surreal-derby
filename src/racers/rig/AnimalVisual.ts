@@ -160,8 +160,13 @@ export abstract class AnimalVisual implements RacerVisual {
         sm.skeleton.update(); // 렌더 전에는 boneMatrices 가 0 이라 먼저 갱신
         sm.computeBoundingBox();
       });
-      // 자동 정렬: 바운딩 박스 높이 → fitHeight, 발바닥 y=0, 박스 중심 x/z=0
-      const box = new THREE.Box3().setFromObject(model);
+      // 자동 정렬: 뼈 위치 범위(스킨 박스는 일부 에셋에서 어긋남)로 높이 → fitHeight, 발바닥 y=0, 중심 x/z=0
+      const box = new THREE.Box3();
+      const bp = new THREE.Vector3();
+      model.traverse((o) => {
+        if ((o as THREE.Bone).isBone) box.expandByPoint(o.getWorldPosition(bp));
+      });
+      if (box.isEmpty()) box.setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
       const scale = this.cfg.fitHeight / Math.max(1e-6, size.y);
       model.scale.setScalar(scale);

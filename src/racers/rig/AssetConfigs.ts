@@ -11,7 +11,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 /** "Horse" by Henry S — Gallop/Walk/Idle/Buck/Sleep/Fallen/Eat 클립, 안장·등자 포함. 모델 +z 전방, +x 왼쪽 */
 export const HORSE_ASSET: AnimalAssetConfig = {
   url: `${BASE}/models/horse.glb`,
-  fitHeight: 1.95, // 귀 끝까지
+  fitHeight: 1.9, // 뼈 기준 (귀 뼈 끝까지)
   yaw: Math.PI / 2,
   clips: {
     run: /Gallop$/,
@@ -62,7 +62,7 @@ export const HORSE_ASSET: AnimalAssetConfig = {
 /** "African Elephant" by jimmyho905 — Loco_Run/Sprint/WalkSlow, Stand, Roar, Attack, Lying. 모델 +z 전방 */
 export const ELEPHANT_ASSET: AnimalAssetConfig = {
   url: `${BASE}/models/elephant.glb`,
-  fitHeight: 3.5,
+  fitHeight: 4.0,
   yaw: Math.PI / 2,
   clips: { run: 'Loco_Sprint', walk: 'Loco_WalkSlow', idle: 'Stand_00', rear: 'Attack_1', sleep: 'Lying_01', fallen: 'Lying_02' },
   runStride: 5.2,
@@ -95,7 +95,7 @@ export const ELEPHANT_ASSET: AnimalAssetConfig = {
     legBR_foot: 'RigRBLegAnkle_015_23',
   },
   feetTips: ['RigLFLegDigit12_029_39', 'RigRFLegDigit12_093_103', 'RigLBLegDigit12_08_16', 'RigRBLegDigit12_017_25'],
-  height: 3.5,
+  height: 4.0,
   seat: { bone: 'chest', offset: [-0.35, 0.5, 0] },
   neckBob: 0.02,
   numberCloth: { bone: 'spine', offset: [0, 0.1, 0], size: 0.9, halfWidth: 1.05 },
@@ -104,7 +104,7 @@ export const ELEPHANT_ASSET: AnimalAssetConfig = {
 /** "Farm Cow" by Rukh3D — 걷기/달리기 클립 없음 → 절차 보행. 모델 +z 전방 */
 export const COW_ASSET: AnimalAssetConfig = {
   url: `${BASE}/models/cow.glb`,
-  fitHeight: 1.45,
+  fitHeight: 1.4,
   yaw: Math.PI / 2,
   clips: { idle: /idle1/, rear: /Attack1/ },
   runStride: 5.0,
@@ -145,7 +145,7 @@ export const COW_ASSET: AnimalAssetConfig = {
 /** "Giraffe" by Amx360 — 달리기 클립 1개. 모델 +z 전방 */
 export const GIRAFFE_ASSET: AnimalAssetConfig = {
   url: `${BASE}/models/giraffe.glb`,
-  fitHeight: 4.5,
+  fitHeight: 5.6,
   yaw: Math.PI / 2,
   clips: { run: 'Animation' },
   runStride: 6.0,
@@ -174,7 +174,7 @@ export const GIRAFFE_ASSET: AnimalAssetConfig = {
     legBR_foot: 'Bone021_20',
   },
   feetTips: ['Bone010_23', 'Bone018_27', 'Bone014_15', 'Bone022_19'],
-  height: 4.5,
+  height: 5.6,
   seat: { bone: 'chest', offset: [-0.15, 0.45, 0] },
   neckBob: 0.03,
   numberCloth: { bone: 'spine', offset: [0, -0.1, 0], size: 0.5, halfWidth: 0.5 },
