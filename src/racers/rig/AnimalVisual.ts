@@ -58,6 +58,8 @@ export interface AnimalAssetConfig {
   gaitPhases?: [number, number, number, number];
   /** 뻣뻣한 조형물(트로이 목마): 클립·보행·목 끄덕임 없음, 바인드 포즈 고정 */
   rigid?: boolean;
+  /** 발굽/발끝 뼈 이름 (지면 보정용). 없으면 leg*_foot 뼈 사용 */
+  feetTips?: (string | RegExp)[];
   /** run 클립 한 루프당 이동 거리(m) — timeScale 계산 */
   runStride: number;
   walkStride?: number;
@@ -267,42 +269,38 @@ export abstract class AnimalVisual implements RacerVisual {
    */
   private calibrateGround(): void {
     if (!this.mixer || !this.model) return;
+    // GPU 스키닝은 뼈를 따르므로 발끝 뼈 위치로 잰다 (CPU 스킨 박스는 일부 에셋에서 어긋남)
+    const tips = (this.cfg.feetTips ?? []).map((n) => findBone(this.model!, n)).filter(Boolean) as THREE.Bone[];
+    const feet = tips.length ? tips : ((['legFL_foot', 'legFR_foot', 'legBL_foot', 'legBR_foot'] as RigBone[]).map((k) => this.bones[k]).filter(Boolean) as THREE.Bone[]);
+    if (!feet.length) return;
     const run = this.clips?.run;
-    const skinned: THREE.SkinnedMesh[] = [];
-    this.model.traverse((o) => {
-      const sm = o as THREE.SkinnedMesh;
-      if (sm.isSkinnedMesh && sm.visible) skinned.push(sm);
-    });
-    if (!skinned.length) return;
-    const box = new THREE.Box3();
-    const inv = new THREE.Matrix4();
+    const p = new THREE.Vector3();
     let minY = Infinity;
-    // 스키닝된 메쉬의 실제 최저점 (발굽 바닥) 을 body 공간에서 잰다
     const sample = () => {
       this.body.updateMatrixWorld(true);
-      inv.copy(this.body.matrixWorld).invert();
-      for (const sm of skinned) {
-        sm.skeleton.update();
-        sm.computeBoundingBox();
-        box.copy(sm.boundingBox!).applyMatrix4(sm.matrixWorld).applyMatrix4(inv);
-        minY = Math.min(minY, box.min.y);
+      for (const f of feet) {
+        f.getWorldPosition(p);
+        this.body.worldToLocal(p);
+        minY = Math.min(minY, p.y);
       }
     };
     if (run) {
       const dur = run.getClip().duration;
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 16; i++) {
         for (const b of this.allBones) {
           b.quaternion.copy(b.userData.bindQuat as THREE.Quaternion);
           b.position.copy(b.userData.bindPos as THREE.Vector3);
         }
-        this.mixer.setTime((i / 12) * dur);
+        this.mixer.setTime((i / 16) * dur);
         sample();
       }
       this.mixer.setTime(0);
     } else sample();
     if (!isFinite(minY)) return;
-    this.model.position.y -= minY;
-    if (import.meta.env.DEV) console.info(`[rig] ${this.def.id} ground calibrate: mesh minY=${minY.toFixed(3)} → offset ${(-minY).toFixed(3)}`);
+    // 발끝 뼈는 발굽 바닥보다 조금 위 → 키의 1.5% 만큼 여유
+    const pad = this.cfg.fitHeight * (tips.length ? 0.015 : 0.03);
+    this.model.position.y -= minY - pad;
+    if (import.meta.env.DEV) console.info(`[rig] ${this.def.id} ground calibrate: minTipY=${minY.toFixed(3)} → offset ${(-(minY - pad)).toFixed(3)}`);
   }
 
   /** 서브클래스: 장식(깃털·핸들·담요 등) 소켓 부착 */

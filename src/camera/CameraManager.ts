@@ -249,8 +249,9 @@ export class CameraManager {
         break;
       }
       case 'SIDE_TRACKING_CAMERA': {
-        P(this.focusS + 2, -half - 9, 3.4, this.desiredPos);
-        P(this.focusS + 3, this.focusLat, 1.4, this.desiredLook);
+        // 옆이 아니라 약간 뒤·위 45° 대각선에서 내려다보는 중계 시점
+        P(this.focusS - 5, -half - 8.5, 6.5, this.desiredPos);
+        P(this.focusS + 3, this.focusLat, 1.2, this.desiredLook);
         break;
       }
       case 'LOW_TRACKING_CAMERA': {
@@ -262,8 +263,8 @@ export class CameraManager {
         const lr = this.racers.byId(pack.leaderId);
         const ls = lr ? lr.state.distance : this.focusS;
         const ll = lr ? lr.state.lane : this.focusLat;
-        P(ls - 8, ll + 6.5, 3.0, this.desiredPos);
-        P(ls + 1, ll, 1.4, this.desiredLook);
+        P(ls - 7, ll + 6.5, 4.8, this.desiredPos);
+        P(ls + 1, ll, 1.3, this.desiredLook);
         break;
       }
       case 'REAR_CAMERA': {
@@ -293,7 +294,8 @@ export class CameraManager {
         // 올림픽 결승선 사이드 카메라: 결승선 옆(인필드)에 고정, 다가오는 선두를 팬으로 따라가다
         // 결승선 근처에서는 라인을 옆에서 보며 말들이 화면을 가로질러 지나가게 한다.
         const fs = t.finishS;
-        P(fs + 1.5, -half - 11, 2.4, this.desiredPos);
+        // 결승선도 대각선 위에서: 결승선 약간 앞, 인필드 쪽 높은 위치
+        P(fs + 4, -half - 12, 7.5, this.desiredPos);
         const winner = this.winnerId ? this.racers.byId(this.winnerId) : undefined;
         if (winner && this.finishSideTimer < 3.2) {
           // 골인 직후 3초: 우승마를 계속 팬으로 따라가 화면에서 사라지지 않게 한다.
