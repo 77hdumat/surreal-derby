@@ -266,17 +266,26 @@ export abstract class AnimalVisual implements RacerVisual {
    * 발이 더 아래로 내려가는 경우가 있다. run 클립 한 사이클을 샘플링해 가장 낮은 발 높이가 0 이 되게 모델을 내린다.
    */
   private calibrateGround(): void {
-    const feet = (['legFL_foot', 'legFR_foot', 'legBL_foot', 'legBR_foot'] as RigBone[]).map((k) => this.bones[k]).filter(Boolean) as THREE.Bone[];
-    if (!feet.length || !this.mixer || !this.model) return;
+    if (!this.mixer || !this.model) return;
     const run = this.clips?.run;
-    const p = new THREE.Vector3();
+    const skinned: THREE.SkinnedMesh[] = [];
+    this.model.traverse((o) => {
+      const sm = o as THREE.SkinnedMesh;
+      if (sm.isSkinnedMesh && sm.visible) skinned.push(sm);
+    });
+    if (!skinned.length) return;
+    const box = new THREE.Box3();
+    const inv = new THREE.Matrix4();
     let minY = Infinity;
+    // 스키닝된 메쉬의 실제 최저점 (발굽 바닥) 을 body 공간에서 잰다
     const sample = () => {
       this.body.updateMatrixWorld(true);
-      for (const f of feet) {
-        f.getWorldPosition(p);
-        this.body.worldToLocal(p);
-        minY = Math.min(minY, p.y);
+      inv.copy(this.body.matrixWorld).invert();
+      for (const sm of skinned) {
+        sm.skeleton.update();
+        sm.computeBoundingBox();
+        box.copy(sm.boundingBox!).applyMatrix4(sm.matrixWorld).applyMatrix4(inv);
+        minY = Math.min(minY, box.min.y);
       }
     };
     if (run) {
@@ -292,10 +301,8 @@ export abstract class AnimalVisual implements RacerVisual {
       this.mixer.setTime(0);
     } else sample();
     if (!isFinite(minY)) return;
-    // 발굽 뼈는 발굽 바닥보다 조금 위에 있으므로 약간 여유
-    const hoofPad = this.cfg.fitHeight * 0.03;
-    this.model.position.y -= minY - hoofPad;
-    if (import.meta.env.DEV) console.info(`[rig] ${this.def.id} ground calibrate: minFootY=${minY.toFixed(3)} → offset ${(-(minY - hoofPad)).toFixed(3)}`);
+    this.model.position.y -= minY;
+    if (import.meta.env.DEV) console.info(`[rig] ${this.def.id} ground calibrate: mesh minY=${minY.toFixed(3)} → offset ${(-minY).toFixed(3)}`);
   }
 
   /** 서브클래스: 장식(깃털·핸들·담요 등) 소켓 부착 */

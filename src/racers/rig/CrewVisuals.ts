@@ -449,7 +449,7 @@ export class CostumeRig extends CrewVisualBase {
     const lifts = this.crew.map((r, i) => {
       const p = ph * 2 + i * 0.3;
       const mode = c > 0.3 ? 'lie' : k > 0.02 ? 'lift' : 'run';
-      const lift = r.animate({ mode, ph: p, energy: mode === 'lie' ? 0 : energy, time, lean: mode === 'lift' ? 0.1 : 0.2 });
+      const lift = r.animate({ mode, ph: p, energy: mode === 'lie' ? 0 : energy, time, lean: mode === 'lift' ? 0.1 : 0.2, armRaise: THREE.MathUtils.smoothstep(this.liftT, 0, 0.9) });
       const base = i === 0 ? 0.55 : -0.6;
       if (c > 0.05) {
         // 쓰러진 탈에서 튀어나와 바닥에 널브러짐
@@ -464,7 +464,13 @@ export class CostumeRig extends CrewVisualBase {
     if (k > 0.02) {
       // 1단계(~0.9초): 멈춰 서서 팔을 번쩍 들어 탈을 머리 위로 → 2단계: 상체 드러낸 채 전력질주
       const lift = THREE.MathUtils.smoothstep(this.liftT, 0, 0.9);
-      this.shell.position.y = k * lift * 1.45 + (lifts[0] + lifts[1]) * 0.5;
+      // 상자 바닥(쉘 로컬 y≈0.86)이 두 사람의 손 높이에 얹히도록
+      let handY = 0;
+      this.crew.forEach((r) => {
+        handY = Math.max(handY, r.group.position.y + Math.max(r.handL.y, r.handR.y));
+      });
+      const restY = (lifts[0] + lifts[1]) * 0.5;
+      this.shell.position.y = THREE.MathUtils.lerp(restY, Math.max(restY, handY - 0.86 + 0.02), k * lift);
       this.shell.rotation.set(Math.sin(time * 14) * 0.06 * k, 0, k * 0.1 + Math.sin(time * 9) * 0.03 * k);
       this.head.rotation.z = 0.95 + k * 0.5;
       return;
@@ -706,7 +712,8 @@ export class TrojanRig extends AnimalVisual {
       const baseX = s.group.userData.baseX as number;
       const baseZ = s.group.userData.baseZ as number;
       const lift = s.animate({ mode: 'push', ph: ph * 2 + i * 0.17, energy: Math.max(0.3, ctx.speedNorm), time });
-      s.group.position.set(THREE.MathUtils.lerp(0.3, baseX, out), lift, THREE.MathUtils.lerp(0, baseZ, out));
+      // body 는 뒷발 서기로 들려 있으므로 그만큼 내려 병사 발이 땅에 닿게 한다
+      s.group.position.set(THREE.MathUtils.lerp(0.3, baseX, out), lift - this.body.position.y, THREE.MathUtils.lerp(0, baseZ, out));
     });
     // 나무 덜컹거림
     const rattle = ctx.speedNorm * (0.6 + a * 0.6);

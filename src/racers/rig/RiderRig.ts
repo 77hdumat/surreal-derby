@@ -350,7 +350,7 @@ uniform float sideCenter;`,
    *  lift  탈을 머리 위로 들고 달리기   push  앞으로 밀며 달리기   lie   널브러짐   flail 낙마 허우적
    * 반환값: 골반 높이 보정(m) — 호출자가 group.position.y 에 더한다.
    */
-  animate(o: { mode: HumanMode; ph: number; energy: number; time: number; lean?: number }): number {
+  animate(o: { mode: HumanMode; ph: number; energy: number; time: number; lean?: number; armRaise?: number }): number {
     if (!this.bones || !this.model) return 0;
     const B = this.bones;
     const root = this.group;
@@ -436,7 +436,7 @@ uniform float sideCenter;`,
           const kneeFold = 0.2 + 1.25 * e * Math.max(0, Math.sin(Math.PI * 2 * p + 0.5));
           leg(s, thigh, kneeFold, 0.06, 0.35 * Math.max(0, Math.sin(Math.PI * 2 * p + 0.5)) * e);
           if (o.mode === 'run') arm(s, 0.2 - 0.8 * e * Math.cos(Math.PI * 2 * p), 1.35, 0.15);
-          else if (o.mode === 'lift') arm(s, 2.9 + Math.sin(time * 11 + s) * 0.05, 0.15, 0.25); // 머리 위로
+          else if (o.mode === 'lift') arm(s, THREE.MathUtils.lerp(0.4, 2.9, o.armRaise ?? 1) + Math.sin(time * 11 + s) * 0.05, 0.15, 0.25); // 머리 위로
           else arm(s, 1.55 + Math.sin(time * 10 + s) * 0.06 * e, 0.3, 0.1); // 앞으로 수평
         }
         break;
