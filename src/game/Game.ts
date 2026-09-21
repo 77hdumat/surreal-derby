@@ -14,6 +14,7 @@ import { VoiceManager } from '../audio/VoiceManager';
 import { TEASERS_JA } from '../commentary/CommentaryJa';
 import { updateWind } from '../track/Vegetation';
 import { onAssetProgress } from '../racers/rig/Assets';
+import { loadSky } from '../track/Environment';
 import { installHsvFog } from '../effects/HsvFog';
 import type { RacePhase } from './RaceState';
 import type { RaceEvent } from '../events/RaceEvent';
@@ -91,7 +92,7 @@ export class Game {
     this.track = new RaceTrack();
     this.scene.add(this.track.group);
     this.sunOffset.copy(RaceTrack.SUN_DIR).multiplyScalar(130);
-    // 하늘 돔을 환경맵으로 구워 간접광·반사에 사용
+    // 절차 하늘 돔은 HDRI 가 로드될 때까지만 (환경맵도 임시로 여기서 굽는다)
     {
       const pmrem = new THREE.PMREMGenerator(this.renderer);
       const skyScene = new THREE.Scene();
@@ -101,6 +102,8 @@ export class Game {
       this.track.group.add(this.track.sky);
       pmrem.dispose();
     }
+    void this.applySky();
+    if (import.meta.env.DEV) (window as unknown as { __game?: unknown }).__game = this;
     this.particles = new ParticleManager(3000);
     this.scene.add(this.particles.points);
     this.racers = new RacerManager(this.scene, this.track, this.particles);
@@ -142,6 +145,29 @@ export class Game {
     // 고급 모드는 사용자가 직접 선택할 때만 켠다. 고해상도 디스플레이에서
     // 첫 진입부터 무거운 후처리를 돌려 프레임이 급락하는 일을 막는다.
     this.setHighQuality(savedQuality === 'high');
+  }
+
+  /** 실사 HDRI 하늘: 배경·환경광으로 쓰고, HDRI 의 태양 방향에 DirectionalLight 를 맞춘다 */
+  private async applySky(): Promise<void> {
+    try {
+      const sky = await loadSky(this.highQuality);
+      this.scene.background = sky.texture;
+      this.scene.environment = sky.texture;
+      this.scene.environmentIntensity = 0.55;
+      this.scene.backgroundIntensity = 1.0;
+      this.scene.backgroundBlurriness = 0;
+      this.track.sky.visible = false;
+      this.sunOffset.copy(sky.sunDir).multiplyScalar(130);
+      this.sun.intensity = 2.4;
+      // 안개색을 HDRI 지평선 톤(옅은 하늘색)에 맞춤 — HSV 안개: r=명도, g=채도
+      const fog = this.scene.fog as THREE.Fog;
+      fog.color.setRGB(0.8, 0.16, 0);
+      fog.near = 160;
+      fog.far = 1000; // 먼 산까지 보이게
+      if (import.meta.env.DEV) console.info('[sky] HDRI 적용, 태양 방향', sky.sunDir.toArray().map((v) => v.toFixed(2)));
+    } catch (e) {
+      console.warn('[sky] HDRI 로드 실패 — 절차 하늘 유지', e);
+    }
   }
 
   start(): void {

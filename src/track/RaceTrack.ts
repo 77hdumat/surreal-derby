@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeGrassField, makeTree, applyCloudShadow } from './Vegetation';
+import { grassMaterial, buildMountainRing } from './Environment';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -149,70 +150,11 @@ export class RaceTrack {
     });
   }
 
-  private stripeTexture(): THREE.CanvasTexture {
-    const c = document.createElement('canvas');
-    c.width = 256;
-    c.height = 512;
-    const ctx = c.getContext('2d')!;
-    // 잔디 깎은 줄무늬 (레인당 한 줄) + 잔디 결 노이즈
-    for (let i = 0; i < 8; i++) {
-      ctx.fillStyle = i % 2 === 0 ? '#6da86f' : '#5f9a64';
-      ctx.fillRect(0, i * 64, 256, 64);
-    }
-    let seed = 3;
-    const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
-    for (let i = 0; i < 9000; i++) {
-      const g = 130 + rnd() * 60;
-      ctx.fillStyle = `rgba(${70 + rnd() * 30},${g},${90 + rnd() * 30},${0.2 + rnd() * 0.25})`;
-      const x = rnd() * 256;
-      const y = rnd() * 512;
-      ctx.fillRect(x, y, 1 + rnd() * 2, 2 + rnd() * 5);
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
-    return tex;
-  }
-
-  private grassTexture(): THREE.CanvasTexture {
-    const c = document.createElement('canvas');
-    c.width = 512;
-    c.height = 512;
-    const ctx = c.getContext('2d')!;
-    ctx.fillStyle = '#5f9a6a';
-    ctx.fillRect(0, 0, 512, 512);
-    let seed = 11;
-    const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
-    // 큰 얼룩(저주파) + 잔디 결(고주파) — 타일 경계가 눈에 띄지 않게 낮은 대비
-    for (let i = 0; i < 60; i++) {
-      const r = 40 + rnd() * 90;
-      const grd = ctx.createRadialGradient(rnd() * 512, rnd() * 512, 0, 0, 0, r);
-      const x = rnd() * 512;
-      const y = rnd() * 512;
-      const g2 = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g2.addColorStop(0, `rgba(${80 + rnd() * 30},${150 + rnd() * 30},${110 + rnd() * 20},0.18)`);
-      g2.addColorStop(1, 'rgba(0,0,0,0)');
-      void grd;
-      ctx.fillStyle = g2;
-      ctx.fillRect(x - r, y - r, r * 2, r * 2);
-    }
-    for (let i = 0; i < 14000; i++) {
-      ctx.fillStyle = `rgba(${70 + rnd() * 30},${140 + rnd() * 40},${95 + rnd() * 25},${0.12 + rnd() * 0.18})`;
-      ctx.fillRect(rnd() * 512, rnd() * 512, 1, 2 + rnd() * 3);
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(40, 40);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
-    return tex;
-  }
-
   private buildGround(): void {
     const geo = new THREE.PlaneGeometry(1600, 1600);
-    const mat = new THREE.MeshStandardMaterial({ map: this.grassTexture(), roughness: 1, metalness: 0 });
+    geo.setAttribute('uv2', geo.attributes.uv);
+    // 실사 잔디 PBR: 1600m 를 약 3.2m 타일로
+    const mat = grassMaterial(500);
     applyCloudShadow(mat, 0.3);
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
@@ -251,7 +193,9 @@ export class RaceTrack {
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.setIndex(indices);
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ map: this.stripeTexture(), roughness: 1, metalness: 0 });
+    geo.setAttribute('uv2', geo.attributes.uv);
+    // u = 20m 당 1, v = 트랙 폭(≈17m) 당 1 → 약 3m 타일 + 잔디깎기 줄무늬
+    const mat = grassMaterial(6.5, 5.5, { stripes: true });
     applyCloudShadow(mat, 0.3);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
@@ -791,50 +735,9 @@ export class RaceTrack {
     sky.userData.noShadow = true;
     this.sky = sky;
     this.group.add(sky);
-    // 오후의 태양
-    const sun = new THREE.Mesh(new THREE.SphereGeometry(22, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff6dc, fog: false }));
-    sun.position.copy(RaceTrack.SUN_DIR).multiplyScalar(820);
-    sun.userData.noShadow = true;
-    this.group.add(sun);
-    const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(60, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.12, depthWrite: false, fog: false }),
-    );
-    halo.position.copy(sun.position);
-    halo.userData.noShadow = true;
-    this.group.add(halo);
-
-    // 구름 (납작한 스프라이트 느낌의 박스)
-    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xfff1de, emissive: 0xffe5c4, emissiveIntensity: 0.7, roughness: 1, transparent: true, opacity: 0.94 });
-    for (let i = 0; i < 18; i++) {
-      const c = new THREE.Group();
-      const n = 3 + Math.floor(Math.random() * 3);
-      for (let j = 0; j < n; j++) {
-        const s = 12 + Math.random() * 18;
-        const m = new THREE.Mesh(new THREE.SphereGeometry(s, 8, 6), cloudMat);
-        m.position.set(j * s * 0.9 - (n * s) / 2, Math.random() * 4, (Math.random() - 0.5) * 10);
-        m.scale.y = 0.5;
-        c.add(m);
-      }
-      const ang = Math.random() * Math.PI * 2;
-      const r = 350 + Math.random() * 350;
-      c.position.set(Math.cos(ang) * r, 90 + Math.random() * 60, Math.sin(ang) * r);
-      c.userData.cloud = true;
-      c.userData.speed = 0.6 + Math.random() * 0.8;
-      this.group.add(c);
-      this.clouds.push(c);
-    }
-
-    // 먼 산
-    const mtnMat = new THREE.MeshStandardMaterial({ color: 0x9db4cf, roughness: 0.95, metalness: 0 });
-    for (let i = 0; i < 26; i++) {
-      const ang = (i / 26) * Math.PI * 2 + Math.random() * 0.2;
-      const r = 620 + Math.random() * 120;
-      const h = 60 + Math.random() * 110;
-      const m = new THREE.Mesh(new THREE.ConeGeometry(70 + Math.random() * 60, h, 5), mtnMat);
-      m.position.set(Math.cos(ang) * r, h / 2 - 5, Math.sin(ang) * r);
-      this.group.add(m);
-    }
+    // 하늘·태양·구름은 HDRI(Game.applySky)가 담당한다. 먼 산은 능선 지형 링.
+    const mountains = buildMountainRing();
+    this.group.add(mountains);
     // 먼 건물 (관중석 뒤)
     const bMat = new THREE.MeshStandardMaterial({ color: 0xd9d3cb, roughness: 0.95, metalness: 0 });
     for (let i = 0; i < 30; i++) {
