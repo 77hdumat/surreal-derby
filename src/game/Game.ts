@@ -159,14 +159,16 @@ export class Game {
       this.track.sky.visible = false;
       this.sunOffset.copy(sky.sunDir).multiplyScalar(130);
       this.sun.intensity = 2.4;
+      void this.track.loadRealAssets(sky.sunDir);
       // 안개색을 HDRI 지평선 톤(옅은 하늘색)에 맞춤 — HSV 안개: r=명도, g=채도
       const fog = this.scene.fog as THREE.Fog;
       fog.color.setRGB(0.8, 0.16, 0);
-      fog.near = 160;
-      fog.far = 1000; // 먼 산까지 보이게
+      fog.near = 200;
+      fog.far = 2600; // 먼 산(1.5km)까지 보이게
       if (import.meta.env.DEV) console.info('[sky] HDRI 적용, 태양 방향', sky.sunDir.toArray().map((v) => v.toFixed(2)));
     } catch (e) {
       console.warn('[sky] HDRI 로드 실패 — 절차 하늘 유지', e);
+      void this.track.loadRealAssets(RaceTrack.SUN_DIR);
     }
   }
 

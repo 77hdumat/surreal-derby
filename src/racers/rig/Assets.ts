@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 /**
  * GLB 에셋 캐시. 같은 파일은 한 번만 내려받고, 인스턴스마다 SkeletonUtils.clone 으로
@@ -13,6 +14,7 @@ export interface LoadedAsset {
 
 const cache = new Map<string, Promise<GLTF>>();
 const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder); // 정적 씬 모델(EXT_meshopt_compression)
 
 export function loadAsset(url: string): Promise<GLTF> {
   let p = cache.get(url);

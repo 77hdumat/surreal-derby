@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { makeGrassField, makeTree, applyCloudShadow } from './Vegetation';
 import { grassMaterial, buildMountainRing } from './Environment';
+import { loadTreePrototypes, cloneTree, loadMountains, loadGrandstand, makeLake } from './SceneAssets';
+import type { Water } from 'three/examples/jsm/objects/Water.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -45,6 +47,12 @@ export class RaceTrack {
   private crowdScale: Float32Array = new Float32Array(0);
   private lightTowers: THREE.Mesh[] = [];
   private clouds: THREE.Group[] = [];
+  /** 절차 나무 자리 — 실사 나무 로드 후 교체 */
+  private treeSlots: { group: THREE.Group; height: number }[] = [];
+  private standGroup?: THREE.Group;
+  private crowdGroup?: THREE.Group;
+  private pond?: THREE.Mesh;
+  private lake?: Water;
   sky!: Sky;
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
   static readonly SUN_DIR = new THREE.Vector3(0.35, 1.05, 0.3).normalize();
@@ -388,7 +396,6 @@ export class RaceTrack {
       box.position.set(0, 0.7 + t * 1.4, zBase + 1.75 + t * 3.5);
       stand.add(box);
     }
-    // 뒷벽 + 지붕
     const wall = new THREE.Mesh(
       new THREE.BoxGeometry(len, tiers * 1.4 + 6, 1),
       new THREE.MeshStandardMaterial({ color: 0xcfc6b8, roughness: 0.95, metalness: 0 }),
@@ -402,18 +409,28 @@ export class RaceTrack {
     roof.position.set(0, tiers * 1.4 + 6, zBase + (tiers * 3.5) / 2 + 0.5);
     roof.rotation.x = 0.08;
     stand.add(roof);
-    for (let i = -4; i <= 4; i++) {
-      const col = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.35, 0.35, tiers * 1.4 + 6, 8),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 }),
-      );
-      col.position.set((i * len) / 8.5, (tiers * 1.4 + 6) / 2, zBase - 0.5);
-      stand.add(col);
+    this.standGroup = stand;
+    this.group.add(stand);
+    // 관중 좌석 (절차 스탠드 기준) — 실사 스탠드 로드 후 모듈 좌석으로 다시 만든다
+    const seats: THREE.Vector3[] = [];
+    for (let t = 0; t < tiers; t++) {
+      for (let i = 0; i < 150; i++) {
+        seats.push(new THREE.Vector3(-len / 2 + 2 + Math.random() * (len - 4), 1.4 + t * 1.4, zBase + 0.6 + t * 3.5 + Math.random() * 1.6));
+      }
     }
-    // 관중 — 몸/머리/팔을 분리한 저폴리 사람 실루엣. 멀리서도 상자보다
-    // 자연스럽고, 팔을 서로 다른 박자로 흔들 수 있게 인스턴스를 나눈다.
-    const perTier = 150;
-    const total = tiers * perTier;
+    this.buildCrowd(seats);
+  }
+
+  /** 관중 — 몸/머리/팔을 분리한 저폴리 실루엣 인스턴스. seats = 서 있는 발 위치(월드) */
+  private buildCrowd(seats: THREE.Vector3[]): void {
+    if (this.crowdGroup) {
+      this.group.remove(this.crowdGroup);
+      this.crowdGroup.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+      });
+    }
+    const total = seats.length;
     const crowdGeo = new THREE.CapsuleGeometry(0.17, 0.45, 4, 8);
     crowdGeo.translate(0, 0.42, 0);
     const headGeo = new THREE.SphereGeometry(0.155, 10, 8);
@@ -430,43 +447,81 @@ export class RaceTrack {
     this.crowdBase = new Float32Array(total * 3);
     this.crowdPhase = new Float32Array(total);
     this.crowdScale = new Float32Array(total);
-    let idx = 0;
-    for (let t = 0; t < tiers; t++) {
-      for (let i = 0; i < perTier; i++) {
-        const x = -len / 2 + 2 + Math.random() * (len - 4);
-        const y = 1.4 + t * 1.4;
-        const z = zBase + 0.6 + t * 3.5 + Math.random() * 1.6;
-        this.crowdBase[idx * 3] = x;
-        this.crowdBase[idx * 3 + 1] = y;
-        this.crowdBase[idx * 3 + 2] = z;
-        this.crowdPhase[idx] = Math.random() * Math.PI * 2;
-        this.crowdScale[idx] = 0.85 + Math.random() * 0.3;
-        dummy.position.set(x, y, z);
-        dummy.scale.set(this.crowdScale[idx], this.crowdScale[idx], this.crowdScale[idx]);
-        dummy.updateMatrix();
-        crowd.setMatrixAt(idx, dummy.matrix);
-        color.setHSL(Math.random(), 0.6 + Math.random() * 0.3, 0.45 + Math.random() * 0.25);
-        crowd.setColorAt(idx, color);
-        armL.setColorAt(idx, color);
-        armR.setColorAt(idx, color);
-        skin.setHSL(0.07, 0.28 + Math.random() * 0.22, 0.55 + Math.random() * 0.28);
-        heads.setColorAt(idx, skin);
-        idx++;
-      }
-    }
+    seats.forEach((sp, idx) => {
+      this.crowdBase[idx * 3] = sp.x;
+      this.crowdBase[idx * 3 + 1] = sp.y;
+      this.crowdBase[idx * 3 + 2] = sp.z;
+      this.crowdPhase[idx] = Math.random() * Math.PI * 2;
+      this.crowdScale[idx] = 0.85 + Math.random() * 0.3;
+      dummy.position.copy(sp);
+      dummy.scale.setScalar(this.crowdScale[idx]);
+      dummy.updateMatrix();
+      crowd.setMatrixAt(idx, dummy.matrix);
+      color.setHSL(Math.random(), 0.6 + Math.random() * 0.3, 0.45 + Math.random() * 0.25);
+      crowd.setColorAt(idx, color);
+      armL.setColorAt(idx, color);
+      armR.setColorAt(idx, color);
+      skin.setHSL(0.07, 0.28 + Math.random() * 0.22, 0.55 + Math.random() * 0.28);
+      heads.setColorAt(idx, skin);
+    });
     for (const mesh of [crowd, heads, armL, armR]) {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     }
-    for (const mesh of [crowd, heads, armL, armR]) mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    stand.add(crowd, heads, armL, armR);
+    const g = new THREE.Group();
+    g.add(crowd, heads, armL, armR);
+    this.crowdGroup = g;
     this.crowdMesh = crowd;
     this.crowdHeadMesh = heads;
     this.crowdArmMeshes = [armL, armR];
-    this.group.add(stand);
+    this.group.add(g);
+  }
+
+  /**
+   * 실사 배경 모델 로드 (비동기): 나무·먼 산·관중석·호수.
+   * 실패해도 절차 버전이 남아 있으므로 각각 독립적으로 시도한다.
+   */
+  async loadRealAssets(sunDir: THREE.Vector3): Promise<void> {
+    const tasks: Promise<void>[] = [];
+    tasks.push(
+      loadTreePrototypes().then((protos) => {
+        if (!protos.length) return;
+        for (const slot of this.treeSlots) {
+          const tree = cloneTree(protos[Math.floor(Math.random() * protos.length)], slot.height);
+          slot.group.clear();
+          slot.group.add(tree);
+        }
+      }),
+    );
+    tasks.push(
+      loadMountains().then((m) => {
+        this.group.add(m);
+      }),
+    );
+    tasks.push(
+      loadGrandstand(this.radius + this.width / 2 + 6, this.straight + 40).then((stand) => {
+        if (this.standGroup) this.group.remove(this.standGroup);
+        this.group.add(stand.group);
+        this.buildCrowd(stand.seats);
+      }),
+    );
+    // 호수: 반사 물
+    try {
+      const lake = makeLake(22 * 1.6, 22, sunDir);
+      lake.position.set(-40, 0.04, -8);
+      if (this.pond) this.group.remove(this.pond);
+      this.group.add(lake);
+      this.lake = lake;
+    } catch (e) {
+      console.warn('[env] lake', e);
+    }
+    const results = await Promise.allSettled(tasks);
+    for (const r of results) if (r.status === 'rejected') console.warn('[env] 로드 실패', r.reason);
   }
 
   /** 구름 표류 */
   updateAmbient(dt: number): void {
+    if (this.lake) this.lake.material.uniforms.time.value += dt * 0.6;
     for (const c of this.clouds) {
       c.position.x += (c.userData.speed as number) * dt;
       if (c.position.x > 800) c.position.x = -800;
@@ -671,6 +726,7 @@ export class RaceTrack {
     pond.scale.set(1.6, 1, 1);
     pond.userData.noShadow = true;
     this.group.add(pond);
+    this.pond = pond;
     const inPond = (x: number, z: number) => Math.hypot(x + 40, (z + 8) / 1.6) < 24;
     const finishCam = this.getPoint(this.finishS + 1.5, -this.width / 2 - 11);
     const nearFinishCam = (x: number, z: number) => Math.hypot(x - finishCam.x, z - finishCam.z) < 18;
@@ -685,6 +741,7 @@ export class RaceTrack {
       t.position.set(x, 0, z);
       t.rotation.y = Math.random() * Math.PI * 2;
       trees.add(t);
+      this.treeSlots.push({ group: t, height: 7 + Math.random() * 4 });
     }
     // 트랙 바깥 나무 (관중석 반대편·코너)
     for (let i = 0; i < 90; i++) {
@@ -696,6 +753,7 @@ export class RaceTrack {
       t.position.set(p.x, 0, p.z);
       t.rotation.y = Math.random() * Math.PI * 2;
       trees.add(t);
+      this.treeSlots.push({ group: t, height: 9 + Math.random() * 7 });
     }
     this.group.add(trees);
 
@@ -738,15 +796,6 @@ export class RaceTrack {
     // 하늘·태양·구름은 HDRI(Game.applySky)가 담당한다. 먼 산은 능선 지형 링.
     const mountains = buildMountainRing();
     this.group.add(mountains);
-    // 먼 건물 (관중석 뒤)
-    const bMat = new THREE.MeshStandardMaterial({ color: 0xd9d3cb, roughness: 0.95, metalness: 0 });
-    for (let i = 0; i < 30; i++) {
-      const w = 10 + Math.random() * 20;
-      const h = 15 + Math.random() * 50;
-      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), bMat);
-      b.position.set(-250 + Math.random() * 500, h / 2, 170 + Math.random() * 120);
-      this.group.add(b);
-    }
   }
 
   private buildLightTowers(): void {

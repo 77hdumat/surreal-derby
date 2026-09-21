@@ -67,7 +67,7 @@ export class CameraManager {
     this.track = track;
     this.racers = racers;
     this.engine = engine;
-    this.camera = new THREE.PerspectiveCamera(BASE_FOV, aspect, 0.3, 2000);
+    this.camera = new THREE.PerspectiveCamera(BASE_FOV, aspect, 0.3, 4000);
     this.setMode('START_CAMERA', true);
     this.computeDesired(0);
     this.smoothPos.copy(this.desiredPos);
