@@ -4,7 +4,7 @@ import type { RaceEventType } from '../../events/RaceEvent';
 import type { RacerVisual, VisualContext } from '../RacerVisual';
 import { instantiate, findBone, findClip, dumpSkeleton } from './Assets';
 import { rotateBoneModelSpace, translateBoneModelSpace, BoneSocket, AXIS_X, AXIS_Y, AXIS_Z } from './BoneTools';
-import { RiderRig, JOCKEY_POSE, type RiderAssetConfig, type RiderPose } from './RiderRig';
+import { RiderRig, JOCKEY_POSE, type RiderAssetConfig, type RiderPose, type RiderColors } from './RiderRig';
 
 /**
  * 리깅 GLB 동물 공통 비주얼.
@@ -46,11 +46,18 @@ export type RigBone =
 
 export interface AnimalAssetConfig {
   url: string;
-  scale: number;
+  /** 바인드 포즈 바운딩 박스 높이를 이 값(m)에 맞춰 자동 스케일 */
+  fitHeight: number;
+  /** 모델이 +x 를 보도록 하는 Y 회전 */
   yaw: number;
-  /** 모델 원점 보정 (m) — 발바닥이 y=0, 몸 중심이 x=0 이 되도록 */
+  /** 자동 정렬(발바닥 y=0, 박스 중심 x=0) 뒤 추가 보정 (m) */
   offset?: [number, number, number];
-  clips: { run: string | RegExp; walk?: string | RegExp; idle?: string | RegExp; rear?: string | RegExp };
+  /** run 이 없으면 절차 보행(뼈 IK)으로 다리를 움직인다 */
+  clips: { run?: string | RegExp; walk?: string | RegExp; idle?: string | RegExp; rear?: string | RegExp; sleep?: string | RegExp; fallen?: string | RegExp; eat?: string | RegExp };
+  /** 절차 보행 위상 [FL, FR, BL, BR] */
+  gaitPhases?: [number, number, number, number];
+  /** 뻣뻣한 조형물(트로이 목마): 클립·보행·목 끄덕임 없음, 바인드 포즈 고정 */
+  rigid?: boolean;
   /** run 클립 한 루프당 이동 거리(m) — timeScale 계산 */
   runStride: number;
   walkStride?: number;
@@ -72,10 +79,13 @@ export interface AnimalAssetConfig {
 }
 
 interface Clips {
-  run: THREE.AnimationAction;
+  run?: THREE.AnimationAction;
   walk?: THREE.AnimationAction;
   idle?: THREE.AnimationAction;
   rear?: THREE.AnimationAction;
+  sleep?: THREE.AnimationAction;
+  fallen?: THREE.AnimationAction;
+  eat?: THREE.AnimationAction;
 }
 
 export const RIDER_ASSET: { cfg: RiderAssetConfig | null } = { cfg: null };
@@ -96,6 +106,8 @@ export abstract class AnimalVisual implements RacerVisual {
   protected rider?: RiderRig;
   protected riderSocket?: BoneSocket;
   protected riderPose: RiderPose = JOCKEY_POSE;
+  /** 기수 의상 색 (기본: 레이서 정의의 실크/클로스 색) */
+  protected riderColors?: RiderColors;
   protected riderDropped = false;
   protected fallenRider: { vel: THREE.Vector3; landed: boolean; spin: number } | null = null;
   protected fallback: RacerVisual;
@@ -136,9 +148,39 @@ export abstract class AnimalVisual implements RacerVisual {
     try {
       const asset = await instantiate(this.cfg.url);
       const model = asset.scene;
-      model.scale.setScalar(this.cfg.scale);
       model.rotation.y = this.cfg.yaw;
-      if (this.cfg.offset) model.position.set(...this.cfg.offset);
+      // updateMatrixWorld 여야 SkinnedMesh 가 bindMatrixInverse 를 갱신한다 (updateWorldMatrix 는 건너뜀)
+      model.updateMatrixWorld(true);
+      // 스킨 메쉬는 바인드 포즈를 스키닝한 박스를 써야 실제 크기가 나온다
+      model.traverse((o) => {
+        const sm = o as THREE.SkinnedMesh;
+        if (!sm.isSkinnedMesh) return;
+        sm.skeleton.update(); // 렌더 전에는 boneMatrices 가 0 이라 먼저 갱신
+        sm.computeBoundingBox();
+      });
+      // 자동 정렬: 바운딩 박스 높이 → fitHeight, 발바닥 y=0, 박스 중심 x/z=0
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const scale = this.cfg.fitHeight / Math.max(1e-6, size.y);
+      model.scale.setScalar(scale);
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+      if (this.cfg.offset) model.position.add(new THREE.Vector3(...this.cfg.offset));
+      if (import.meta.env.DEV) {
+        model.traverse((o) => {
+          const sm = o as THREE.SkinnedMesh;
+          if (!sm.isSkinnedMesh) return;
+          sm.geometry.computeBoundingBox();
+          const g = sm.geometry.boundingBox!.getSize(new THREE.Vector3());
+          const b = sm.boundingBox!.getSize(new THREE.Vector3());
+          const ws = new THREE.Vector3();
+          sm.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), ws);
+          let sum = 0;
+          for (let i = 0; i < 16; i++) sum += Math.abs(sm.skeleton.boneMatrices[i]);
+          console.info(`[rig-dbg] ${this.def.id} ${sm.name} geoBox=${g.toArray().map((v) => v.toFixed(2))} skinBox=${b.toArray().map((v) => v.toFixed(2))} worldScale=${ws.toArray().map((v) => v.toFixed(3))} bones=${sm.skeleton.bones.length} bm0=${sum.toFixed(2)} bindMode=${sm.bindMode}`);
+        });
+      }
+      if (import.meta.env.DEV) console.info(`[rig] ${this.def.id} bbox(raw) size=${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)} scale=${scale.toFixed(4)}`);
       if (import.meta.env.DEV && !(window as unknown as { __rigDumped?: Set<string> }).__rigDumped?.has(this.cfg.url)) {
         const w = window as unknown as { __rigDumped?: Set<string> };
         (w.__rigDumped ??= new Set()).add(this.cfg.url);
@@ -153,7 +195,9 @@ export abstract class AnimalVisual implements RacerVisual {
       model.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
-        if (this.cfg.hideMeshes?.some((p) => (typeof p === 'string' ? m.name === p : p.test(m.name)))) m.visible = false;
+        // 노드 이름(Object_NN)뿐 아니라 재질 이름(Saddle, Hair …)으로도 숨김 판정
+        const matName = (Array.isArray(m.material) ? m.material[0] : m.material)?.name ?? '';
+        if (this.cfg.hideMeshes?.some((p) => (typeof p === 'string' ? m.name === p || matName === p : p.test(m.name) || p.test(matName)))) m.visible = false;
         if (this.cfg.tint) {
           const mats = Array.isArray(m.material) ? m.material : [m.material];
           for (const mat of mats) (mat as THREE.MeshStandardMaterial).color?.multiply(new THREE.Color(this.def.bodyColor));
@@ -170,25 +214,39 @@ export abstract class AnimalVisual implements RacerVisual {
       this.body.add(model);
       // 클립
       this.mixer = new THREE.AnimationMixer(model);
-      const run = findClip(asset.animations, this.cfg.clips.run) ?? asset.animations[0];
       const mk = (c: THREE.AnimationClip | null) => (c ? this.mixer!.clipAction(c) : undefined);
+      const C = this.cfg.clips;
       this.clips = {
-        run: this.mixer.clipAction(run),
-        walk: mk(findClip(asset.animations, this.cfg.clips.walk)),
-        idle: mk(findClip(asset.animations, this.cfg.clips.idle)),
-        rear: mk(findClip(asset.animations, this.cfg.clips.rear)),
+        run: mk(findClip(asset.animations, C.run)),
+        walk: mk(findClip(asset.animations, C.walk)),
+        idle: mk(findClip(asset.animations, C.idle)),
+        rear: mk(findClip(asset.animations, C.rear)),
+        sleep: mk(findClip(asset.animations, C.sleep)),
+        fallen: mk(findClip(asset.animations, C.fallen)),
+        eat: mk(findClip(asset.animations, C.eat)),
       };
-      for (const a of [this.clips.run, this.clips.walk, this.clips.idle]) if (a) a.play().setEffectiveWeight(a === this.clips.run ? 1 : 0);
+      for (const a of [this.clips.run, this.clips.walk, this.clips.idle, this.clips.sleep, this.clips.fallen, this.clips.eat]) {
+        if (a) a.play().setEffectiveWeight(a === this.clips.run ? 1 : 0);
+      }
       if (this.clips.rear) {
         this.clips.rear.setLoop(THREE.LoopOnce, 1);
         this.clips.rear.clampWhenFinished = true;
       }
-      this.body.updateWorldMatrix(true, true);
+      // 소켓 기준 자세: 리그의 rest 포즈는 클립 자세와 크게 다를 수 있어(예: 목이 접힘)
+      // idle(없으면 run) 클립 0초 자세를 "중립" 으로 삼아 장식·기수 소켓을 만든다.
+      const neutral = this.clips.idle ?? this.clips.run;
+      if (neutral) {
+        for (const a of [this.clips.run, this.clips.walk, this.clips.idle]) if (a) a.setEffectiveWeight(a === neutral ? 1 : 0);
+        this.mixer.update(0);
+      }
+      this.body.updateMatrixWorld(true);
       this.buildDecor();
       this.buildRider();
       this.buildReins();
       this.buildSleepZ();
       this.buildNumberCloth();
+      if (neutral) for (const a of [this.clips.run, this.clips.walk, this.clips.idle]) if (a) a.setEffectiveWeight(a === this.clips.run ? 1 : 0);
+      this.calibrateGround();
       // 발굽 위치
       for (const k of ['legFL_foot', 'legFR_foot', 'legBL_foot', 'legBR_foot'] as RigBone[]) {
         if (this.bones[k]) this.hoofPoints.push(new THREE.Vector3());
@@ -201,6 +259,43 @@ export abstract class AnimalVisual implements RacerVisual {
       console.warn(`[rig] ${this.def.id} 로드 실패 — 절차 생성 비주얼 유지`, e);
       this.failed = true;
     }
+  }
+
+  /**
+   * 지면 보정: 바인드 포즈 박스로 발바닥을 y=0 에 맞췄지만, 달리기 클립은 루트가 위로 떠 있거나
+   * 발이 더 아래로 내려가는 경우가 있다. run 클립 한 사이클을 샘플링해 가장 낮은 발 높이가 0 이 되게 모델을 내린다.
+   */
+  private calibrateGround(): void {
+    const feet = (['legFL_foot', 'legFR_foot', 'legBL_foot', 'legBR_foot'] as RigBone[]).map((k) => this.bones[k]).filter(Boolean) as THREE.Bone[];
+    if (!feet.length || !this.mixer || !this.model) return;
+    const run = this.clips?.run;
+    const p = new THREE.Vector3();
+    let minY = Infinity;
+    const sample = () => {
+      this.body.updateMatrixWorld(true);
+      for (const f of feet) {
+        f.getWorldPosition(p);
+        this.body.worldToLocal(p);
+        minY = Math.min(minY, p.y);
+      }
+    };
+    if (run) {
+      const dur = run.getClip().duration;
+      for (let i = 0; i < 12; i++) {
+        for (const b of this.allBones) {
+          b.quaternion.copy(b.userData.bindQuat as THREE.Quaternion);
+          b.position.copy(b.userData.bindPos as THREE.Vector3);
+        }
+        this.mixer.setTime((i / 12) * dur);
+        sample();
+      }
+      this.mixer.setTime(0);
+    } else sample();
+    if (!isFinite(minY)) return;
+    // 발굽 뼈는 발굽 바닥보다 조금 위에 있으므로 약간 여유
+    const hoofPad = this.cfg.fitHeight * 0.03;
+    this.model.position.y -= minY - hoofPad;
+    if (import.meta.env.DEV) console.info(`[rig] ${this.def.id} ground calibrate: minFootY=${minY.toFixed(3)} → offset ${(-(minY - hoofPad)).toFixed(3)}`);
   }
 
   /** 서브클래스: 장식(깃털·핸들·담요 등) 소켓 부착 */
@@ -219,7 +314,7 @@ export abstract class AnimalVisual implements RacerVisual {
 
   protected buildRider(): void {
     if (!RIDER_ASSET.cfg) return;
-    this.rider = new RiderRig(RIDER_ASSET.cfg, { silks: this.def.silksColor, sleeves: this.def.clothColor, helmet: this.def.clothColor });
+    this.rider = new RiderRig(RIDER_ASSET.cfg, this.riderColors ?? { silks: this.def.silksColor, sleeves: this.def.clothColor, helmet: this.def.clothColor });
     this.rider.setPose(this.riderPose);
     const s = this.socket(this.cfg.seat.bone, this.rider.group, this.cfg.seat.offset);
     if (s) this.riderSocket = s;
@@ -326,43 +421,57 @@ export abstract class AnimalVisual implements RacerVisual {
       st === 'COLLAPSED' || st === 'ENGINE_FAILURE' || st === 'FALLEN' || st === 'SLEEPING' || st === 'STUBBORN' || st === 'SHOELACE' || st === 'BROKEN' || st === 'PLANTED' || st === 'DANCING';
     const speed = grounded ? 0 : Math.abs(ctx.speed);
     const stride = Math.max(1, this.cfg.runStride);
-    // 클립 블렌딩: idle(<1m/s) → walk(<5) → run
+    // 클립 블렌딩: idle(<1m/s) → walk(<5) → run, 상태 클립(잠·넘어짐·풀뜯기)은 해당 상태에서 우선
     const wRun = THREE.MathUtils.clamp((speed - 3) / 4, 0, 1);
     const wWalk = this.clips.walk ? THREE.MathUtils.clamp(speed / 2, 0, 1) * (1 - wRun) : 0;
     const wIdle = this.clips.idle ? 1 - Math.max(wRun, wWalk) : 0;
+    const wSleep = this.clips.sleep && st === 'SLEEPING' ? 1 : 0;
+    const wFallen = this.clips.fallen && st === 'FALLEN' ? 1 : 0;
+    const wEat = this.clips.eat && st === 'STUBBORN' ? 1 : 0;
+    const special = Math.max(wSleep, wFallen, wEat);
     const k = 1 - Math.exp(-8 * dt);
     const w = (a: THREE.AnimationAction | undefined, target: number) => {
       if (!a) return;
       a.setEffectiveWeight(THREE.MathUtils.lerp(a.getEffectiveWeight(), target, k));
     };
-    w(this.clips.run, wRun || (!this.clips.walk && !this.clips.idle ? 1 : 0));
-    w(this.clips.walk, wWalk);
-    w(this.clips.idle, wIdle);
+    w(this.clips.run, (wRun || (!this.clips.walk && !this.clips.idle ? 1 : 0)) * (1 - special));
+    w(this.clips.walk, wWalk * (1 - special));
+    w(this.clips.idle, wIdle * (1 - special));
+    w(this.clips.sleep, wSleep);
+    w(this.clips.fallen, wFallen);
+    w(this.clips.eat, wEat);
     // 보폭 주파수: 클립 1루프 = runStride m
     const hz = speed / stride;
-    this.clips.run.timeScale = speed < 0.3 ? 0 : (ctx.speed < 0 ? -1 : 1) * hz;
+    if (this.clips.run) this.clips.run.timeScale = speed < 0.3 ? 0 : (ctx.speed < 0 ? -1 : 1) * hz;
     if (this.clips.walk) this.clips.walk.timeScale = speed < 0.3 ? 0.001 : speed / (this.cfg.walkStride ?? stride * 0.45);
     for (const b of this.allBones) {
       b.quaternion.copy(b.userData.bindQuat as THREE.Quaternion);
       b.position.copy(b.userData.bindPos as THREE.Vector3);
     }
     this.mixer.update(dt);
-    this.stridePhase = (this.clips.run.time / this.clips.run.getClip().duration) % 1;
+    if (this.clips.run) this.stridePhase = (this.clips.run.time / this.clips.run.getClip().duration) % 1;
+    else this.stridePhase = (this.stridePhase + (ctx.speed < 0 ? -hz : hz) * dt + 1) % 1;
     const ph = this.stridePhase;
-    const animSpeed = speedNorm * wRun;
+    const animSpeed = this.cfg.rigid ? 0 : this.clips.run ? speedNorm * wRun : Math.min(1, speed / 6);
+    // 절차 보행 (run 클립이 없는 에셋): 다리 뼈를 모델 공간에서 흔든다
+    const procGait = !this.cfg.rigid && !this.clips.run && !grounded && speed > 0.3;
+    // 잠·넘어짐 클립이 있으면 몸통 눕히기(downPose)는 생략하고 클립에 맡긴다
+    const clipHandlesDown = (st === 'SLEEPING' && !!this.clips.sleep) || (st === 'FALLEN' && !!this.clips.fallen);
 
     // 몸통 그룹: 코너 기울기·충격·넘어짐 (뼈가 아니라 body 로)
-    const downTarget = st === 'FALLEN' || st === 'SLEEPING' ? 1 : 0;
+    const downTarget = (st === 'FALLEN' || st === 'SLEEPING') && !clipHandlesDown ? 1 : 0;
     this.downPose = THREE.MathUtils.lerp(this.downPose, downTarget, 1 - Math.exp(-(downTarget ? 7 : 3) * dt));
-    const grazeTarget = st === 'STUBBORN' ? 1 : 0;
+    const grazeTarget = st === 'STUBBORN' && !this.clips.eat ? 1 : 0;
     this.grazePose = THREE.MathUtils.lerp(this.grazePose, grazeTarget, 1 - Math.exp(-4 * dt));
+    // 갤럽 바운스 (절차 보행일 때만 — 클립은 자체 바운스 포함)
+    const bounce = procGait ? Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.05))) * 0.06 * animSpeed : 0;
     const lean = -ctx.cornerWeight * THREE.MathUtils.clamp((ctx.speed * ctx.speed) / (60 * 9.8), 0, 1) * 0.3;
     const roll = lean + this.impactStrength * this.impactSide * Math.sin(this.impactAge * 12) * Math.exp(-this.impactAge * 7) * 0.13;
     const pitch = -THREE.MathUtils.clamp(ctx.accel, -8, 8) * 0.003 - this.stumble * 0.12;
     const dp = this.downPose;
     const reverse = st === 'REVERSING' ? 1 : 0;
     this.body.rotation.set(roll * (1 - dp) + dp * 1.5, Math.sin(time * 5.3 + this.seed) * 0.01 * animSpeed, pitch * (1 - dp) + reverse * 0.18);
-    this.body.position.set(0, dp * 0.15 + Math.sin(time * 2.2) * 0.02 * dp, 0);
+    this.body.position.set(0, dp * 0.15 + Math.sin(time * 2.2) * 0.02 * dp + bounce, 0);
     if (st === 'LAUNCHED') {
       const t = THREE.MathUtils.clamp(1 - ctx.stateTimer / 2.6, 0, 1);
       this.body.position.y = 4 * t * (1 - t) * 9;
@@ -382,7 +491,8 @@ export abstract class AnimalVisual implements RacerVisual {
 
     // ---- 뼈 additive 레이어 (클립 위에 얹음). 부모→자식 순서.
     this.body.updateWorldMatrix(true, true);
-    const bob = this.cfg.neckBob ?? 0.05;
+    if (procGait) this.proceduralGait(ph, animSpeed);
+    const bob = this.cfg.rigid ? 0 : (this.cfg.neckBob ?? 0.05);
     // 목: 갤럽에 맞춰 끄덕임 + 풀 뜯기 때 아래로
     const neckDown = this.grazePose * 0.55 + (Math.cos(Math.PI * 2 * (ph - 0.35)) * bob * animSpeed);
     const neckChain: RigBone[] = ['neck0', 'neck1', 'neck2'];
@@ -435,6 +545,34 @@ export abstract class AnimalVisual implements RacerVisual {
       b.getWorldPosition(p);
       this.root.worldToLocal(p);
     }
+  }
+
+  /**
+   * 절차 보행: 갤럽 위상에 따라 상완/대퇴(스윙)·전완/경골(접힘)·발(굴곡)을 모델 공간 Z축으로 회전.
+   * 앞다리는 무릎이 뒤로 접히고(뒤로 회전), 뒷다리는 비절이 앞으로 접힌다.
+   */
+  protected proceduralGait(ph: number, amount: number): void {
+    const phases = this.cfg.gaitPhases ?? [0.5, 0.65, 0.0, 0.15];
+    const legs: [RigBone, RigBone, RigBone, number][] = [
+      ['legFL_upper', 'legFL_lower', 'legFL_foot', phases[0]],
+      ['legFR_upper', 'legFR_lower', 'legFR_foot', phases[1]],
+      ['legBL_upper', 'legBL_lower', 'legBL_foot', phases[2]],
+      ['legBR_upper', 'legBR_lower', 'legBR_foot', phases[3]],
+    ];
+    legs.forEach(([up, lo, ft, phase], i) => {
+      const front = i < 2;
+      const u = ((ph - phase) % 1 + 1) % 1;
+      // stance 40%: 앞→뒤 직선, swing 60%: 뒤→앞 (무릎 접고)
+      const stance = u < 0.4;
+      const t = stance ? u / 0.4 : (u - 0.4) / 0.6;
+      const ease = t * t * (3 - 2 * t);
+      const swing = stance ? 0.5 - t : -0.5 + ease; // -0.5(뒤) … +0.5(앞)
+      const fold = stance ? 0 : Math.sin(Math.PI * Math.min(1, t / 0.8)) ** 1.3;
+      const a = 0.55 * amount;
+      this.rot(up, AXIS_Z, swing * 2 * a + (front ? 0.05 : -0.05) * amount);
+      this.rot(lo, AXIS_Z, (front ? -1 : 1) * fold * 1.1 * amount - (stance ? 0 : 0));
+      this.rot(ft, AXIS_Z, (front ? -0.3 : 0.25) * fold * amount + (stance ? -0.15 * (1 - t) * amount : 0));
+    });
   }
 
   private updateReins(): void {

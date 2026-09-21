@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { instantiate, findBone } from './Assets';
-import { rotateBoneModelSpace, BoneSocket, AXIS_X, AXIS_Y, AXIS_Z } from './BoneTools';
+import { rotateBoneModelSpace, aimBoneModelSpace, BoneSocket, AXIS_Y, AXIS_Z } from './BoneTools';
 
 /**
  * 리깅된 인체 GLB 로 만든 기수.
@@ -10,10 +10,12 @@ import { rotateBoneModelSpace, BoneSocket, AXIS_X, AXIS_Y, AXIS_Z } from './Bone
  */
 export interface RiderAssetConfig {
   url: string;
-  /** 모델 단위 → m */
-  scale: number;
+  /** 바인드 포즈 키(m) — 바운딩 박스 높이를 이 값에 맞춰 스케일 */
+  fitHeight: number;
   /** 모델이 +x 를 보도록 하는 Y 회전 */
   yaw: number;
+  /** 숨길 메쉬 (LOD 중복 등) */
+  hideMeshes?: (string | RegExp)[];
   bones: {
     hips: string | RegExp;
     spine: (string | RegExp)[];
@@ -38,10 +40,18 @@ export interface RiderAssetConfig {
   helmetOffset?: [number, number, number];
 }
 
+export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'lie' | 'flail';
+
 export interface RiderColors {
   silks: number;
   sleeves: number;
   helmet: number;
+  /** 승마바지 (기본 흰색) */
+  breeches?: number;
+  /** 부츠 (기본 검정) */
+  boots?: number;
+  /** 헬멧 없이 맨머리 */
+  bareHead?: boolean;
 }
 
 /** 자세 파라미터 — 모든 각도는 라디안, 모델 공간(+x 전방, +y 위, +z 오른쪽) 기준 */
@@ -65,25 +75,25 @@ export interface RiderPose {
 }
 
 export const JOCKEY_POSE: RiderPose = {
-  lean: 0.95,
-  thigh: 1.55,
-  knee: 2.05,
-  armForward: 0.85,
-  armDown: 1.15,
-  elbow: 1.35,
-  headUp: 0.9,
+  lean: 0.8,
+  thigh: 1.45,
+  knee: 2.0,
+  armForward: 0.9,
+  armDown: 0.12,
+  elbow: 1.2,
+  headUp: 0.55,
   thighSpread: 0.28,
 };
 
 /** 초퍼 바이크 자세: 뒤로 젖히고 팔을 위로 뻗어 에이프행어 핸들 */
 export const CHOPPER_POSE: RiderPose = {
-  lean: -0.35,
-  thigh: 1.2,
-  knee: 1.3,
-  armForward: 1.35,
-  armDown: 0.55,
-  elbow: 0.35,
-  headUp: -0.1,
+  lean: 0.12,
+  thigh: 1.15,
+  knee: 1.55,
+  armForward: 1.75,
+  armDown: 0.12,
+  elbow: 0.25,
+  headUp: 0.15,
   thighSpread: 0.35,
 };
 
@@ -109,21 +119,34 @@ export class RiderRig {
   private uniforms = {
     silks: { value: new THREE.Color() },
     sleeves: { value: new THREE.Color() },
+    breeches: { value: new THREE.Color(0xeee9dd) },
+    boots: { value: new THREE.Color(0x0d0a09) },
     bands: { value: new THREE.Vector4(0.13, 0.5, 0.87, 0.42) },
     bodyMin: { value: 0 },
     bodyHeight: { value: 1 },
+    upAxis: { value: new THREE.Vector3(0, 1, 0) },
+    sideAxis: { value: new THREE.Vector3(1, 0, 0) },
+    sideCenter: { value: 0 },
   };
   private helmetMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.32 });
+  private bareHead = false;
   private pose: RiderPose = JOCKEY_POSE;
   /** 손 위치 (그룹 로컬) — 고삐 끝점 */
   readonly handL = new THREE.Vector3(0.55, 0.35, -0.2);
   readonly handR = new THREE.Vector3(0.55, 0.35, 0.2);
   readonly headTop = new THREE.Vector3(0.3, 0.9, 0);
+  /** 발 위치 (그룹 로컬) — 먼지 파티클 */
+  readonly footL = new THREE.Vector3(0, 0, -0.15);
+  readonly footR = new THREE.Vector3(0, 0, 0.15);
   loaded = false;
   private tmpV = new THREE.Vector3();
+  private dirTmp = new THREE.Vector3();
   private flail = 0;
 
-  constructor(readonly cfg: RiderAssetConfig, colors: RiderColors) {
+  /**
+   * @param pivot 그룹 원점 기준: 'hips' = 골반(안장에 앉히기), 'feet' = 발바닥(땅에 세우기)
+   */
+  constructor(readonly cfg: RiderAssetConfig, colors: RiderColors, readonly pivot: 'hips' | 'feet' = 'hips') {
     this.group.name = 'rider';
     this.setColors(colors);
     void this.load();
@@ -132,6 +155,9 @@ export class RiderRig {
   setColors(colors: RiderColors): void {
     this.uniforms.silks.value.set(colors.silks);
     this.uniforms.sleeves.value.set(colors.sleeves);
+    if (colors.breeches !== undefined) this.uniforms.breeches.value.set(colors.breeches);
+    if (colors.boots !== undefined) this.uniforms.boots.value.set(colors.boots);
+    this.bareHead = !!colors.bareHead;
     this.helmetMat.color.set(colors.helmet);
   }
 
@@ -142,13 +168,53 @@ export class RiderRig {
   private async load(): Promise<void> {
     const asset = await instantiate(this.cfg.url);
     const model = asset.scene;
-    model.scale.setScalar(this.cfg.scale);
     model.rotation.y = this.cfg.yaw;
-    // 바인드 포즈 높이 범위 (셰이더 밴드 기준)
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && this.cfg.hideMeshes?.some((p) => (typeof p === 'string' ? m.name === p : p.test(m.name)))) m.visible = false;
+    });
+    model.updateMatrixWorld(true);
+    model.traverse((o) => {
+      const sm = o as THREE.SkinnedMesh;
+        if (!sm.isSkinnedMesh) return;
+        sm.skeleton.update(); // 렌더 전에는 boneMatrices 가 0 이라 먼저 갱신
+        sm.computeBoundingBox();
+    });
     const box = new THREE.Box3().setFromObject(model);
-    const inv = 1 / this.cfg.scale;
-    this.uniforms.bodyMin.value = box.min.y * inv;
-    this.uniforms.bodyHeight.value = (box.max.y - box.min.y) * inv;
+    const size = box.getSize(new THREE.Vector3());
+    const scale = this.cfg.fitHeight / Math.max(1e-6, size.y);
+    model.scale.setScalar(scale);
+    const center = box.getCenter(new THREE.Vector3());
+    model.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+    if (import.meta.env.DEV) console.info(`[rig] rider bbox(raw) size=${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)} scale=${scale.toFixed(4)}`);
+    // 셰이더 밴드는 지오메트리(바인드 포즈, T 포즈) 좌표 기준. 축 방향은 뼈의 바인드 위치로 알아낸다:
+    // 지오메트리 공간 위치 = bindMatrix^-1 · boneInverse^-1 · 원점
+    let skinned: THREE.SkinnedMesh | null = null;
+    model.traverse((o) => {
+      const sm = o as THREE.SkinnedMesh;
+      if (sm.isSkinnedMesh && sm.visible && !skinned) skinned = sm;
+    });
+    const geoPos = (name: string): THREE.Vector3 => {
+      const sm = skinned!;
+      const idx = sm.skeleton.bones.findIndex((b) => b.name === name);
+      const m = new THREE.Matrix4().copy(sm.skeleton.boneInverses[idx]).invert().premultiply(new THREE.Matrix4().copy(sm.bindMatrix).invert());
+      return new THREE.Vector3().setFromMatrixPosition(m);
+    };
+    const c0 = this.cfg.bones;
+    const nameOf = (pat: string | RegExp) => (typeof pat === 'string' ? pat : findBone(model, pat)!.name);
+    const gHips = geoPos(nameOf(c0.hips));
+    const gHead = geoPos(nameOf(c0.head));
+    const gL = geoPos(nameOf(c0.upperArmL));
+    const gR = geoPos(nameOf(c0.upperArmR));
+    const up = gHead.clone().sub(gHips).normalize();
+    const side = gL.clone().sub(gR).normalize();
+    // 골반 = 0.53, 머리 뼈 = 0.93 이 되도록 정규화
+    const H = (gHead.dot(up) - gHips.dot(up)) / 0.4;
+    this.uniforms.upAxis.value.copy(up);
+    this.uniforms.sideAxis.value.copy(side);
+    this.uniforms.bodyMin.value = gHips.dot(up) - 0.53 * H;
+    this.uniforms.bodyHeight.value = H;
+    this.uniforms.sideCenter.value = gHips.dot(side);
     const b = this.cfg.bands ?? { boot: 0.13, breech: 0.5, collar: 0.87, hand: 0.42 };
     this.uniforms.bands.value.set(b.boot, b.breech, b.collar, b.hand);
     model.traverse((o) => {
@@ -176,6 +242,13 @@ export class RiderRig {
       shin: [req(c.shinL), req(c.shinR)],
       foot: [opt(c.footL), opt(c.footR)],
     };
+    if (this.pivot === 'hips') {
+      // 골반 뼈가 그룹 원점에 오도록 내린다 (안장 위치 = 골반)
+      model.updateMatrixWorld(true);
+      const hip = new THREE.Vector3();
+      this.bones.hips.getWorldPosition(hip);
+      model.position.y -= hip.y;
+    }
     this.model = model;
     this.group.add(model);
     this.buildHelmet();
@@ -196,28 +269,33 @@ export class RiderRig {
 varying vec3 vBind;
 uniform vec3 silks;
 uniform vec3 sleeves;
+uniform vec3 breeches;
+uniform vec3 boots;
 uniform vec4 bands;
 uniform float bodyMin;
-uniform float bodyHeight;`,
+uniform float bodyHeight;
+uniform vec3 upAxis;
+uniform vec3 sideAxis;
+uniform float sideCenter;`,
         )
         .replace(
           '#include <map_fragment>',
           `#include <map_fragment>
 {
-  float t = (vBind.y - bodyMin) / bodyHeight;
+  float t = (dot(vBind, upAxis) - bodyMin) / bodyHeight;
   float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
   float shade = 0.55 + 0.9 * lum;
-  float lateral = abs(vBind.x) / bodyHeight;
+  float lateral = abs(dot(vBind, sideAxis) - sideCenter) / bodyHeight;
   vec3 c = diffuseColor.rgb;
   float r = 0.6;
-  if (t < bands.x) { c = vec3(0.05, 0.04, 0.035) * shade; r = 0.3; }
-  else if (t < bands.y) { c = vec3(0.93, 0.91, 0.86) * shade; r = 0.75; }
-  else if (t < bands.z) {
-    // T 포즈: 손은 몸통에서 멀리 (lateral 큼) → 장갑, 팔은 소매색, 몸통은 실크색
+  if (t > 0.62 && t < bands.z && lateral > 0.13) {
+    // T 포즈: 어깨 바깥 = 팔 (손목 너머는 장갑, 그 안쪽은 소매)
     if (lateral > bands.w) { c = vec3(0.12, 0.09, 0.08) * shade; r = 0.45; }
-    else if (lateral > 0.14) { c = sleeves * shade; r = 0.7; }
-    else { c = silks * shade; r = 0.7; }
+    else { c = sleeves * shade; r = 0.7; }
   }
+  else if (t < bands.x) { c = boots * shade; r = 0.3; }
+  else if (t < bands.y) { c = breeches * shade; r = 0.75; }
+  else if (t < bands.z) { c = silks * shade; r = 0.7; }
   diffuseColor.rgb = c;
   vBandRough = r;
 }`,
@@ -229,10 +307,10 @@ uniform float bodyHeight;`,
   }
 
   private buildHelmet(): void {
-    if (!this.bones) return;
+    if (!this.bones || this.bareHead) return;
     const g = new THREE.Group();
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.128, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), this.helmetMat);
-    cap.scale.set(1.05, 0.9, 1);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.118, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), this.helmetMat);
+    cap.scale.set(1.08, 0.92, 1);
     cap.castShadow = true;
     g.add(cap);
     const peak = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.012, 20, 1, false, -0.7, 1.4), this.helmetMat);
@@ -263,57 +341,128 @@ uniform float bodyHeight;`,
    * @param energy 0..1 속도 비례 팔 펌핑·상하 움직임
    */
   update(ph: number, energy: number, time: number, riding: boolean): void {
-    if (!this.bones || !this.model) return;
+    this.animate({ mode: riding ? 'ride' : 'flail', ph, energy, time });
+  }
+
+  /**
+   * 인체 동작 모드.
+   *  ride  기승(2점 자세)      run   두 발 달리기        crawl 네발 기기(기수 태움)
+   *  lift  탈을 머리 위로 들고 달리기   push  앞으로 밀며 달리기   lie   널브러짐   flail 낙마 허우적
+   * 반환값: 골반 높이 보정(m) — 호출자가 group.position.y 에 더한다.
+   */
+  animate(o: { mode: HumanMode; ph: number; energy: number; time: number; lean?: number }): number {
+    if (!this.bones || !this.model) return 0;
     const B = this.bones;
     const root = this.group;
-    // 바인드 포즈로 리셋
-    this.model.traverse((o) => {
-      if ((o as THREE.Bone).isBone && o.userData.bindQuat) o.quaternion.copy(o.userData.bindQuat as THREE.Quaternion);
-      else if ((o as THREE.Bone).isBone) o.userData.bindQuat = o.quaternion.clone();
+    this.model.traverse((b) => {
+      if ((b as THREE.Bone).isBone && b.userData.bindQuat) b.quaternion.copy(b.userData.bindQuat as THREE.Quaternion);
+      else if ((b as THREE.Bone).isBone) b.userData.bindQuat = b.quaternion.clone();
     });
     root.updateWorldMatrix(true, true);
-    const P = this.pose;
-    if (!riding) {
-      // 낙마: 사지를 휘저음
-      this.flail += 0.016;
-      const f = this.flail;
-      rotateBoneModelSpace(B.spine[0], root, AXIS_Z, 0.4 + Math.sin(f * 9) * 0.3);
-      for (let s = 0; s < 2; s++) {
-        const sgn = s === 0 ? -1 : 1;
-        rotateBoneModelSpace(B.upperArm[s], root, AXIS_X, sgn * -0.6);
-        rotateBoneModelSpace(B.upperArm[s], root, AXIS_Z, -0.9 + Math.sin(f * 11 + s) * 0.8);
-        rotateBoneModelSpace(B.foreArm[s], root, AXIS_Z, -0.8);
-        rotateBoneModelSpace(B.thigh[s], root, AXIS_Z, -0.6 + Math.sin(f * 8 + s * 2) * 0.7);
-        rotateBoneModelSpace(B.shin[s], root, AXIS_Z, 0.9);
+    const { ph, energy, time } = o;
+    const R = (bone: THREE.Bone | null, axis: THREE.Vector3, angle: number) => bone && rotateBoneModelSpace(bone, root, axis, angle);
+    const A = (bone: THREE.Bone | null, tip: THREE.Bone | null, dir: THREE.Vector3) => bone && tip && aimBoneModelSpace(bone, tip, root, dir);
+    const v = this.dirTmp;
+    // 방향 헬퍼 (모델 공간: +x 전방, +y 위, +z 오른쪽). a = 수직 아래에서 앞으로 잰 각
+    const down = (a: number, z = 0) => v.set(Math.sin(a), -Math.cos(a), z);
+    const up = (a: number, z = 0) => v.set(Math.sin(a), Math.cos(a), z);
+    // 몸통: 골반→머리 방향. 첫 척추 뼈로 대부분 굽히고 나머지는 살짝 (허리에서 꺾이지 않게)
+    const torso = (lean: number) => {
+      // 척추 뼈 사이 오프셋이 몸통 축과 어긋나 있어, 척추 밑동→머리 벡터 하나로 조준한다
+      A(B.spine[0], B.head, up(lean));
+    };
+    // 다리: 허벅지 각(a, 앞+), 무릎 접힘(k) → 정강이는 허벅지에서 k 만큼 뒤로
+    const leg = (s: number, a: number, k: number, spread = 0.05, footFlex = 0) => {
+      const sgn = s === 0 ? -1 : 1;
+      A(B.thigh[s], B.shin[s], down(a, sgn * spread));
+      A(B.shin[s], B.foot[s] ?? B.shin[s], down(a - k, sgn * spread));
+      if (B.foot[s]) R(B.foot[s], AXIS_Z, footFlex);
+    };
+    // 팔: 상완 각(a, 수직 아래 기준 앞+), 팔꿈치 굽힘(e) → 전완은 상완에서 e 만큼 앞으로
+    const arm = (s: number, a: number, e: number, spread = 0.12) => {
+      const sgn = s === 0 ? -1 : 1;
+      A(B.upperArm[s], B.foreArm[s], down(a, sgn * spread));
+      A(B.foreArm[s], B.hand[s] ?? B.foreArm[s], down(a + e, sgn * spread * 0.6));
+    };
+    let lift = 0;
+    switch (o.mode) {
+      case 'flail': {
+        this.flail += 0.016;
+        const f = this.flail;
+        torso(0.4 + Math.sin(f * 9) * 0.3);
+        for (let s = 0; s < 2; s++) {
+          arm(s, -0.9 + Math.sin(f * 11 + s) * 0.8, 0.8, 0.6);
+          leg(s, -0.6 + Math.sin(f * 8 + s * 2) * 0.7, 0.9, 0.2);
+        }
+        break;
       }
-      this.updateSockets();
-      return;
-    }
-    const pump = Math.sin(Math.PI * 2 * ph) * energy;
-    const bob = Math.cos(Math.PI * 2 * (ph - 0.15)) * energy;
-    // 몸통: 앞으로 숙이고(−Z 회전 = 코가 아래) 보폭에 맞춰 살짝 출렁
-    const lean = P.lean + bob * 0.06;
-    B.spine.forEach((s) => rotateBoneModelSpace(s, root, AXIS_Z, -lean / B.spine.length));
-    // 고개는 앞을 보도록 되돌림 + 좌우 살짝
-    if (B.neck) rotateBoneModelSpace(B.neck, root, AXIS_Z, P.headUp * 0.4);
-    rotateBoneModelSpace(B.head, root, AXIS_Z, P.headUp * 0.6 - bob * 0.04);
-    rotateBoneModelSpace(B.head, root, AXIS_Y, Math.sin(time * 0.7) * 0.08);
-    for (let s = 0; s < 2; s++) {
-      const sgn = s === 0 ? -1 : 1; // L = -z
-      // 다리: 허벅지 앞으로 올리고 벌림, 무릎 접어 종아리 뒤로, 발끝은 등자에
-      rotateBoneModelSpace(B.thigh[s], root, AXIS_Z, P.thigh);
-      rotateBoneModelSpace(B.thigh[s], root, AXIS_X, -sgn * P.thighSpread);
-      rotateBoneModelSpace(B.shin[s], root, AXIS_Z, -P.knee);
-      if (B.foot[s]) rotateBoneModelSpace(B.foot[s]!, root, AXIS_Z, 0.35);
-      // 팔: T 포즈에서 내리고(X축), 앞으로 뻗고(Z축), 팔꿈치 접기 + 고삐 펌핑
-      const pumpArm = pump * 0.12 * (s === 0 ? 1 : -1) + Math.sin(time * 1.3 + s) * 0.03;
-      rotateBoneModelSpace(B.upperArm[s], root, AXIS_X, sgn * P.armDown);
-      rotateBoneModelSpace(B.upperArm[s], root, AXIS_Z, P.armForward + pumpArm);
-      rotateBoneModelSpace(B.foreArm[s], root, AXIS_Z, P.elbow - pumpArm * 0.5);
-      if (B.hand[s]) rotateBoneModelSpace(B.hand[s]!, root, AXIS_Z, 0.25);
+      case 'lie': {
+        torso(0);
+        for (let s = 0; s < 2; s++) {
+          arm(s, 0.3 + Math.sin(time * 1.7 + s) * 0.05, 0.2, 0.9);
+          leg(s, 0.25 + Math.sin(time * 1.3 + s * 2) * 0.06, 0.5, 0.25);
+        }
+        R(B.head, AXIS_Y, Math.sin(time * 0.9) * 0.3);
+        break;
+      }
+      case 'ride': {
+        const P = this.pose;
+        const pump = Math.sin(Math.PI * 2 * ph) * energy;
+        const bob = Math.cos(Math.PI * 2 * (ph - 0.15)) * energy;
+        torso(P.lean + bob * 0.06);
+        if (B.neck) R(B.neck, AXIS_Z, P.headUp * 0.4);
+        R(B.head, AXIS_Z, P.headUp * 0.6 - bob * 0.04);
+        R(B.head, AXIS_Y, Math.sin(time * 0.7) * 0.08);
+        for (let s = 0; s < 2; s++) {
+          leg(s, P.thigh, P.knee, P.thighSpread, 0.35);
+          const pumpArm = pump * 0.12 * (s === 0 ? 1 : -1) + Math.sin(time * 1.3 + s) * 0.03;
+          arm(s, P.armForward + pumpArm, P.elbow - pumpArm * 0.5, P.armDown);
+          R(B.hand[s], AXIS_Z, 0.25);
+        }
+        break;
+      }
+      case 'run':
+      case 'lift':
+      case 'push': {
+        // 두 발 달리기: 한 보폭 = 두 걸음. 다리는 반 보폭 어긋나고 팔은 같은 쪽 다리와 반대.
+        const e = Math.max(0.15, energy);
+        const lean = o.lean ?? (o.mode === 'push' ? 0.55 : o.mode === 'lift' ? 0.12 : 0.3);
+        torso(lean);
+        R(B.head, AXIS_Z, lean * 0.7);
+        lift = Math.abs(Math.sin(Math.PI * 2 * ph)) * 0.05 * e;
+        for (let s = 0; s < 2; s++) {
+          const p = ph + s * 0.5;
+          const thigh = 0.75 * e * Math.cos(Math.PI * 2 * p);
+          const kneeFold = 0.2 + 1.25 * e * Math.max(0, Math.sin(Math.PI * 2 * p + 0.5));
+          leg(s, thigh, kneeFold, 0.06, 0.35 * Math.max(0, Math.sin(Math.PI * 2 * p + 0.5)) * e);
+          if (o.mode === 'run') arm(s, 0.2 - 0.8 * e * Math.cos(Math.PI * 2 * p), 1.35, 0.15);
+          else if (o.mode === 'lift') arm(s, 2.9 + Math.sin(time * 11 + s) * 0.05, 0.15, 0.25); // 머리 위로
+          else arm(s, 1.55 + Math.sin(time * 10 + s) * 0.06 * e, 0.3, 0.1); // 앞으로 수평
+        }
+        break;
+      }
+      case 'crawl': {
+        // 베어 크롤: 상체를 거의 수평으로 눕히고 팔로 땅을 짚는다. 대각선 교차 (왼팔+오른다리).
+        const e = Math.max(0.1, energy);
+        torso(1.35);
+        R(B.head, AXIS_Z, 1.1 + Math.sin(time * 5) * 0.04 * e);
+        lift = Math.abs(Math.sin(Math.PI * 2 * ph)) * 0.04 * e;
+        for (let s = 0; s < 2; s++) {
+          const pl = ph + s * 0.5;
+          const pa = ph + (1 - s) * 0.5;
+          const legSwing = 0.45 * e * Math.cos(Math.PI * 2 * pl);
+          const legFold = 1.2 + 0.5 * e * Math.max(0, Math.sin(Math.PI * 2 * pl + 0.4));
+          leg(s, 0.85 + legSwing, legFold, 0.12, 0.5);
+          // 팔: 어깨에서 거의 수직으로 땅을 향해, 스윙 시 앞뒤로
+          const armSwing = 0.45 * e * Math.cos(Math.PI * 2 * pa);
+          const armFold = 0.15 + 0.6 * e * Math.max(0, Math.sin(Math.PI * 2 * pa + 0.4));
+          arm(s, 0.25 + armSwing, -armFold, 0.1);
+          R(B.hand[s], AXIS_Z, 0.6);
+        }
+        break;
+      }
     }
     root.updateWorldMatrix(true, true);
-    // 손·머리 위치 갱신 (고삐·카메라용)
     const hl = B.hand[0] ?? B.foreArm[0];
     const hr = B.hand[1] ?? B.foreArm[1];
     hl.getWorldPosition(this.tmpV);
@@ -322,7 +471,14 @@ uniform float bodyHeight;`,
     this.handR.copy(root.worldToLocal(this.tmpV));
     B.head.getWorldPosition(this.tmpV);
     this.headTop.copy(root.worldToLocal(this.tmpV));
+    const fl = B.foot[0] ?? B.shin[0];
+    const fr = B.foot[1] ?? B.shin[1];
+    fl.getWorldPosition(this.tmpV);
+    this.footL.copy(root.worldToLocal(this.tmpV));
+    fr.getWorldPosition(this.tmpV);
+    this.footR.copy(root.worldToLocal(this.tmpV));
     this.updateSockets();
+    return lift;
   }
 
   private updateSockets(): void {

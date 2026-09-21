@@ -204,6 +204,7 @@ export class UIManager {
     const h = this.previewVisual.height;
     this.previewCamera.position.set(6.5, h * 0.9 + 1, 6.5);
     this.previewCamera.lookAt(0, h * 0.5, 0);
+    if (import.meta.env.DEV) (window as unknown as { __preview?: unknown }).__preview = { camera: this.previewCamera, visual: this.previewVisual, ctx: this.previewCtx };
   }
 
   updatePreview(dt: number): void {
@@ -211,7 +212,7 @@ export class UIManager {
     this.previewCtx.dt = dt;
     this.previewCtx.time += dt;
     this.previewVisual.update(this.previewCtx);
-    this.previewVisual.root.rotation.y += dt * 0.6;
+    if (!(window as unknown as { __previewFreeze?: boolean }).__previewFreeze) this.previewVisual.root.rotation.y += dt * 0.6;
     this.previewRenderer.render(this.previewScene, this.previewCamera);
   }
 

@@ -32,11 +32,16 @@ export function rotateBoneModelSpace(bone: THREE.Object3D, root: THREE.Object3D,
   bone.quaternion.premultiply(inv);
 }
 
+const sTmp = new THREE.Vector3();
+const sRoot = new THREE.Vector3();
 export function translateBoneModelSpace(bone: THREE.Object3D, root: THREE.Object3D, delta: THREE.Vector3): void {
   if (!bone.parent) return;
   const pr = parentToRoot(bone, root, qTmp);
-  // 부모 스케일 무시 (리그 스케일은 root 에만 적용한다는 가정)
-  vTmp.copy(delta).applyQuaternion(qParent.copy(pr).invert());
+  // 모델(root) 공간 미터 → 부모 로컬 단위: 부모/루트 스케일 비로 나눈다 (균등 스케일 가정)
+  bone.parent.getWorldScale(sTmp);
+  root.getWorldScale(sRoot);
+  const k = sRoot.x / Math.max(1e-6, sTmp.x);
+  vTmp.copy(delta).applyQuaternion(qParent.copy(pr).invert()).multiplyScalar(k);
   bone.position.add(vTmp);
 }
 
@@ -84,4 +89,27 @@ export class BoneSocket {
     this.obj.position.copy(this.offset).applyQuaternion(this.rot).add(this.pos);
     this.obj.quaternion.copy(this.rot).multiply(this.baseQuat);
   }
+}
+
+const aimTmpA = new THREE.Vector3();
+const aimTmpB = new THREE.Vector3();
+const aimQ = new THREE.Quaternion();
+const aimRootInv = new THREE.Quaternion();
+/**
+ * 뼈가 tip(자식 뼈)을 향하는 방향을 모델(root) 공간의 dir 로 맞춘다.
+ * 바인드 포즈에서 뼈의 로컬 축이 어디를 향하든 동작하므로 사지 자세를 "방향" 으로 정의할 수 있다.
+ */
+export function aimBoneModelSpace(bone: THREE.Object3D, tip: THREE.Object3D, root: THREE.Object3D, dir: THREE.Vector3): void {
+  if (!bone.parent) return;
+  tip.updateWorldMatrix(true, false);
+  bone.getWorldPosition(aimTmpA);
+  tip.getWorldPosition(aimTmpB);
+  root.getWorldQuaternion(aimRootInv).invert();
+  const cur = aimTmpB.sub(aimTmpA).applyQuaternion(aimRootInv).normalize();
+  if (cur.lengthSq() < 1e-8) return;
+  aimQ.setFromUnitVectors(cur, aimTmpA.copy(dir).normalize());
+  const pr = parentToRoot(bone, root, qTmp);
+  const inv = qParent.copy(pr).invert();
+  inv.multiply(aimQ).multiply(pr);
+  bone.quaternion.premultiply(inv);
 }

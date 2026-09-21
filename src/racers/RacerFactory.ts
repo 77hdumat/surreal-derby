@@ -17,6 +17,14 @@ import {
   type RacerVisual,
   type VisualContext,
 } from './RacerVisual';
+import { RIDER_ASSET } from './rig/AnimalVisual';
+import { RIDER_ASSET_CFG } from './rig/AssetConfigs';
+import { HorseRig, CircusRig, MotorRig, LongbodyRig, ElephantRig, CowRig, GiraffeRig } from './rig/RigVisuals';
+import { CostumeRig, HumanRig, TrojanRig } from './rig/CrewVisuals';
+
+/** 리깅 GLB 캐릭터 사용 (false 면 절차 생성 placeholder 만) */
+export const USE_RIG_ASSETS = true;
+RIDER_ASSET.cfg = RIDER_ASSET_CFG;
 
 const damp = (cur: number, target: number, k: number, dt: number) => THREE.MathUtils.lerp(cur, target, 1 - Math.exp(-k * dt));
 
@@ -2112,7 +2120,7 @@ export class GltfRacerVisual implements RacerVisual {
 
 // ================================================================ Factory
 export class RacerFactory {
-  static createVisual(def: RacerDefinition): RacerVisual {
+  static createVisual(def: RacerDefinition, allowRig = USE_RIG_ASSETS): RacerVisual {
     let placeholder: RacerVisual;
     switch (def.specialAbility) {
       case 'COSTUME':
@@ -2146,29 +2154,57 @@ export class RacerFactory {
         placeholder = new ClassicVisual(def);
     }
     if (def.modelUrl) return new GltfRacerVisual(def, placeholder);
-    return placeholder;
+    if (!allowRig) return placeholder;
+    // 리깅 GLB 가 있는 캐릭터는 로드 전/실패 시 placeholder 를 폴백으로 쓴다
+    switch (def.specialAbility) {
+      case 'CLASSIC':
+        return new HorseRig(def, placeholder);
+      case 'CIRCUS':
+        return new CircusRig(def, placeholder);
+      case 'MOTORCYCLE':
+        return new MotorRig(def, placeholder);
+      case 'LONGBODY':
+        return new LongbodyRig(def, placeholder);
+      case 'ELEPHANT':
+        return new ElephantRig(def, placeholder);
+      case 'COW':
+        return new CowRig(def, placeholder);
+      case 'GIRAFFE':
+        return new GiraffeRig(def, placeholder);
+      case 'COSTUME':
+        return new CostumeRig(def, placeholder);
+      case 'HUMAN':
+        return new HumanRig(def, placeholder);
+      case 'TROJAN':
+        return new TrojanRig(def, placeholder);
+      default:
+        return placeholder;
+    }
   }
 
   static exhaustPoints(v: RacerVisual): THREE.Vector3[] {
-    return v instanceof MotorcycleVisual ? v.exhaustPoints : [];
+    return v instanceof MotorcycleVisual || v instanceof MotorRig ? v.exhaustPoints : [];
   }
 
   static backfiring(v: RacerVisual): boolean {
-    return v instanceof MotorcycleVisual && v.backfiring;
+    return (v instanceof MotorcycleVisual || v instanceof MotorRig) && v.backfiring;
   }
 
   /** 소 콧구멍 (분노 시 김) — body 로컬 */
   static nostrilPoints(v: RacerVisual): THREE.Vector3[] {
+    if (v instanceof CowRig) return v.nostrils;
     if (!(v instanceof CowVisual)) return [];
     // head 로컬 → body 로컬 근사 (머리 위치 기준)
     return v.nostrils.map((p) => new THREE.Vector3(1.9 + p.x * 0.5, 1.75, p.z));
   }
 
   static trunkTip(v: RacerVisual): THREE.Vector3 | null {
+    if (v instanceof ElephantRig) return v.trunkTip(v.trunkTmp);
     return v instanceof ElephantVisual ? v.trunkTip() : null;
   }
 
   static sweatPoint(v: RacerVisual): THREE.Vector3 | null {
+    if (v instanceof HumanRig) return v.isTired ? v.sweatPoint : null;
     return v instanceof HumanVisual && v.isTired ? v.sweatPoint : null;
   }
 

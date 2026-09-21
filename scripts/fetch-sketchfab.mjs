@@ -42,8 +42,9 @@ for (let i = 0; i < args.length; i += 2) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   const zipPath = join(dir, 'model.zip');
-  const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
-  writeFileSync(zipPath, buf);
+  // 큰 zip 은 Node fetch 가 타임아웃 나므로 curl 로 (재시도 포함)
+  execSync(`curl -sSL --retry 5 --retry-delay 3 -o "${zipPath}" "${url.replace(/"/g, '')}"`, { stdio: 'inherit' });
+  const buf = readFileSync(zipPath);
   execSync(`unzip -oq "${zipPath}" -d "${dir}"`);
   rmSync(zipPath);
   const line = `- **${name}**: "${info.name}" by ${info.user.displayName} (${info.user.profileUrl}) — ${info.viewerUrl} — ${info.license.label} (${info.license.url ?? 'https://creativecommons.org/licenses/by/4.0/'})\n`;
