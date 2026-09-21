@@ -90,7 +90,7 @@ export class UIManager {
     this.previewScene.add(ground);
   }
 
-  private static NAMES_KEY = 'surreal-derby-names';
+  private static NAMES_KEY = 'surreal-derby-names-v2'; // v2: 클래식 호스 → 제브라 다니오 개명
 
   private loadNames(): void {
     try {

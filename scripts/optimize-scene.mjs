@@ -5,7 +5,7 @@
  */
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, prune, textureCompress, simplify, weld, quantize, meshopt } from '@gltf-transform/functions';
+import { dedup, prune, textureCompress, simplify, simplifyPrimitive, weld, quantize, meshopt } from '@gltf-transform/functions';
 import { MeshoptSimplifier, MeshoptEncoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import { rmSync, existsSync, statSync } from 'node:fs';
@@ -15,6 +15,8 @@ const [name, maxArg, ratioArg, ...rest] = process.argv.slice(2);
 const maxTex = Number(maxArg) || 1024;
 const ratio = ratioArg ? Number(ratioArg) : 0;
 const drop = rest.find((a) => a.startsWith('--drop='))?.slice(7);
+/** --simplifyOnly=<재질 이름 정규식>: 해당 재질 프리미티브만 ratio 로 단순화 (잎 카드 등은 보존) */
+const simplifyOnly = rest.find((a) => a.startsWith('--simplifyOnly='))?.slice(15);
 const root = join(process.cwd(), 'public', 'models');
 const src = join(root, name, 'scene.gltf');
 const out = join(root, `${name}.glb`);
@@ -35,9 +37,21 @@ if (drop) {
   }
 }
 const ops = [dedup(), prune()];
-if (ratio > 0 && ratio < 1) {
+if (ratio > 0 && ratio < 1 && !simplifyOnly) {
   await MeshoptSimplifier.ready;
   ops.push(weld(), simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.002 }));
+}
+if (ratio > 0 && ratio < 1 && simplifyOnly) {
+  await MeshoptSimplifier.ready;
+  const re = new RegExp(simplifyOnly);
+  ops.push(weld());
+  ops.push(async (d) => {
+    for (const mesh of d.getRoot().listMeshes()) {
+      for (const prim of mesh.listPrimitives()) {
+        if (re.test(prim.getMaterial()?.getName() ?? '')) simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio, error: 0.003 });
+      }
+    }
+  });
 }
 ops.push(textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [maxTex, maxTex], quality: 80 }));
 // 지오메트리 양자화 + meshopt 압축 (three: MeshoptDecoder 필요)

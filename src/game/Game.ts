@@ -55,6 +55,7 @@ export class Game {
   private highQuality = false;
   private sun: THREE.DirectionalLight;
   private footprints: Footprints;
+  private sceneryPromise: Promise<void> = Promise.resolve();
   private sunOffset = new THREE.Vector3(70, 95, 50);
 
 
@@ -104,7 +105,7 @@ export class Game {
       this.track.group.add(this.track.sky);
       pmrem.dispose();
     }
-    void this.applySky();
+    this.sceneryPromise = this.applySky();
     if (import.meta.env.DEV) (window as unknown as { __game?: unknown }).__game = this;
     this.particles = new ParticleManager(3000);
     this.scene.add(this.particles.points);
@@ -164,7 +165,7 @@ export class Game {
       this.track.sky.visible = false;
       this.sunOffset.copy(sky.sunDir).multiplyScalar(130);
       this.sun.intensity = 2.4;
-      void this.track.loadRealAssets(sky.sunDir);
+      await this.track.loadRealAssets(sky.sunDir);
       // 안개색을 HDRI 지평선 톤(옅은 하늘색)에 맞춤 — HSV 안개: r=명도, g=채도
       const fog = this.scene.fog as THREE.Fog;
       fog.color.setRGB(0.8, 0.16, 0);
@@ -173,7 +174,7 @@ export class Game {
       if (import.meta.env.DEV) console.info('[sky] HDRI 적용, 태양 방향', sky.sunDir.toArray().map((v) => v.toFixed(2)));
     } catch (e) {
       console.warn('[sky] HDRI 로드 실패 — 절차 하늘 유지', e);
-      void this.track.loadRealAssets(RaceTrack.SUN_DIR);
+      await this.track.loadRealAssets(RaceTrack.SUN_DIR);
     }
   }
 
@@ -192,6 +193,8 @@ export class Game {
     this.ui.setLoading(true);
     const off = onAssetProgress((d, t) => this.ui.setLoading(true, d, t));
     await this.racers.whenReady();
+    // 배경 모델(나무·산·관중석)도 시작 전에 올려 레이스 중 끊김을 막는다 (최대 20초 대기)
+    await Promise.race([this.sceneryPromise, new Promise((r) => setTimeout(r, 20000))]);
     off();
     try {
       await this.renderer.compileAsync(this.scene, this.camera.camera);
@@ -224,9 +227,10 @@ export class Game {
     this.highQuality = high;
     // 2x DPR + 4096 그림자 + full-res AO 조합은 1080p에서도 수천만 픽셀을
     // 여러 번 처리한다. 고급 모드는 선명도 차이는 남기되 GPU 비용을 제한한다.
-    const pixelBudget = high ? 3_600_000 : 2_200_000;
+    // 실사 씬(나무·산·리깅 캐릭터)이 무거워져 픽셀 예산을 더 보수적으로 잡는다
+    const pixelBudget = high ? 2_600_000 : 1_700_000;
     const budgetRatio = Math.sqrt(pixelBudget / Math.max(1, window.innerWidth * window.innerHeight));
-    const ratio = Math.min(window.devicePixelRatio, high ? 1.5 : 1.1, Math.max(0.75, budgetRatio));
+    const ratio = Math.min(window.devicePixelRatio, high ? 1.25 : 1.0, Math.max(0.7, budgetRatio));
     this.renderer.setPixelRatio(ratio);
     const shadowSize = high ? 2048 : 1024;
     if (this.sun.shadow.mapSize.x !== shadowSize) {
@@ -428,7 +432,6 @@ export class Game {
         a.play('motoPass', { pos, minGain: 0.4, gain: 0.8 });
         a.play('whoosh', { pos, minGain: 0.3, gain: 0.6 });
         a.crowdRoar(0.8);
-        this.effects.flashScreen(0.35);
         this.excitement += 0.25;
         break;
       case 'ENGINE_FAILURE':
@@ -604,10 +607,10 @@ export class Game {
     const moto = this.racers.byId('motorcycle');
     if (moto && moto.state.state === 'BOOSTING') {
       const d = this.racers.worldPosition('motorcycle', this.tmp).distanceTo(this.camera.camera.position);
-      after = Math.max(after, THREE.MathUtils.clamp(1.2 - d / 70, 0, 1));
+      after = Math.max(after, THREE.MathUtils.clamp(0.8 - d / 70, 0, 0.45)); // 잔상은 은은하게 (눈부심 방지)
     }
     if (this.slowMo) after = Math.max(after, 0.35);
-    this.effects.setAfterimage(after);
+    this.effects.setAfterimage(after * 0.6);
     this.effects.setSpeedLines(this.camera.boostNearby);
     if (this.camera.boostNearby > 0.5) this.camera.shake(dt * 0.12);
 

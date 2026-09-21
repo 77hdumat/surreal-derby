@@ -249,6 +249,16 @@ export class RiderRig {
       this.bones.hips.getWorldPosition(hip);
       model.position.y -= hip.y;
     }
+    model.traverse((o) => {
+      const sm = o as THREE.SkinnedMesh;
+      if (!sm.isSkinnedMesh) return;
+      sm.skeleton.update();
+      sm.computeBoundingSphere();
+      if (sm.boundingSphere) {
+        sm.boundingSphere.radius *= 2.5;
+        sm.frustumCulled = true;
+      }
+    });
     this.model = model;
     this.group.add(model);
     this.buildHelmet();

@@ -256,6 +256,17 @@ export abstract class AnimalVisual implements RacerVisual {
       this.buildNumberCloth();
       if (neutral) for (const a of [this.clips.run, this.clips.walk, this.clips.idle]) if (a) a.setEffectiveWeight(a === this.clips.run ? 1 : 0);
       this.calibrateGround();
+      // 스킨 메쉬 컬링: 바인드 포즈 구를 2.5배 키워 두면 화면 밖 선수는 렌더·그림자 패스에서 빠진다
+      model.traverse((o) => {
+        const sm = o as THREE.SkinnedMesh;
+        if (!sm.isSkinnedMesh) return;
+        sm.skeleton.update();
+        sm.computeBoundingSphere();
+        if (sm.boundingSphere) {
+          sm.boundingSphere.radius *= 2.5;
+          sm.frustumCulled = true;
+        }
+      });
       // 발굽 위치
       for (const k of ['legFL_foot', 'legFR_foot', 'legBL_foot', 'legBR_foot'] as RigBone[]) {
         if (this.bones[k]) this.hoofPoints.push(new THREE.Vector3());

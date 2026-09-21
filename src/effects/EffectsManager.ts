@@ -79,7 +79,9 @@ export class EffectsManager {
     this.highQuality = high;
     this.pixelRatio = pixelRatio;
     this.composer.setPixelRatio(pixelRatio);
-    this.ao.setQualityMode(high ? 'Medium' : 'Performance');
+    // AO 는 가장 비싼 패스 — 고급 모드에서만, 그것도 Performance 프리셋·반 해상도로
+    this.ao.enabled = high;
+    this.ao.setQualityMode('Performance');
     this.ao.configuration.halfRes = true;
     this.ao.configuration.transparencyAware = false;
   }

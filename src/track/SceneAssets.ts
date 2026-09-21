@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Water } from 'three/examples/jsm/objects/Water.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { loadAsset } from '../racers/rig/Assets';
 
 /**
@@ -15,6 +15,8 @@ export interface TreePrototype {
   group: THREE.Group;
   /** 프로토타입 높이(m, 스케일 1 기준) */
   height: number;
+  /** 삼각형 수 (배치 예산용) */
+  tris: number;
 }
 
 /** 나무 프로토타입: 메쉬 이름 접두사별로 묶고 밑동 중심을 원점으로 옮긴다 */
@@ -57,14 +59,15 @@ export async function loadTreePrototypes(): Promise<TreePrototype[]> {
         mat.depthWrite = true;
       }
       mat.roughness = 0.9;
-      c.castShadow = true;
+      c.castShadow = !leafy; // 잎 알파 그림자는 비용이 커서 줄기만 그림자
       c.receiveShadow = !leafy;
       g.add(c);
     }
-    protos.push({ group: g, height: size.y });
+    const tris = meshes.reduce((a, m) => a + (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3, 0);
+    protos.push({ group: g, height: size.y, tris });
   }
-  // 큰 나무부터
-  protos.sort((a, b) => b.height - a.height);
+  // 가벼운 나무부터 (먼 곳엔 앞쪽 = 가벼운 것만 쓴다)
+  protos.sort((a, b) => a.tris - b.tris);
   return protos;
 }
 
@@ -75,47 +78,66 @@ export function cloneTree(proto: TreePrototype, targetHeight: number): THREE.Gro
   return g;
 }
 
-/** 먼 산: DEM 타일을 스케일해 4방향에 배치 */
+/**
+ * 먼 산: 위성 텍스처 DEM 타일. 타일 가장자리가 수직 절벽처럼 잘려 보이지 않도록
+ * 가장자리로 갈수록 높이를 0 으로 눌러(테이퍼) 산줄기 섬처럼 만들고, 8각 링으로 둘러 배치한다.
+ */
 export async function loadMountains(): Promise<THREE.Group> {
   const gltf = await loadAsset(`${BASE}/models/mountains.glb`);
   const src = gltf.scene;
   src.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(src);
-  const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
+  const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+  const v = new THREE.Vector3();
+  const inv = new THREE.Matrix4();
   src.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
     m.castShadow = false;
     m.receiveShadow = false;
     m.frustumCulled = true;
+    // 지오메트리 테이퍼 (월드 좌표 기준으로 판정 후 다시 로컬로)
+    const pos = m.geometry.attributes.position as THREE.BufferAttribute;
+    inv.copy(m.matrixWorld).invert();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+      const ex = Math.abs(v.x - center.x) / half.x;
+      const ez = Math.abs(v.z - center.z) / half.z;
+      const e = Math.max(ex, ez); // 0 중심 … 1 가장자리
+      const taper = 1 - THREE.MathUtils.smoothstep(e, 0.55, 1.0);
+      v.y = box.min.y + (v.y - box.min.y) * taper;
+      v.applyMatrix4(inv);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    pos.needsUpdate = true;
+    m.geometry.computeVertexNormals();
+    m.geometry.computeBoundingSphere();
     const mat = m.material as THREE.MeshStandardMaterial;
     mat.roughness = 1;
     mat.metalness = 0;
-    // 위성 텍스처는 어두운 편이라 밝기를 올리고, 먼 산의 대기 산란 느낌으로 약한 하늘색 발광을 더한다
-    mat.color.setRGB(1.45, 1.45, 1.4);
-    mat.emissive.set(0x7d95b5);
-    mat.emissiveIntensity = 0.28;
-    mat.fog = false; // HSV 안개가 먼 산을 회색 실루엣으로 만들어서 끄고, 대기 산란은 발광 틴트로 대신
+    // 위성 텍스처가 어두워 조금 밝히고, 먼 산의 대기 산란은 옅은 하늘색 발광으로
+    mat.color.setRGB(1.25, 1.25, 1.2);
+    mat.emissive.set(0x8fa6c4);
+    mat.emissiveIntensity = 0.16;
+    mat.fog = false;
     mat.needsUpdate = true;
   });
   const group = new THREE.Group();
-  const scale = 0.6;
-  const ring = 1150; // 타일 중심 거리
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+  const scale = 0.55;
+  const ring = 1250;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     const tile = src.clone(true);
     tile.scale.setScalar(scale);
-    // 타일 중심을 원점으로, 바닥(min.y)을 -5m 에
-    tile.position.set(-center.x * scale, -box.min.y * scale - 5, -center.z * scale);
+    tile.position.set(-center.x * scale, -box.min.y * scale - 3, -center.z * scale);
     const holder = new THREE.Group();
     holder.add(tile);
     holder.position.set(Math.cos(a) * ring, 0, Math.sin(a) * ring);
-    holder.rotation.y = -a + Math.PI / 2 + (i % 2 ? Math.PI : 0); // 긴 변이 접선 방향
+    holder.rotation.y = -a + Math.PI / 2 + (i % 2 ? Math.PI : 0);
     group.add(holder);
   }
   group.userData.noShadow = true;
-  void size;
   return group;
 }
 
@@ -128,14 +150,28 @@ export interface StandModule {
 /** 관중석 모듈 타일링. front = 트랙 쪽 z, length = 덮을 길이 */
 export async function loadGrandstand(frontZ: number, length: number): Promise<StandModule> {
   const gltf = await loadAsset(`${BASE}/models/stand.glb`);
-  const src = gltf.scene;
-  src.updateMatrixWorld(true);
-  src.traverse((o) => {
+  gltf.scene.updateMatrixWorld(true);
+  // 좌석 하나하나가 별도 메쉬(수백 개) → 재질별로 병합해 드로우콜을 모듈당 몇 개로 줄인다
+  const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  gltf.scene.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
-    m.castShadow = true;
-    m.receiveShadow = true;
+    const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+    const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.Material;
+    if (!byMat.has(mat)) byMat.set(mat, []);
+    byMat.get(mat)!.push(g);
   });
+  const src = new THREE.Group();
+  for (const [mat, geos] of byMat) {
+    const merged = mergeGeometries(geos, false);
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    src.add(mesh);
+  }
+  src.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(src);
   const size = box.getSize(new THREE.Vector3());
   const scale = 9.5 / size.y; // 높이 9.5m
@@ -200,22 +236,25 @@ function waterNormals(): THREE.CanvasTexture {
   return t;
 }
 
-/** 반사되는 3D 호수 */
-export function makeLake(radiusX: number, radiusZ: number, sunDir: THREE.Vector3): Water {
+/** 호수: 환경맵(HDRI) 반사 + 흐르는 노멀맵. 평면 반사 패스(Water) 대신 써서 렌더 비용을 아낀다 */
+export function makeLake(radiusX: number, radiusZ: number, _sunDir: THREE.Vector3): THREE.Mesh {
   const geo = new THREE.CircleGeometry(1, 48);
   geo.scale(radiusX, radiusZ, 1);
-  const water = new Water(geo, {
-    textureWidth: 512,
-    textureHeight: 512,
-    waterNormals: waterNormals(),
-    sunDirection: sunDir.clone(),
-    sunColor: 0xffffff,
-    waterColor: 0x2a5f6e,
-    distortionScale: 2.2,
-    fog: true,
+  const normals = waterNormals();
+  normals.repeat.set(radiusX / 4, radiusZ / 4);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x2f6b78,
+    roughness: 0.06,
+    metalness: 0.15,
+    normalMap: normals,
+    normalScale: new THREE.Vector2(0.35, 0.35),
+    envMapIntensity: 1.6,
+    transparent: true,
+    opacity: 0.94,
   });
+  const water = new THREE.Mesh(geo, mat);
   water.rotation.x = -Math.PI / 2;
-  water.material.uniforms.size.value = 6;
   water.userData.noShadow = true;
+  water.userData.waterNormals = normals;
   return water;
 }

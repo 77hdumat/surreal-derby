@@ -632,7 +632,7 @@ export class TrojanRig extends AnimalVisual {
     sword.add(guard);
     this.sword = sword;
     // 병사 12명: 청동 흉갑·붉은 튜닉·코린트식 투구
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 8; i++) {
       const s = new RiderRig(RIDER_ASSET_CFG, { silks: 0xb08d57, sleeves: 0xd9b27a, helmet: 0xb08d57, breeches: 0x8b1a1a, boots: 0x5a3a1e }, 'feet');
       const row = Math.floor(i / 4);
       const col = i % 4;
@@ -701,7 +701,7 @@ export class TrojanRig extends AnimalVisual {
       this.sword.position.copy(this.rider.handR);
       this.sword.rotation.set(0, 0, 0.35 + Math.sin(time * 5) * 0.06 * (0.3 + a));
     }
-    const army = ctx.extension > 0.5 ? 12 : 6;
+    const army = ctx.extension > 0.5 ? 8 : 5;
     this.soldiers.forEach((s, i) => {
       if (!s.loaded) return;
       const visible = a > 0.05 && i < army;

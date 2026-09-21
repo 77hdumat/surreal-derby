@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { makeGrassField, makeTree, applyCloudShadow } from './Vegetation';
 import { grassMaterial } from './Environment';
-import { loadTreePrototypes, cloneTree, loadMountains, loadGrandstand, makeLake } from './SceneAssets';
-import type { Water } from 'three/examples/jsm/objects/Water.js';
+import { loadTreePrototypes, cloneTree, loadMountains, makeLake } from './SceneAssets';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -49,10 +48,8 @@ export class RaceTrack {
   private clouds: THREE.Group[] = [];
   /** 절차 나무 자리 — 실사 나무 로드 후 교체 */
   private treeSlots: { group: THREE.Group; height: number }[] = [];
-  private standGroup?: THREE.Group;
-  private crowdGroup?: THREE.Group;
   private pond?: THREE.Mesh;
-  private lake?: Water;
+  private lake?: THREE.Mesh;
   sky!: Sky;
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
   static readonly SUN_DIR = new THREE.Vector3(0.35, 1.05, 0.3).normalize();
@@ -143,7 +140,6 @@ export class RaceTrack {
     this.buildRails();
     this.buildFinishLine();
     this.buildGate();
-    this.buildGrandstand();
     this.buildBillboards();
     this.buildBigScreen();
     this.buildInfield();
@@ -383,92 +379,7 @@ export class RaceTrack {
     return this.gateDrive;
   }
 
-  private buildGrandstand(): void {
-    const zBase = this.radius + this.width / 2 + 6; // 트랙 바깥
-    const len = this.straight + 40;
-    const tiers = 7;
-    const tierMat = new THREE.MeshStandardMaterial({ color: 0xe9e2d6, roughness: 0.95, metalness: 0 });
-    const stand = new THREE.Group();
-    for (let t = 0; t < tiers; t++) {
-      const box = new THREE.Mesh(new THREE.BoxGeometry(len, 1.4, 3.5), tierMat);
-      box.position.set(0, 0.7 + t * 1.4, zBase + 1.75 + t * 3.5);
-      stand.add(box);
-    }
-    const wall = new THREE.Mesh(
-      new THREE.BoxGeometry(len, tiers * 1.4 + 6, 1),
-      new THREE.MeshStandardMaterial({ color: 0xcfc6b8, roughness: 0.95, metalness: 0 }),
-    );
-    wall.position.set(0, (tiers * 1.4 + 6) / 2, zBase + tiers * 3.5 + 0.5);
-    stand.add(wall);
-    const roof = new THREE.Mesh(
-      new THREE.BoxGeometry(len + 4, 0.5, tiers * 3.5 + 6),
-      new THREE.MeshStandardMaterial({ color: 0xf4efe6, roughness: 0.95, metalness: 0 }),
-    );
-    roof.position.set(0, tiers * 1.4 + 6, zBase + (tiers * 3.5) / 2 + 0.5);
-    roof.rotation.x = 0.08;
-    stand.add(roof);
-    this.standGroup = stand;
-    this.group.add(stand);
-    // 관중 없음 (스탠드만). 필요하면 buildCrowd(seats) 로 다시 채울 수 있다.
-  }
-
   /** 관중 — 몸/머리/팔을 분리한 저폴리 실루엣 인스턴스. seats = 서 있는 발 위치(월드) */
-  // @ts-expect-error 관중을 다시 넣을 때를 위해 보관 (현재 미사용)
-  private buildCrowd(seats: THREE.Vector3[]): void {
-    if (this.crowdGroup) {
-      this.group.remove(this.crowdGroup);
-      this.crowdGroup.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.geometry) m.geometry.dispose();
-      });
-    }
-    const total = seats.length;
-    const crowdGeo = new THREE.CapsuleGeometry(0.17, 0.45, 4, 8);
-    crowdGeo.translate(0, 0.42, 0);
-    const headGeo = new THREE.SphereGeometry(0.155, 10, 8);
-    const armGeo = new THREE.CapsuleGeometry(0.052, 0.3, 3, 6);
-    const crowdMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 });
-    const crowd = new THREE.InstancedMesh(crowdGeo, crowdMat, total);
-    const heads = new THREE.InstancedMesh(headGeo, skinMat, total);
-    const armL = new THREE.InstancedMesh(armGeo, crowdMat, total);
-    const armR = new THREE.InstancedMesh(armGeo, crowdMat, total);
-    const dummy = new THREE.Object3D();
-    const color = new THREE.Color();
-    const skin = new THREE.Color();
-    this.crowdBase = new Float32Array(total * 3);
-    this.crowdPhase = new Float32Array(total);
-    this.crowdScale = new Float32Array(total);
-    seats.forEach((sp, idx) => {
-      this.crowdBase[idx * 3] = sp.x;
-      this.crowdBase[idx * 3 + 1] = sp.y;
-      this.crowdBase[idx * 3 + 2] = sp.z;
-      this.crowdPhase[idx] = Math.random() * Math.PI * 2;
-      this.crowdScale[idx] = 0.85 + Math.random() * 0.3;
-      dummy.position.copy(sp);
-      dummy.scale.setScalar(this.crowdScale[idx]);
-      dummy.updateMatrix();
-      crowd.setMatrixAt(idx, dummy.matrix);
-      color.setHSL(Math.random(), 0.6 + Math.random() * 0.3, 0.45 + Math.random() * 0.25);
-      crowd.setColorAt(idx, color);
-      armL.setColorAt(idx, color);
-      armR.setColorAt(idx, color);
-      skin.setHSL(0.07, 0.28 + Math.random() * 0.22, 0.55 + Math.random() * 0.28);
-      heads.setColorAt(idx, skin);
-    });
-    for (const mesh of [crowd, heads, armL, armR]) {
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    }
-    const g = new THREE.Group();
-    g.add(crowd, heads, armL, armR);
-    this.crowdGroup = g;
-    this.crowdMesh = crowd;
-    this.crowdHeadMesh = heads;
-    this.crowdArmMeshes = [armL, armR];
-    this.group.add(g);
-  }
-
   /**
    * 실사 배경 모델 로드 (비동기): 나무·먼 산·관중석·호수.
    * 실패해도 절차 버전이 남아 있으므로 각각 독립적으로 시도한다.
@@ -479,7 +390,10 @@ export class RaceTrack {
       loadTreePrototypes().then((protos) => {
         if (!protos.length) return;
         for (const slot of this.treeSlots) {
-          const tree = cloneTree(protos[Math.floor(Math.random() * protos.length)], slot.height);
+          // 트랙 가까운 슬롯은 큰 나무, 먼 슬롯은 가벼운(폴리 적은) 나무
+          const near = Math.hypot(slot.group.position.x, slot.group.position.z) < this.straight / 2 + this.radius + 25;
+          const pool = near ? protos : protos.slice(0, Math.max(1, Math.ceil(protos.length / 2)));
+          const tree = cloneTree(pool[Math.floor(Math.random() * pool.length)], slot.height);
           slot.group.clear();
           slot.group.add(tree);
         }
@@ -490,13 +404,7 @@ export class RaceTrack {
         this.group.add(m);
       }),
     );
-    tasks.push(
-      loadGrandstand(this.radius + this.width / 2 + 6, this.straight + 40).then((stand) => {
-        if (this.standGroup) this.group.remove(this.standGroup);
-        this.group.add(stand.group);
-        void stand.seats; // 관중은 두지 않는다
-      }),
-    );
+    // 관중석 없음 (사용자 요청) — loadGrandstand 는 필요 시 다시 붙일 수 있게 남겨둠
     // 호수: 반사 물
     try {
       const lake = makeLake(22 * 1.6, 22, sunDir);
@@ -513,7 +421,11 @@ export class RaceTrack {
 
   /** 구름 표류 */
   updateAmbient(dt: number): void {
-    if (this.lake) this.lake.material.uniforms.time.value += dt * 0.6;
+    if (this.lake) {
+      const n = this.lake.userData.waterNormals as THREE.Texture;
+      n.offset.x += dt * 0.02;
+      n.offset.y += dt * 0.013;
+    }
     for (const c of this.clouds) {
       c.position.x += (c.userData.speed as number) * dt;
       if (c.position.x > 800) c.position.x = -800;
@@ -723,12 +635,15 @@ export class RaceTrack {
     const finishCam = this.getPoint(this.finishS + 1.5, -this.width / 2 - 11);
     const nearFinishCam = (x: number, z: number) => Math.hypot(x - finishCam.x, z - finishCam.z) < 18;
     const nearScreen = (x: number, z: number) => Math.abs(x - (this.finishS - this.straight / 2 - 30)) < 22 && z > 0 && z < 24;
+    // 결승선 주변(카메라 시야) 60m 는 나무 금지
+    const finishPt = this.getPoint(this.finishS, 0);
+    const nearFinish = (x: number, z: number) => Math.hypot(x - finishPt.x, z - finishPt.z) < 60;
     // 인필드 나무
     const trees = new THREE.Group();
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 16; i++) {
       const x = (Math.random() - 0.5) * (this.straight + 30);
       const z = (Math.random() - 0.5) * 70;
-      if (inPond(x, z) || nearScreen(x, z)) continue;
+      if (inPond(x, z) || nearScreen(x, z) || nearFinish(x, z)) continue;
       const t = makeTree(1 + Math.random() * 0.6);
       t.position.set(x, 0, z);
       t.rotation.y = Math.random() * Math.PI * 2;
@@ -736,11 +651,12 @@ export class RaceTrack {
       this.treeSlots.push({ group: t, height: 7 + Math.random() * 4 });
     }
     // 트랙 바깥 나무 (관중석 반대편·코너)
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 30; i++) {
       const s = Math.random() * this.length;
       const f = this.getFrame(s);
       if (f.pos.z > 20 && Math.abs(f.pos.x) < this.straight / 2 + 40) continue;
       const p = f.pos.clone().addScaledVector(f.right, this.width / 2 + 10 + Math.random() * 60);
+      if (nearFinish(p.x, p.z)) continue;
       const t = makeTree(1.2 + Math.random() * 1.2);
       t.position.set(p.x, 0, p.z);
       t.rotation.y = Math.random() * Math.PI * 2;

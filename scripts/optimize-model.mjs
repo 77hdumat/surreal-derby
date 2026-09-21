@@ -8,7 +8,8 @@
  */
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, prune, resample, textureCompress, metalRough } from '@gltf-transform/functions';
+import { dedup, prune, resample, textureCompress, metalRough, weld, simplify } from '@gltf-transform/functions';
+import { MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 import { rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,6 +21,8 @@ if (!name) {
 }
 const maxTex = Number(maxArg) || 1024;
 const drop = rest.find((a) => a.startsWith('--drop='))?.slice(7);
+const ratioArg = rest.find((a) => a.startsWith('--simplify='))?.slice(11);
+const ratio = ratioArg ? Number(ratioArg) : 0;
 const root = join(process.cwd(), 'public', 'models');
 const src = join(root, name, 'scene.gltf');
 const out = join(root, `${name}.glb`);
@@ -38,11 +41,13 @@ if (drop) {
     }
   }
 }
+if (ratio > 0 && ratio < 1) await MeshoptSimplifier.ready;
 await doc.transform(
   metalRough(), // KHR_materials_pbrSpecularGlossiness → metal/rough (three 미지원 확장)
   dedup(),
   prune(),
   resample(),
+  ...(ratio > 0 && ratio < 1 ? [weld(), simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.001 })] : []),
   textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [maxTex, maxTex], quality: 82 }),
 );
 await io.write(out, doc);
