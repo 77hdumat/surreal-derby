@@ -156,8 +156,20 @@ export async function loadGrandstand(frontZ: number, length: number): Promise<St
   gltf.scene.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
-    const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
-    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+    // 양자화(int16 normalized) 속성은 월드 행렬을 적용하면 [-1,1] 로 잘리므로 float 로 풀어서 병합
+    const g = new THREE.BufferGeometry();
+    for (const k of ['position', 'normal', 'uv'] as const) {
+      const a = m.geometry.getAttribute(k) as THREE.BufferAttribute | undefined;
+      if (!a) continue;
+      const item = a.itemSize;
+      const arr = new Float32Array(a.count * item);
+      for (let i = 0; i < a.count; i++) for (let c = 0; c < item; c++) arr[i * item + c] = a.getComponent(i, c);
+      g.setAttribute(k, new THREE.BufferAttribute(arr, item));
+    }
+    if (m.geometry.index) g.setIndex(m.geometry.index.clone());
+    if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    g.applyMatrix4(m.matrixWorld);
     const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.Material;
     if (!byMat.has(mat)) byMat.set(mat, []);
     byMat.get(mat)!.push(g);

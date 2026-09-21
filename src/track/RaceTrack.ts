@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { makeGrassField, makeTree, applyCloudShadow } from './Vegetation';
 import { grassMaterial } from './Environment';
-import { loadTreePrototypes, cloneTree, loadMountains, makeLake } from './SceneAssets';
+import { loadTreePrototypes, cloneTree, loadMountains, loadGrandstand, makeLake } from './SceneAssets';
+import { Dancers } from './Dancers';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -49,6 +50,7 @@ export class RaceTrack {
   /** 절차 나무 자리 — 실사 나무 로드 후 교체 */
   private treeSlots: { group: THREE.Group; height: number }[] = [];
   private pond?: THREE.Mesh;
+  private dancers?: Dancers;
   private lake?: THREE.Mesh;
   sky!: Sky;
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
@@ -404,7 +406,23 @@ export class RaceTrack {
         this.group.add(m);
       }),
     );
-    // 관중석 없음 (사용자 요청) — loadGrandstand 는 필요 시 다시 붙일 수 있게 남겨둠
+    // 관중석 모듈 + 그 앞에서 춤추는 엽기 관중 (스펀지밥·뚱이·슈렉·피카츄·바나나·게·토끼·비보이)
+    const frontZ = this.radius + this.width / 2 + 6;
+    const standLen = this.straight + 40;
+    tasks.push(
+      loadGrandstand(frontZ, standLen).then((stand) => {
+        this.group.add(stand.group);
+      }),
+    );
+    {
+      const d = new Dancers();
+      const spots: [number, number][] = [];
+      const n = 12;
+      for (let i = 0; i < n; i++) spots.push([-standLen / 2 + 12 + (i + 0.5) * ((standLen - 24) / n), frontZ - 2.6 + (i % 2) * 1.2]);
+      this.group.add(d.group);
+      this.dancers = d;
+      tasks.push(d.load(spots, -1));
+    }
     // 호수: 반사 물
     try {
       const lake = makeLake(22 * 1.6, 22, sunDir);
@@ -421,6 +439,7 @@ export class RaceTrack {
 
   /** 구름 표류 */
   updateAmbient(dt: number): void {
+    this.dancers?.update(dt);
     if (this.lake) {
       const n = this.lake.userData.waterNormals as THREE.Texture;
       n.offset.x += dt * 0.02;
