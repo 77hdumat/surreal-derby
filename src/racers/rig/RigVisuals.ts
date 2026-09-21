@@ -36,6 +36,7 @@ export class CircusRig extends HorseRig {
   private perform = 0;
   private beat = 0;
   private plume?: THREE.Group;
+  private hoofTmp = new THREE.Vector3();
 
   protected buildRider(): void {
     // 서커스 기수: 흰 의상에 금장식, 금색 헬멧
@@ -107,8 +108,7 @@ export class CircusRig extends HorseRig {
     // 골반(root 뼈)을 축으로 몸 전체를 세우고, 뒷다리는 수직으로 되돌린다
     this.rot('root', AXIS_Z, angle);
     this.rot('root', AXIS_X, Math.sin(Math.PI * beat) * 0.08 * p);
-    // root 뼈는 지면 원점에 있어 회전하면 뒷발이 땅 밑으로 내려간다 → 뒷발 위치만큼 들어 올려 보정
-    this.body.position.y += hop * 0.22 * p + 0.55 * Math.sin(angle);
+    // 뒷발 위치는 아래에서 실제 발굽 뼈로 재서 지면에 맞춘다
     for (const [up, lo, sideSign] of [['legBL_upper', 'legBL_lower', 0], ['legBR_upper', 'legBR_lower', 0.5]] as const) {
       const ph = Math.PI * 2 * (beat * 0.5 + sideSign);
       const lift = Math.max(0, Math.sin(ph));
@@ -120,6 +120,18 @@ export class CircusRig extends HorseRig {
       this.rot(up, AXIS_Z, (0.9 + Math.sin(ph) * 0.45) * p);
       this.rot(lo, AXIS_Z, (-1.4 + Math.cos(ph) * 0.3) * p);
     }
+    // 뒷발굽이 땅에 닿도록: 회전된 자세에서 가장 낮은 뒷발굽 뼈 높이를 재서 몸을 들어 올림 + 깡충 뛰기
+    this.body.updateWorldMatrix(true, true);
+    let minY = Infinity;
+    for (const name of ['BN_L_Toe_2_055_0_059', 'BN_R_Toe_2_059_0_065']) {
+      const b = this.model?.getObjectByName(name);
+      if (!b) continue;
+      b.getWorldPosition(this.hoofTmp);
+      this.body.worldToLocal(this.hoofTmp);
+      minY = Math.min(minY, this.hoofTmp.y);
+    }
+    if (isFinite(minY)) this.body.position.y += (0.03 - minY) * p;
+    this.body.position.y += hop * 0.22 * p;
     // 머리 좌우 까딱, 목은 자랑스럽게, 꼬리 박자
     this.rot('head', AXIS_Y, Math.sin(Math.PI * beat) * 0.3 * p);
     this.rot('neck0', AXIS_Z, (0.25 + Math.sin(Math.PI * 2 * beat) * 0.08) * p);
