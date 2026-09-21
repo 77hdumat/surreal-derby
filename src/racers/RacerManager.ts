@@ -159,6 +159,7 @@ export class RacerManager {
         this.particles.impact(pos.clone().setY(0.4), 1.6);
         break;
       case 'LAUNCHED':
+      case 'BULL_TOSS':
         this.particles.impact(pos.clone().setY(0.5), 2.0);
         break;
       case 'PLANTED':

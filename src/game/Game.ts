@@ -297,6 +297,12 @@ export class Game {
         a.playPixelTumble(pos);
         a.crowdGasp();
         break;
+      case 'BULL_TOSS':
+        a.play('cow2', { pos, minGain: 0.5, gain: 1.0 });
+        a.play('screamFall', { pos, minGain: 0.6, gain: 1.0 });
+        a.play('impactHeavy', { pos, minGain: 0.5, gain: 0.9 });
+        a.crowdRoar(0.9);
+        break;
       case 'LAUNCHED':
         a.play('screamFall', { pos, minGain: 0.6, gain: 1.0 });
         a.play('impactHeavy', { pos, minGain: 0.5, gain: 0.9 });

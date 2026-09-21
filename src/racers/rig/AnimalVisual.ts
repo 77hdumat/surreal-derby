@@ -108,6 +108,8 @@ export abstract class AnimalVisual implements RacerVisual {
   protected rider?: RiderRig;
   protected riderSocket?: BoneSocket;
   protected riderPose: RiderPose = JOCKEY_POSE;
+  /** 기수 동작 모드 (기본 기승; 서브클래스가 바꿀 수 있음) */
+  protected riderMode: 'ride' | 'matador' = 'ride';
   /** 기수 의상 색 (기본: 레이서 정의의 실크/클로스 색) */
   protected riderColors?: RiderColors;
   protected riderDropped = false;
@@ -529,8 +531,8 @@ export abstract class AnimalVisual implements RacerVisual {
     for (const s of this.sockets) s.update();
     if (this.rider) {
       const riding = !this.riderDropped;
-      if (riding) this.rider.update(ph, animSpeed, time, true);
-      else this.rider.update(ph, 0, time, false);
+      if (riding) this.rider.animate({ mode: this.riderMode, ph, energy: animSpeed, time });
+      else this.rider.animate({ mode: 'flail', ph, energy: 0, time });
     }
     this.updateFallenRider(dt);
     this.updateReins();

@@ -23,6 +23,8 @@ export class RaceEngine {
   ranking: RankingEntry[] = [];
   leaderId: string | null = null;
   firstFinishTime: number | null = null;
+  /** 이번 투우(RAGING) 동안 날린 선수 수 */
+  private bullTosses = 0;
   finalStretchFired = false;
   private leadChangeCooldown = 0;
   private pairCooldown = new Map<string, number>();
@@ -260,8 +262,8 @@ export class RaceEngine {
       const rate = s.state === 'BOOSTING' ? 1.6 : 0.95;
       baseTarget = Math.sin(this.time * rate + s.wobbleSeed) * (half - 1.6) + Math.sin(this.time * 6.3) * 0.6;
     }
-    // 코끼리: 돌진 중엔 가장 가까운 앞 선수를 향해 들이받으러 감
-    if (d.specialAbility === 'ELEPHANT' && s.state === 'CHARGING') {
+    // 코끼리 돌진·황소 투우: 가장 가까운 앞 선수를 향해 들이받으러 감
+    if ((d.specialAbility === 'ELEPHANT' && s.state === 'CHARGING') || (d.specialAbility === 'COW' && s.state === 'RAGING')) {
       let best: Racer | null = null;
       let bestD = 14;
       for (const o of this.racers) {
@@ -417,7 +419,22 @@ export class RaceEngine {
             const aggressor = aggressorA ? a : b;
             this.pairCooldown.set(key, 1.5);
             const protectedWinner = this.scenario?.winnerId === victim.def.id;
-            if (aggressor.def.specialAbility === 'ELEPHANT' && aggressor.state.state === 'CHARGING' && !protectedWinner && victim.state.state !== 'LAUNCHED' && victim.state.state !== 'PLANTED' && victim.state.state !== 'FINISHED') {
+            const canLaunch = !protectedWinner && victim.state.state !== 'LAUNCHED' && victim.state.state !== 'PLANTED' && victim.state.state !== 'FINISHED';
+            // 황소: 투우사 기수가 빨간 천을 흔드는 동안 머리로 들이받아 앞 선수를 최대 3명 날린다
+            if (aggressor.def.specialAbility === 'COW' && aggressor.state.state === 'RAGING' && canLaunch && this.bullTosses < 3 && Math.random() < 0.8) {
+              this.bullTosses++;
+              this.launch(victim, aggressor === a ? -sign : sign);
+              this.events.emit({
+                time: this.time,
+                racerId: victim.def.id,
+                targetId: aggressor.def.id,
+                event: 'BULL_TOSS',
+                major: true,
+                label: `${victim.def.name} 황소 뿔에 받혀 하늘로`,
+              });
+              continue;
+            }
+            if (aggressor.def.specialAbility === 'ELEPHANT' && aggressor.state.state === 'CHARGING' && canLaunch) {
               // 코끼리 돌진에 받히면 하늘로 날아갔다가 머리부터 땅에 꽂힌다 (기권)
               this.launch(victim, aggressor === a ? -sign : sign);
               this.events.emit({
@@ -676,6 +693,7 @@ export class RaceEngine {
       }
       case 'COW_RAGE':
         this.setState(r, 'RAGING', dur ?? 10, 1.42, 2.5);
+        this.bullTosses = 0;
         break;
       case 'MOTORCYCLE_BOOST':
         this.setState(r, 'BOOSTING', dur ?? 8, 1.75, 8);

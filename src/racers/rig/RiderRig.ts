@@ -40,7 +40,7 @@ export interface RiderAssetConfig {
   helmetOffset?: [number, number, number];
 }
 
-export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'lie' | 'flail';
+export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'lie' | 'flail' | 'matador';
 
 export interface RiderColors {
   silks: number;
@@ -439,6 +439,23 @@ uniform float sideCenter;`,
           else if (o.mode === 'lift') arm(s, THREE.MathUtils.lerp(0.4, 2.9, o.armRaise ?? 1) + Math.sin(time * 11 + s) * 0.05, 0.15, 0.25); // 머리 위로
           else arm(s, 1.55 + Math.sin(time * 10 + s) * 0.06 * e, 0.3, 0.1); // 앞으로 수평
         }
+        break;
+      }
+      case 'matador': {
+        // 투우사: 등 위에 우뚝 서서 오른팔로 빨간 천을 크게 휘두르고 왼손은 허리에
+        const e = Math.max(0.2, energy);
+        const sway = Math.sin(time * 2.6) * 0.06;
+        torso(0.12 + sway);
+        R(B.head, AXIS_Z, 0.1);
+        R(B.head, AXIS_Y, Math.sin(time * 1.9) * 0.25);
+        for (let s = 0; s < 2; s++) {
+          const bal = Math.sin(Math.PI * 2 * ph) * 0.06 * e;
+          leg(s, 0.06 + (s === 0 ? bal : -bal), 0.2, 0.22, 0.05);
+        }
+        // 오른팔(1): 옆·위로 크게 펼쳐 천을 펄럭임 (2~3Hz 왕복), 왼팔(0): 허리
+        const wave = Math.sin(time * 5.2);
+        arm(1, 1.9 + wave * 0.5, 0.35, 0.95 + wave * 0.15);
+        arm(0, 0.45, 1.9, 0.3);
         break;
       }
       case 'crawl': {

@@ -178,6 +178,7 @@ export class CameraManager {
         this.shake(1.0);
         break;
       case 'LAUNCHED':
+      case 'BULL_TOSS':
         this.shake(0.8);
         this.eventTimer = 3.4;
         break;

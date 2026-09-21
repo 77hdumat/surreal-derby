@@ -438,6 +438,12 @@ export class ElephantRig extends AnimalVisual {
 // ================================================================ 4. 레이지 불
 export class CowRig extends AnimalVisual {
   private rage = 0;
+  private stand = 0;
+  private toss = 0;
+  private cape?: THREE.Mesh;
+  private capeGeo?: THREE.PlaneGeometry;
+  private capeBase?: Float32Array;
+  private seatBaseY = 0;
   nostrils: THREE.Vector3[] = [new THREE.Vector3(0.95, 0.9, -0.08), new THREE.Vector3(0.95, 0.9, 0.08)];
   private eyes: THREE.Mesh[] = [];
 
@@ -461,17 +467,77 @@ export class CowRig extends AnimalVisual {
       this.eyes.push(eye);
       this.socket('head', eye, [0.28, 0.12, s * 0.16]);
     }
+    // 투우사의 빨간 천 (물레타): 기수 오른손에서 늘어지는 천, 정점을 흔들어 펄럭임
+    this.capeGeo = new THREE.PlaneGeometry(0.75, 0.95, 10, 12);
+    this.capeGeo.translate(0.375, -0.475, 0); // 원점 = 왼쪽 위 모서리(손)
+    this.capeBase = Float32Array.from(this.capeGeo.attributes.position.array as Float32Array);
+    this.cape = new THREE.Mesh(this.capeGeo, new THREE.MeshStandardMaterial({ color: 0xd8101c, roughness: 0.85, side: THREE.DoubleSide }));
+    this.cape.castShadow = true;
+    this.cape.visible = false;
+    this.seatBaseY = this.cfg.seat.offset[1];
+  }
+
+  onEvent(type: Parameters<AnimalVisual['onEvent']>[0], ctx: VisualContext): void {
+    super.onEvent(type, ctx);
+    if (type === 'BULL_TOSS') this.toss = 1;
+  }
+
+  reset(): void {
+    super.reset();
+    this.rage = this.stand = this.toss = 0;
+    if (this.cape) this.cape.visible = false;
   }
 
   protected updateSpecial(ctx: VisualContext, _ph: number): void {
     const { time, dt, speedNorm } = ctx;
     this.rage = damp(this.rage, ctx.state === 'RAGING' ? 1 : 0, 5, dt);
     const r = this.rage;
-    // 분노: 머리를 좌우로 세차게 흔들고 낮춘다
-    this.rot('head', AXIS_Y, Math.sin(time * 26) * 0.4 * r + Math.sin(time * 3 + this.seed) * 0.05 * speedNorm);
-    this.rot('neck0', AXIS_Z, -0.4 * r);
-    this.rot('head', AXIS_Z, Math.sin(time * 7) * 0.04 * speedNorm - 0.1 * r);
+    // 들이받기: 머리를 숙였다가 위로 확 퍼올림 (0.5초)
+    this.toss = Math.max(0, this.toss - dt * 2.0);
+    const tossU = 1 - this.toss;
+    const tossLift = this.toss > 0 ? (tossU < 0.3 ? -0.6 * (tossU / 0.3) : 1.0 * Math.exp(-(tossU - 0.3) * 3) * Math.sin(((tossU - 0.3) / 0.7) * Math.PI * 0.5 + 0.2)) : 0;
+    // 분노: 머리를 좌우로 세차게 흔들고 낮춘다 (들이받을 땐 퍼올림)
+    this.rot('head', AXIS_Y, Math.sin(time * 26) * 0.4 * r * (1 - this.toss) + Math.sin(time * 3 + this.seed) * 0.05 * speedNorm);
+    this.rot('neck0', AXIS_Z, -0.4 * r + tossLift * 0.5);
+    this.rot('neck1', AXIS_Z, tossLift * 0.4);
+    this.rot('head', AXIS_Z, Math.sin(time * 7) * 0.04 * speedNorm - 0.1 * r + tossLift * 0.5);
+    if (this.toss > 0.6) this.body.position.y += (this.toss - 0.6) * 0.3; // 앞다리 살짝 들림
     for (const e of this.eyes) (e.material as THREE.MeshBasicMaterial).opacity = r;
+    // 투우사 기수: 분노 중엔 등 위에 일어서서 빨간 천을 흔든다
+    this.stand = damp(this.stand, r > 0.5 ? 1 : 0, 4, dt);
+    const st = this.stand;
+    if (this.rider && this.riderSocket) {
+      this.riderSocket.offset.y = this.seatBaseY + 0.62 * st; // 골반이 서 있는 높이로
+      this.riderMode = st > 0.5 ? 'matador' : 'ride';
+      for (const list of this.reinSegments) for (const seg of list) seg.visible = st < 0.5; // 서 있을 땐 고삐 놓음
+      if (this.cape) {
+        this.cape.visible = st > 0.05;
+        if (this.cape.parent !== this.rider.group) this.rider.group.add(this.cape);
+        this.cape.position.copy(this.rider.handR);
+        this.cape.rotation.set(0, 0.4, 0.15 * Math.sin(time * 5.2));
+        this.cape.scale.setScalar(THREE.MathUtils.clamp(st * 1.3, 0.001, 1));
+        this.flapCape(time, speedNorm);
+      }
+    }
+  }
+
+  /** 천 펄럭임: 손(원점)에서 멀어질수록 크게 물결 */
+  private flapCape(time: number, speedNorm: number): void {
+    if (!this.capeGeo || !this.capeBase) return;
+    const pos = this.capeGeo.attributes.position as THREE.BufferAttribute;
+    const arr = pos.array as Float32Array;
+    const wind = 0.5 + speedNorm;
+    for (let i = 0; i < pos.count; i++) {
+      const bx = this.capeBase[i * 3];
+      const by = this.capeBase[i * 3 + 1];
+      const d = Math.hypot(bx, by) / 1.4; // 손에서의 거리 0..1
+      const w = d * d;
+      arr[i * 3] = bx + Math.sin(time * 9 + by * 4) * 0.08 * w * wind;
+      arr[i * 3 + 1] = by + Math.sin(time * 7 + bx * 5) * 0.05 * w;
+      arr[i * 3 + 2] = Math.sin(time * 8 + bx * 3 + by * 2) * 0.22 * w * wind + Math.sin(time * 5.2) * 0.15 * d;
+    }
+    pos.needsUpdate = true;
+    this.capeGeo.computeVertexNormals();
   }
 }
 
