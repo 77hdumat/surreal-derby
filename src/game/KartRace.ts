@@ -150,6 +150,11 @@ export class KartRace {
     this.checkOver();
   }
 
+  /** 클라이언트가 스냅샷 적용 후 순위를 다시 계산할 때 */
+  refreshRanking(): void {
+    this.computeRanking();
+  }
+
   private computeRanking(): void {
     const idx = this.karts.map((_, i) => i);
     idx.sort((a, b) => {

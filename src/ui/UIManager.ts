@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import type { RacerDefinition } from '../racers/Racer';
-import type { Racer } from '../racers/Racer';
-import type { RankingEntry } from '../game/RaceState';
-import type { RaceEvent } from '../events/RaceEvent';
 import { RacerFactory } from '../racers/RacerFactory';
 import type { RacerVisual, VisualContext } from '../racers/RacerVisual';
-import type { CommentaryLine } from '../commentary/CommentaryManager';
+import { JOCKEYS, jockeyById, statBars, type Jockey } from '../racers/Jockeys';
+import type { LobbySlot } from '../net/Protocol';
+import type { RaceResult, SlotConfig } from '../game/KartRace';
+import { LAPS } from '../game/KartPhysics';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 
@@ -15,28 +15,51 @@ function $(id: string): HTMLElement {
   return el;
 }
 
+export interface HudState {
+  lap: number;
+  rank: number;
+  total: number;
+  speed: number;
+  gauge: number;
+  boosting: boolean;
+  time: number;
+  /** 순위 순 이름 (상위부터) */
+  order: { name: string; emoji: string; me: boolean; finished: boolean }[];
+}
+
+export interface ResultRow {
+  slot: number;
+  rank: number;
+  name: string;
+  mountEmoji: string;
+  mountName: string;
+  jockeyName: string;
+  jockeyEmoji: string;
+  time: number | null;
+  me: boolean;
+}
+
 /**
- * HTML/CSS 오버레이: 소개 화면, 중계 HUD, 결과 화면.
+ * HTML/CSS 오버레이: 메뉴 → 로비(말·기수 선택) → HUD → 결과.
  */
 export class UIManager {
   private defs: RacerDefinition[];
-  private intro = $('intro');
+  private menu = $('menu');
+  private lobby = $('lobby');
   private hud = $('hud');
   private result = $('result');
-  private rankList = $('rank-list');
-  private ranking = document.querySelector('.ranking') as HTMLElement;
-  private subtitle = $('subtitle');
-  private camLabel = $('cam-label');
   private countdown = $('countdown');
-  private raceTime = $('race-time');
-  private slowmo = $('slowmo');
-  private detail = $('detail-card');
-  private selectedId: string | null = null;
-  private defaultNames: Map<string, string>;
+  private toast = $('hud-toast');
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  private rankList = $('rank-list');
   private lastRankKey = '';
-  private prevRankMap = new Map<string, number>();
-  private rankTimer = 0;
-  private leaderIdShown: string | null = null;
+  private lastLap = 0;
+
+  mountId: string;
+  jockeyId: string;
+  nick = '';
+  private pickLocked = false;
+
   // 프리뷰 렌더러
   private previewRenderer: THREE.WebGLRenderer | null = null;
   private previewScene = new THREE.Scene();
@@ -47,30 +70,66 @@ export class UIManager {
     boost: 0, bump: 0, bumpDir: 0, riderless: false, distanceToFinish: 500, sideHint: 1, extension: 0, lateralVel: 0, extensionMax: 0,
   };
 
-  onStart: (() => void) | null = null;
+  onSolo: (() => void) | null = null;
+  onHost: (() => void) | null = null;
+  onJoin: ((code: string) => void) | null = null;
+  onPick: ((mountId: string, jockeyId: string) => void) | null = null;
+  onReady: ((v: boolean) => void) | null = null;
+  onStartRace: (() => void) | null = null;
+  onLeave: (() => void) | null = null;
+  onKick: ((slot: number) => void) | null = null;
   onAgain: (() => void) | null = null;
-  onBackToSelect: (() => void) | null = null;
+  onToLobby: (() => void) | null = null;
   onToggleMute: (() => boolean) | null = null;
-  onToggleVoice: (() => boolean) | null = null;
   onToggleQuality: (() => boolean) | null = null;
 
   constructor(defs: RacerDefinition[]) {
     this.defs = defs;
-    this.defaultNames = new Map(defs.map((d) => [d.id, d.name]));
-    this.loadNames();
-    this.buildIntroList();
-    $('btn-reset-names').addEventListener('click', () => {
-      for (const d of this.defs) d.name = this.defaultNames.get(d.id) ?? d.name;
-      this.saveNames();
-      this.buildIntroList();
-      if (this.selectedId) this.select(this.selectedId);
+    this.mountId = this.load('surreal-derby-mount', defs[defs.length - 1].id);
+    this.jockeyId = this.load('surreal-derby-jockey', 'balance');
+    if (!defs.some((d) => d.id === this.mountId)) this.mountId = defs[0].id;
+    if (!JOCKEYS.some((j) => j.id === this.jockeyId)) this.jockeyId = 'balance';
+    this.nick = this.load('surreal-derby-nick', '');
+    const nick = $('nick') as HTMLInputElement;
+    nick.value = this.nick;
+    nick.addEventListener('input', () => {
+      this.nick = nick.value.trim();
+      this.save('surreal-derby-nick', this.nick);
     });
-    $('btn-start').addEventListener('click', () => this.onStart?.());
+    this.buildMountList();
+    this.buildJockeyList();
+    this.refreshPick(false);
+
+    const joinCode = $('join-code') as HTMLInputElement;
+    joinCode.addEventListener('input', () => {
+      joinCode.value = joinCode.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+    });
+    joinCode.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && joinCode.value.length === 5) this.onJoin?.(joinCode.value);
+    });
+    $('btn-solo').addEventListener('click', () => this.onSolo?.());
+    $('btn-host').addEventListener('click', () => this.onHost?.());
+    $('btn-join').addEventListener('click', () => {
+      if (joinCode.value.length === 5) this.onJoin?.(joinCode.value);
+      else this.setMenuMsg('방 코드 5자리를 입력하세요');
+    });
+    $('btn-ready').addEventListener('click', () => {
+      const b = $('btn-ready');
+      const v = !b.classList.contains('on');
+      this.onReady?.(v);
+    });
+    $('btn-race').addEventListener('click', () => this.onStartRace?.());
+    $('btn-leave').addEventListener('click', () => this.onLeave?.());
     $('btn-again').addEventListener('click', () => this.onAgain?.());
-    $('btn-select').addEventListener('click', () => this.onBackToSelect?.());
-    $('btn-voice').addEventListener('click', (e) => {
-      const on = this.onToggleVoice?.() ?? false;
-      (e.currentTarget as HTMLElement).classList.toggle('off', !on);
+    $('btn-tolobby').addEventListener('click', () => this.onToLobby?.());
+    $('room-code-wrap').addEventListener('click', () => {
+      const code = $('room-code').textContent ?? '';
+      const url = `${location.origin}${location.pathname}?r=${code}`;
+      navigator.clipboard?.writeText(url).then(() => {
+        $('room-code-wrap').classList.add('copied');
+        this.setLobbyMsg('초대 링크를 복사했습니다: ' + url);
+        setTimeout(() => $('room-code-wrap').classList.remove('copied'), 1200);
+      }).catch(() => {});
     });
     $('btn-mute').addEventListener('click', (e) => {
       const muted = this.onToggleMute?.() ?? false;
@@ -78,208 +137,250 @@ export class UIManager {
       (e.currentTarget as HTMLElement).classList.toggle('off', muted);
     });
     $('btn-quality').addEventListener('click', () => {
-      const high = this.onToggleQuality?.() ?? false;
-      this.setQuality(high);
+      this.onToggleQuality?.();
     });
-    this.previewScene.add(new THREE.HemisphereLight(0xffffff, 0x3f9a2c, 1.1));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-    sun.position.set(3, 6, 4);
-    this.previewScene.add(sun);
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(4, 24), new THREE.MeshLambertMaterial({ color: 0x5ec93c }));
-    ground.rotation.x = -Math.PI / 2;
-    this.previewScene.add(ground);
+    // 터치 기기면 터치 버튼 표시
+    if (window.matchMedia('(pointer: coarse)').matches) $('touch').classList.remove('hidden');
   }
 
-  private static NAMES_KEY = 'surreal-derby-names-v2'; // v2: 클래식 호스 → 제브라 다니오 개명
-
-  private loadNames(): void {
+  private load(key: string, def: string): string {
     try {
-      const raw = localStorage.getItem(UIManager.NAMES_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Record<string, string>;
-      for (const d of this.defs) {
-        const n = saved[d.id];
-        if (typeof n === 'string' && n.trim()) d.name = n.trim().slice(0, 14);
-      }
+      return localStorage.getItem(key) ?? def;
     } catch {
-      /* ignore */
+      return def;
+    }
+  }
+  private save(key: string, v: string): void {
+    try {
+      localStorage.setItem(key, v);
+    } catch {
+      /* private browsing */
     }
   }
 
-  private saveNames(): void {
-    try {
-      const obj: Record<string, string> = {};
-      for (const d of this.defs) obj[d.id] = d.name;
-      localStorage.setItem(UIManager.NAMES_KEY, JSON.stringify(obj));
-    } catch {
-      /* ignore */
-    }
+  get displayNick(): string {
+    return this.nick || '플레이어';
   }
 
-  private buildIntroList(): void {
-    const list = $('intro-list');
+  // ---------------------------------------------------------------- picker
+
+  private buildMountList(): void {
+    const list = $('mount-list');
     list.innerHTML = '';
     for (const d of this.defs) {
       const li = document.createElement('li');
       li.dataset.id = d.id;
-      li.innerHTML = `<span class="num" style="background:${hex(d.clothColor)}">${d.number}</span><span class="emoji">${d.emoji}</span><span class="txt"><div class="nm"><input type="text" maxlength="14" value="" spellcheck="false" /><span class="pen">✎</span></div><div class="en">${d.nameEn}</div></span>`;
-      const input = li.querySelector('input') as HTMLInputElement;
-      input.value = d.name;
-      input.addEventListener('click', (e) => e.stopPropagation());
-      input.addEventListener('focus', () => this.select(d.id));
-      const commit = () => {
-        const v = input.value.trim().slice(0, 14);
-        d.name = v || (this.defaultNames.get(d.id) ?? d.name);
-        input.value = d.name;
-        this.saveNames();
-        if (this.selectedId === d.id) this.select(d.id, true);
-      };
-      input.addEventListener('change', commit);
-      input.addEventListener('blur', commit);
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') input.blur();
+      li.innerHTML = `<span class="emoji">${d.emoji}</span><div class="txt"><div class="nm">${d.name}</div><div class="en">${d.nameEn}</div></div>`;
+      li.addEventListener('click', () => {
+        if (this.pickLocked) return;
+        this.mountId = d.id;
+        this.refreshPick(true);
       });
-      li.addEventListener('click', () => this.select(d.id));
       list.appendChild(li);
     }
   }
 
-  private select(id: string, keepPreview = false): void {
-    this.selectedId = id;
-    document.querySelectorAll('#intro-list li').forEach((li) => li.classList.toggle('active', (li as HTMLElement).dataset.id === id));
-    const d = this.defs.find((x) => x.id === id)!;
-    const stat = (label: string, v: number, max: number, show: string) =>
-      `<div>${label}</div><div class="bar"><i style="width:${Math.round((v / max) * 100)}%"></i></div><div class="val">${show}</div>`;
-    if (keepPreview && this.detail.querySelector('#preview-canvas')) {
-      const nm = this.detail.querySelector('.detail-head .nm');
-      if (nm) nm.textContent = `${d.emoji} ${d.name}`;
-      return;
+  private buildJockeyList(): void {
+    const list = $('jockey-list');
+    list.innerHTML = '';
+    for (const j of JOCKEYS) {
+      const li = document.createElement('li');
+      li.dataset.id = j.id;
+      li.innerHTML = `<span class="emoji">${j.emoji}</span><div class="txt"><div class="nm">${j.name}</div><div class="en">${j.desc}</div></div><span class="swatch" style="background:${hex(j.silks)}"></span>`;
+      li.addEventListener('click', () => {
+        if (this.pickLocked) return;
+        this.jockeyId = j.id;
+        this.refreshPick(true);
+      });
+      list.appendChild(li);
     }
-    this.detail.innerHTML = `
-      <div class="detail-left"><div class="detail-preview"><canvas id="preview-canvas"></canvas></div></div>
-      <div class="detail-right">
-        <div class="detail-head">
-          <span class="num" style="background:${hex(d.clothColor)}">${d.number}</span>
-          <div><div class="nm">${d.emoji} ${d.name}</div><div class="en">${d.nameEn}</div></div>
-        </div>
-        <div class="stats">
-          ${stat('속도', d.speed, 18, d.speed.toFixed(1))}
-          ${stat('가속', d.acceleration, 6, d.acceleration.toFixed(1))}
-          ${stat('스태미나', d.stamina, 1, Math.round(d.stamina * 100) + '')}
-          ${stat('코너링', d.cornering, 1, Math.round(d.cornering * 100) + '')}
-          ${stat('체중', Math.min(d.weight, 4200), 4200, d.weight + 'kg')}
-          ${stat('운', d.luck, 1, Math.round(d.luck * 100) + '')}
-        </div>
-        <div class="ability"><div class="ab-name">특수 능력 · ${d.abilityName}</div><div class="ab-desc">${d.abilityDesc}</div></div>
-        <div class="detail-desc">“${d.description}”</div>
-      </div>
-    `;
-    this.setupPreview(d);
   }
 
-  private setupPreview(d: RacerDefinition): void {
+  private refreshPick(notify: boolean): void {
+    const d = this.defs.find((x) => x.id === this.mountId) ?? this.defs[0];
+    const j = jockeyById(this.jockeyId);
+    $('mount-list').querySelectorAll('li').forEach((li) => li.classList.toggle('active', li.dataset.id === d.id));
+    $('jockey-list').querySelectorAll('li').forEach((li) => li.classList.toggle('active', li.dataset.id === j.id));
+    $('pick-num').textContent = d.emoji;
+    $('pick-num').style.background = hex(d.bodyColor);
+    $('pick-name').textContent = d.name;
+    $('pick-en').textContent = d.nameEn;
+    $('pick-jockey').textContent = `${j.emoji} ${j.name}`;
+    $('pick-jockey-desc').textContent = j.desc;
+    $('pick-desc').textContent = d.description;
+    const stats = $('pick-stats');
+    stats.innerHTML = '';
+    for (const s of statBars(d, j)) {
+      stats.insertAdjacentHTML('beforeend', `<span>${s.label}</span><div class="bar"><i style="width:${Math.round(s.value * 100)}%"></i></div><span class="val">${Math.round(s.value * 100)}</span>`);
+    }
+    this.save('surreal-derby-mount', d.id);
+    this.save('surreal-derby-jockey', j.id);
+    if (!this.lobby.classList.contains('hidden')) this.setupPreview(d, j);
+    if (notify) this.onPick?.(d.id, j.id);
+  }
+
+  /** 레이스 중엔 선택 잠금 */
+  lockPick(locked: boolean): void {
+    this.pickLocked = locked;
+    document.querySelector('.picker')?.classList.toggle('readonly', locked);
+  }
+
+  private setupPreview(d: RacerDefinition, j: Jockey): void {
     const canvas = document.getElementById('preview-canvas') as HTMLCanvasElement | null;
     if (!canvas) return;
-    if (this.previewRenderer) {
-      this.previewRenderer.dispose();
-      this.previewRenderer = null;
+    if (!this.previewRenderer) {
+      try {
+        this.previewRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        this.previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        this.previewScene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6));
+        const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+        sun.position.set(4, 8, 5);
+        this.previewScene.add(sun);
+      } catch {
+        this.previewRenderer = null;
+        return;
+      }
     }
-    try {
-      this.previewRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-      this.previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-      const rect = canvas.parentElement!.getBoundingClientRect();
+    const rect = canvas.parentElement!.getBoundingClientRect();
+    if (rect.width > 0) {
       this.previewRenderer.setSize(rect.width, rect.height, false);
       this.previewCamera.aspect = rect.width / rect.height;
       this.previewCamera.updateProjectionMatrix();
-    } catch {
-      this.previewRenderer = null;
-      return;
     }
     if (this.previewVisual) {
       this.previewScene.remove(this.previewVisual.root);
       this.previewVisual.dispose();
     }
-    this.previewVisual = RacerFactory.createVisual({ ...d, modelUrl: undefined });
+    this.previewVisual = RacerFactory.createVisual({ ...d, modelUrl: undefined, silksColor: j.silks, clothColor: j.cloth });
     this.previewScene.add(this.previewVisual.root);
     const h = this.previewVisual.height;
     this.previewCamera.position.set(6.5, h * 0.9 + 1, 6.5);
     this.previewCamera.lookAt(0, h * 0.5, 0);
-    if (import.meta.env.DEV) (window as unknown as { __preview?: unknown }).__preview = { camera: this.previewCamera, visual: this.previewVisual, ctx: this.previewCtx };
   }
 
   updatePreview(dt: number): void {
-    if (!this.previewRenderer || !this.previewVisual || this.intro.classList.contains('hidden')) return;
+    if (!this.previewRenderer || !this.previewVisual || this.lobby.classList.contains('hidden')) return;
     this.previewCtx.dt = dt;
     this.previewCtx.time += dt;
     this.previewVisual.update(this.previewCtx);
-    if (!(window as unknown as { __previewFreeze?: boolean }).__previewFreeze) this.previewVisual.root.rotation.y += dt * 0.6;
+    this.previewVisual.root.rotation.y += dt * 0.6;
     this.previewRenderer.render(this.previewScene, this.previewCamera);
   }
 
-  // ---------------------------------------------------------------- phases
+  // ---------------------------------------------------------------- screens
 
-  /** 에셋 로딩 상태: 시작 버튼 잠금 + 진행률 표시 */
   setLoading(loading: boolean, doneCount = 0, total = 0): void {
-    const btn = $('btn-start') as HTMLButtonElement;
-    btn.disabled = loading;
-    btn.textContent = loading ? `모델 로딩 중… ${total ? Math.round((doneCount / total) * 100) : 0}%` : '레이스 시작';
-    btn.classList.toggle('loading', loading);
+    for (const id of ['btn-solo', 'btn-host', 'btn-join']) (document.getElementById(id) as HTMLButtonElement).disabled = loading;
+    this.setMenuMsg(loading ? `모델 로딩 중… ${total ? Math.round((doneCount / total) * 100) : 0}%` : '');
   }
 
-  showIntro(): void {
-    this.intro.classList.remove('hidden');
+  setMenuMsg(text: string): void {
+    $('menu-msg').textContent = text;
+  }
+
+  showMenu(msg = ''): void {
+    this.menu.classList.remove('hidden');
+    this.lobby.classList.add('hidden');
     this.hud.classList.add('hidden');
     this.result.classList.add('hidden');
-    if (!this.selectedId) this.select(this.defs[0].id);
-    else this.select(this.selectedId);
+    this.setMenuMsg(msg);
+  }
+
+  /** @param code 방 코드 (솔로면 null) */
+  showLobby(code: string | null, isHost: boolean): void {
+    this.menu.classList.add('hidden');
+    this.lobby.classList.remove('hidden');
+    this.hud.classList.add('hidden');
+    this.result.classList.add('hidden');
+    $('room-code-wrap').classList.toggle('hidden', !code);
+    $('room-code').textContent = code ?? '-----';
+    $('lobby-badge').textContent = code ? (isHost ? '방장' : '참가자') : '혼자 달리기';
+    $('lobby-title').textContent = code ? '대기실' : '출전 준비';
+    $('btn-ready').classList.toggle('hidden', isHost || !code);
+    $('btn-race').classList.toggle('hidden', !isHost);
+    this.lockPick(false);
+    this.refreshPick(false);
+    this.setupPreview(this.defs.find((x) => x.id === this.mountId) ?? this.defs[0], jockeyById(this.jockeyId));
+  }
+
+  setLobbyMsg(text: string): void {
+    $('lobby-msg').textContent = text;
+  }
+
+  setReady(v: boolean): void {
+    const b = $('btn-ready');
+    b.classList.toggle('on', v);
+    b.textContent = v ? '준비 완료 ✓' : '준비';
+  }
+
+  setStartEnabled(enabled: boolean, label = '레이스 시작'): void {
+    const b = $('btn-race') as HTMLButtonElement;
+    b.disabled = !enabled;
+    b.textContent = label;
+  }
+
+  renderLobby(slots: LobbySlot[], mySlot: number, isHost: boolean): void {
+    const list = $('slot-list');
+    list.innerHTML = '';
+    slots.forEach((s, i) => {
+      const li = document.createElement('li');
+      const empty = !s.human && !s.cpu;
+      li.className = (i === mySlot ? 'me ' : '') + (empty ? 'empty' : '');
+      const d = this.defs.find((x) => x.id === s.mountId);
+      const j = jockeyById(s.jockeyId);
+      const badge = i === 0 ? '<span class="badge host">HOST</span>' : s.cpu ? '<span class="badge cpu">CPU</span>' : s.human ? (s.ready ? '<span class="badge ready">READY</span>' : '<span class="badge">대기</span>') : '';
+      const kick = isHost && s.human && i !== 0 ? `<button class="kick" data-slot="${i}" title="강퇴">✕</button>` : '';
+      li.innerHTML = empty
+        ? `<span class="num">${i + 1}</span><div class="txt"><div class="nm">빈 자리</div><div class="sub">시작하면 CPU 가 들어옵니다</div></div>`
+        : `<span class="num">${i + 1}</span><div class="txt"><div class="nm">${s.name}${i === mySlot ? ' (나)' : ''}</div><div class="sub">${d ? d.emoji + ' ' + d.name : ''} · ${j.emoji} ${j.name}</div></div>${badge}${kick}`;
+      list.appendChild(li);
+    });
+    list.querySelectorAll<HTMLButtonElement>('.kick').forEach((b) => b.addEventListener('click', () => this.onKick?.(Number(b.dataset.slot))));
   }
 
   showHud(): void {
-    this.intro.classList.add('hidden');
+    this.menu.classList.add('hidden');
+    this.lobby.classList.add('hidden');
     this.hud.classList.remove('hidden');
     this.result.classList.add('hidden');
-    this.subtitle.classList.add('hidden');
     this.lastRankKey = '';
-    this.leaderIdShown = null;
-    this.prevRankMap.clear();
+    this.lastLap = 0;
+    this.setCountdown('');
+    $('hud-lap').textContent = '1';
+    (document.querySelector('.lap-total') as HTMLElement).textContent = `/${LAPS}`;
   }
 
-  showResult(ranking: RankingEntry[], racers: Racer[], highlights: RaceEvent[], scenarioTitle = ''): void {
-    this.result.classList.remove('hidden');
-    const st = document.getElementById('result-scenario');
-    if (st) st.textContent = scenarioTitle ? `시나리오 · ${scenarioTitle}` : '';
-    const list = $('result-list');
-    list.innerHTML = '';
-    ranking.forEach((e, i) => {
-      const r = racers.find((x) => x.def.id === e.id)!;
-      const li = document.createElement('li');
-      li.style.animationDelay = `${i * 0.08}s`;
-      const t = r.state.finishTime !== null ? r.state.finishTime.toFixed(2) + 's' : 'DNF';
-      li.innerHTML = `<span class="pos">${i + 1}위</span><span class="num" style="background:${hex(r.def.clothColor)}">${r.def.number}</span><span class="name">${r.def.emoji} ${r.def.name}</span><span class="time">${t}</span>`;
-      list.appendChild(li);
-    });
-    const pick = $('result-pick');
-    const winner = racers.find((x) => x.def.id === ranking[0].id)!;
-    const runner = racers.find((x) => x.def.id === ranking[1]?.id);
-    const margin = runner && winner.state.finishTime !== null && runner.state.finishTime !== null ? (runner.state.finishTime - winner.state.finishTime).toFixed(2) + '초 차' : '';
-    pick.innerHTML = `🏆 우승 · ${winner.def.emoji} ${winner.def.name}<br><span class="big-msg">${winner.state.finishTime !== null ? winner.state.finishTime.toFixed(2) + 's' : ''} ${margin}</span>`;
-    const ev = $('result-events');
-    ev.innerHTML = '';
-    const shown = highlights.slice(0, 12);
-    if (!shown.length) ev.innerHTML = '<li>특별한 사건 없이 평화로운(?) 레이스였습니다.</li>';
-    for (const h of shown) {
-      const li = document.createElement('li');
-      const r = racers.find((x) => x.def.id === h.racerId);
-      li.innerHTML = `<span class="t">${h.time.toFixed(1)}초</span><span>${r ? r.def.emoji + ' ' : ''}${h.label ?? h.event}</span>`;
-      ev.appendChild(li);
+  updateHud(h: HudState): void {
+    if (h.lap !== this.lastLap) {
+      this.lastLap = h.lap;
+      $('hud-lap').textContent = String(h.lap);
+    }
+    $('hud-pos').textContent = String(h.rank);
+    $('hud-pos-total').textContent = `/${h.total}`;
+    $('hud-speed').textContent = String(Math.round(Math.abs(h.speed) * 3.6));
+    $('race-time').textContent = h.time.toFixed(1).padStart(4, '0');
+    const fill = $('gauge-fill');
+    fill.style.width = `${Math.round(Math.min(1, h.gauge) * 100)}%`;
+    const g = fill.parentElement!;
+    g.classList.toggle('full', h.gauge >= 1 && !h.boosting);
+    g.classList.toggle('boosting', h.boosting);
+    $('gauge-label').textContent = h.boosting ? 'BOOST!!' : h.gauge >= 1 ? 'SPACE → BOOST' : 'DRIFT → BOOST';
+    const key = h.order.map((o) => o.name + (o.finished ? '!' : '')).join('|');
+    if (key !== this.lastRankKey) {
+      this.lastRankKey = key;
+      this.rankList.innerHTML = '';
+      h.order.forEach((o, i) => {
+        const li = document.createElement('li');
+        li.className = (i === 0 ? 'leader ' : '') + (o.me ? 'pick ' : '') + (o.finished ? 'finished' : '');
+        li.innerHTML = `<span class="pos">${i + 1}</span><span class="name">${o.emoji} ${o.name}</span><span class="gap">${o.finished ? 'FIN' : ''}</span>`;
+        this.rankList.appendChild(li);
+      });
     }
   }
 
-  hideResult(): void {
-    this.result.classList.add('hidden');
+  setNetInfo(text: string): void {
+    $('net-info').textContent = text;
   }
-
-  // ---------------------------------------------------------------- HUD
 
   setCountdown(text: string): void {
     this.countdown.textContent = text;
@@ -290,108 +391,47 @@ export class UIManager {
     }
   }
 
-  setCameraLabel(mode: string): void {
-    this.camLabel.textContent = 'CAM · ' + mode.replace(/_CAMERA$/, '').replace(/_/g, ' ');
+  showToast(text: string, ms = 1400): void {
+    this.toast.textContent = text;
+    this.toast.classList.remove('hidden');
+    void this.toast.offsetWidth;
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.toast.classList.add('hidden'), ms);
   }
 
-  setRaceTime(t: number): void {
-    this.raceTime.textContent = t.toFixed(1).padStart(4, '0');
+  showResult(rows: ResultRow[], canRestart: boolean, subtitle = ''): void {
+    this.result.classList.remove('hidden');
+    $('result-scenario').textContent = subtitle;
+    const list = $('result-list');
+    list.innerHTML = '';
+    rows.forEach((r, i) => {
+      const li = document.createElement('li');
+      li.style.animationDelay = `${i * 0.08}s`;
+      if (r.me) li.classList.add('me');
+      const t = r.time !== null ? r.time.toFixed(2) + 's' : 'DNF';
+      li.innerHTML = `<span class="pos">${r.rank}위</span><span class="num">${r.slot + 1}</span><span class="name">${r.name}</span><span class="combo">${r.mountEmoji} ${r.mountName} · ${r.jockeyEmoji} ${r.jockeyName}</span><span class="time">${t}</span>`;
+      list.appendChild(li);
+    });
+    $('btn-again').classList.toggle('hidden', !canRestart);
   }
 
-  setSlowMo(on: boolean): void {
-    this.slowmo.classList.toggle('hidden', !on);
+  hideResult(): void {
+    this.result.classList.add('hidden');
   }
 
   setQuality(high: boolean): void {
-    const button = $('btn-quality');
-    button.textContent = high ? 'HD 고급' : '균형';
-    button.title = high ? '고급 렌더링 사용 중 (클릭해 균형 모드)' : '균형 모드 사용 중 (클릭해 고급 렌더링)';
-    button.classList.toggle('high', high);
+    const b = $('btn-quality');
+    b.textContent = high ? '고급' : 'HD';
+    b.classList.toggle('high', high);
   }
 
-  setSubtitle(line: CommentaryLine | null): void {
-    if (!line) {
-      this.subtitle.classList.add('hidden');
-      return;
-    }
-    this.subtitle.classList.remove('hidden');
-    this.subtitle.classList.toggle('major', line.major);
-    this.subtitle.textContent = line.text;
-    // 애니메이션 재시작
-    this.subtitle.style.animation = 'none';
-    void this.subtitle.offsetWidth;
-    this.subtitle.style.animation = '';
-  }
-
-  /** 100~200ms 간격으로만 갱신 */
-  updateRanking(dt: number, ranking: RankingEntry[], racers: Racer[], force = false): void {
-    this.rankTimer += dt;
-    if (!force && this.rankTimer < 0.15) return;
-    this.rankTimer = 0;
-    const key = ranking.map((e) => e.id).join(',');
-    const leaderChanged = ranking[0] && this.leaderIdShown !== null && ranking[0].id !== this.leaderIdShown;
-    if (key === this.lastRankKey && !force) {
-      // 순위 같아도 간격은 갱신
-      ranking.forEach((e, i) => {
-        const li = this.rankList.children[i] as HTMLElement | undefined;
-        if (li) this.fillGap(li, e, racers);
-      });
-      return;
-    }
-    this.lastRankKey = key;
-    this.rankList.innerHTML = '';
-    ranking.forEach((e) => {
-      const r = racers.find((x) => x.def.id === e.id)!;
-      const li = document.createElement('li');
-      li.classList.toggle('leader', e.rank === 1);
-      li.classList.toggle('finished', e.finished);
-      const prev = this.prevRankMap.get(e.id);
-      if (prev !== undefined && prev !== e.rank) li.classList.add(e.rank < prev ? 'up' : 'down');
-      this.prevRankMap.set(e.id, e.rank);
-      li.innerHTML = `<span class="pos">${e.rank}</span><span class="num" style="background:${hex(r.def.clothColor)}">${r.def.number}</span><span class="name">${r.def.name}</span><span class="gap"></span>`;
-      this.fillGap(li, e, racers);
-      this.rankList.appendChild(li);
+  /** 결과 화면용 행 생성 도우미 */
+  resultRows(results: RaceResult[], slots: SlotConfig[], mySlot: number): ResultRow[] {
+    return results.map((r) => {
+      const cfg = slots[r.slot];
+      const d = this.defs.find((x) => x.id === cfg.mountId) ?? this.defs[0];
+      const j = jockeyById(cfg.jockeyId);
+      return { slot: r.slot, rank: r.rank, name: cfg.name, mountEmoji: d.emoji, mountName: d.name, jockeyEmoji: j.emoji, jockeyName: j.name, time: r.time, me: r.slot === mySlot };
     });
-    if (leaderChanged) {
-      this.ranking.classList.remove('leadflash');
-      void this.ranking.offsetWidth;
-      this.ranking.classList.add('leadflash');
-    }
-    if (ranking[0]) this.leaderIdShown = ranking[0].id;
-  }
-
-  private fillGap(li: HTMLElement, e: RankingEntry, racers: Racer[]): void {
-    const gap = li.querySelector('.gap');
-    if (!gap) return;
-    const r = racers.find((x) => x.def.id === e.id)!;
-    const st = r.state.state;
-    let s = '';
-    if (e.finished) s = 'FIN';
-    else if (st === 'COLLAPSED') s = '붕괴!';
-    else if (st === 'ENGINE_FAILURE') s = '고장';
-    else if (st === 'BOOSTING') s = '부스트';
-    else if (st === 'CHARGING') s = '돌진!';
-    else if (st === 'RAGING') s = '폭주!';
-    else if (st === 'BIPEDAL') s = '두발!';
-    else if (st === 'PERFORMING') s = '공연중!';
-    else if (st === 'AMBUSH') s = '병사출동!';
-    else if (st === 'GRABBING') s = '코 공격!';
-    else if (st === 'CARRYING') s = '들고뜀!';
-    else if (st === 'FALLEN') s = '넘어짐!';
-    else if (st === 'LAUNCHED') s = '비행중!';
-    else if (st === 'PLANTED') s = '땅에꽂힘';
-    else if (st === 'REVERSING') s = '뒷걸음!';
-    else if (st === 'BROKEN') s = '바퀴빠짐';
-    else if (st === 'SLEEPING') s = 'Zzz';
-    else if (st === 'STUBBORN') s = '풀뜯는중';
-    else if (st === 'DANCING') s = '목댄스!';
-    else if (st === 'SHOELACE') s = '신발끈';
-    else if (st === 'SPRAYING') s = '물대포!';
-    else if (st === 'STRETCHED') s = '쭈욱!';
-    else if (st === 'EXHAUSTED') s = '탈진';
-    else if (st === 'STUNNED') s = '휘청';
-    else if (e.rank === 1) s = 'LEAD';
-    else s = e.gapToLeader < 1 ? '동착' : `-${e.gapToLeader.toFixed(0)}m`;
-    gap.textContent = s;
   }
 }

@@ -2,8 +2,8 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>제1회 초현실 경마 그랑프리</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>초현실 경마 그랑프리 — 대결</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -12,70 +12,122 @@
       <canvas id="fx"></canvas>
       <div id="tv"></div>
 
+      <!-- ===== HUD ===== -->
       <div id="hud" class="hidden">
         <div class="hud-top">
-          <div class="title-tag"><span class="tag-round">제1회</span> 초현실 경마 그랑프리</div>
-          <div class="live"><span class="dot"></span>LIVE</div>
+          <div class="title-tag"><span class="tag-round">대결</span> 초현실 경마 그랑프리</div>
+          <div class="lap-box"><span class="lap-label">LAP</span><span id="hud-lap">1</span><span class="lap-total">/3</span></div>
           <div class="race-time" id="race-time">00.0</div>
         </div>
         <div class="ranking">
-          <div class="ranking-head">현재 순위</div>
+          <div class="ranking-head">순위</div>
           <ol id="rank-list"></ol>
         </div>
-        <div id="cam-label"></div>
+        <div class="pos-box"><span id="hud-pos">4</span><span class="pos-suffix">위</span><span id="hud-pos-total">/4</span></div>
         <div id="countdown"></div>
-        <div id="slowmo" class="hidden">SLOW MOTION</div>
-        <div class="subtitle-wrap"><div class="subtitle hidden" id="subtitle"></div></div>
+        <div id="hud-toast" class="hidden"></div>
+        <div id="net-info"></div>
+        <div class="gauge-wrap">
+          <div class="speed"><span id="hud-speed">0</span><span class="unit">km/h</span></div>
+          <div class="gauge"><div id="gauge-fill"></div><div class="gauge-label" id="gauge-label">DRIFT → BOOST</div></div>
+        </div>
         <div class="controls">
           <button id="btn-quality" class="quality" title="렌더링 품질">HD</button>
-          <button id="btn-voice" title="일본어 음성 해설">🎙</button>
           <button id="btn-mute" title="소리">🔊</button>
+        </div>
+        <div class="keys-hint">↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트</div>
+        <div id="touch" class="hidden">
+          <div class="touch-left">
+            <button data-key="left">◀</button>
+            <button data-key="right">▶</button>
+          </div>
+          <div class="touch-right">
+            <button data-key="boost" class="boost">BOOST</button>
+            <button data-key="drift" class="drift">DRIFT</button>
+            <button data-key="brake" class="brake">▼</button>
+            <button data-key="gas" class="gas">▲</button>
+          </div>
         </div>
       </div>
 
-      <div id="intro">
-        <div class="intro-inner">
+      <!-- ===== MENU ===== -->
+      <div id="menu" class="panel">
+        <div class="panel-inner">
           <header class="intro-header">
             <div class="brand">
-              <span class="brand-badge">제1회</span>
+              <span class="brand-badge">대결 모드</span>
               <h1>초현실 경마 그랑프리</h1>
-              <div class="brand-sub">SURREAL DERBY GRAND PRIX · TODAY'S RACERS</div>
-            </div>
-            <div class="intro-actions">
-              <button id="btn-start" class="nintendo-btn">레이스 시작</button>
-              <button id="btn-reset-names" class="text-btn">이름 초기화</button>
+              <div class="brand-sub">SURREAL DERBY · KART BATTLE · 3 LAPS</div>
             </div>
           </header>
-          <div class="intro-body">
-            <div class="intro-hero">
-              <img src="/cover.webp" alt="" />
-            </div>
-            <div class="intro-panel">
-              <ol id="intro-list"></ol>
-              <div id="detail-card" class="detail-card">
-                <div class="detail-empty">출전 선수를 선택하세요</div>
+          <div class="menu-body">
+            <div class="intro-hero"><img src="/cover.webp" alt="" /></div>
+            <div class="menu-panel">
+              <label class="field"><span>닉네임</span><input id="nick" maxlength="12" placeholder="이름" /></label>
+              <button id="btn-solo" class="nintendo-btn">혼자 달리기 <small>CPU 3명</small></button>
+              <button id="btn-host" class="nintendo-btn alt">방 만들기 <small>친구와 대결</small></button>
+              <div class="join-row">
+                <input id="join-code" maxlength="5" placeholder="방 코드" autocapitalize="characters" autocomplete="off" />
+                <button id="btn-join" class="text-btn">참가</button>
               </div>
-              <div class="hint">선수 카드의 이름을 클릭하면 바로 수정할 수 있습니다 · 변경한 이름은 이 브라우저에 저장됩니다</div>
+              <div id="menu-msg" class="msg"></div>
+              <div class="hint">↑↓←→ 이동 · Shift 드리프트(게이지 충전) · Space 부스터 · 3바퀴 먼저 도는 사람이 승리</div>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- ===== LOBBY ===== -->
+      <div id="lobby" class="panel hidden">
+        <div class="panel-inner">
+          <header class="intro-header">
+            <div class="brand">
+              <span class="brand-badge" id="lobby-badge">대기실</span>
+              <h1 id="lobby-title">출전 준비</h1>
+              <div class="brand-sub" id="lobby-msg"></div>
+            </div>
+            <div class="intro-actions">
+              <div id="room-code-wrap" class="room-code hidden" title="클릭하면 복사"><span>방 코드</span><b id="room-code">-----</b></div>
+              <button id="btn-ready" class="nintendo-btn alt hidden">준비</button>
+              <button id="btn-race" class="nintendo-btn">레이스 시작</button>
+              <button id="btn-leave" class="text-btn">나가기</button>
+            </div>
+          </header>
+          <div class="lobby-body">
+            <div class="slots">
+              <div class="section-title">참가자</div>
+              <ol id="slot-list"></ol>
+            </div>
+            <div class="picker">
+              <div class="section-title">말 선택</div>
+              <ol id="mount-list"></ol>
+              <div class="section-title">기수 선택</div>
+              <ol id="jockey-list"></ol>
+              <div class="detail-card">
+                <div class="detail-left">
+                  <div class="detail-head"><span class="num" id="pick-num">1</span><div><div class="nm" id="pick-name"></div><div class="en" id="pick-en"></div></div></div>
+                  <div class="detail-preview"><canvas id="preview-canvas"></canvas></div>
+                </div>
+                <div class="detail-right">
+                  <div class="stats" id="pick-stats"></div>
+                  <div class="ability"><div class="ab-name" id="pick-jockey"></div><div class="ab-desc" id="pick-jockey-desc"></div></div>
+                  <div class="detail-desc" id="pick-desc"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== RESULT ===== -->
       <div id="result" class="hidden">
         <div class="result-inner">
           <div class="result-title">RACE RESULT</div>
           <div id="result-scenario" class="result-scenario"></div>
-          <div class="result-body">
-            <ol id="result-list"></ol>
-            <div class="result-side">
-              <div id="result-pick"></div>
-              <div class="result-events-head">주요 사건</div>
-              <ul id="result-events"></ul>
-            </div>
-          </div>
+          <ol id="result-list"></ol>
           <div class="result-actions">
             <button id="btn-again" class="result-button">다시 경기</button>
-            <button id="btn-select" class="result-button">선수 선택으로</button>
+            <button id="btn-tolobby" class="result-button">대기실로</button>
           </div>
         </div>
       </div>
