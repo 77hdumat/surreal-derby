@@ -85,6 +85,12 @@ export class Game {
   /** 출발 부스터 판정: ↑ 를 누르기 시작한 시각 (performance.now, ms) */
   private throttleSince = -1;
   private startBoostDone = false;
+  /** 호스트: 카운트다운 전 게스트 준비 대기 */
+  private waitingLoaded = false;
+  private loadedSlots = new Set<number>();
+  private loadedTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 클라: 세팅 중에 GO 가 먼저 도착한 경우 */
+  private pendingGo = false;
   private recvSeq = 0;
   private pingT = 0;
   private netInfoT = 0;
@@ -340,6 +346,7 @@ export class Game {
       this.renderLobby();
       this.broadcastLobby();
       if (name) this.hostChat(`${name} 퇴장`, -1, true);
+      if (this.waitingLoaded) this.checkAllLoaded();
       // 레이스 중 이탈: 그 말은 CPU 가 이어받아 달린다 (트랙에 멈춰 있지 않게)
       if ((this.screen === 'RACE' || this.screen === 'RESULT') && this.race.slots[slot] && !this.race.owned[slot]) {
         this.race.slots[slot].cpu = true;
@@ -369,6 +376,10 @@ export class Game {
         break;
       case 'chat':
         if (typeof m.text === 'string') this.hostChat(m.text.slice(0, 120), slot, false);
+        break;
+      case 'loaded':
+        this.loadedSlots.add(slot);
+        this.checkAllLoaded();
         break;
       case 'pick':
         s.mountId = m.mountId;
@@ -485,6 +496,11 @@ export class Game {
         void this.beginRace(m.slots, m.seed);
         break;
       case 'count':
+        if (this.raceStarting) {
+          // 아직 모델 세팅 중 — 끝나면 바로 출발
+          if (m.n === 0) this.pendingGo = true;
+          break;
+        }
         this.showCount(m.n);
         if (m.n === 0 && this.race.phase !== 'RACING') {
           this.race.startRacing();
@@ -648,6 +664,7 @@ export class Game {
     this.accum = 0;
     this.throttleSince = -1;
     this.startBoostDone = false;
+    this.pendingGo = false;
     this.input.attach();
     this.input.clear();
     this.screen = 'RACE';
@@ -658,12 +675,46 @@ export class Game {
     this.racers.update(this.race.karts, this.race.params, 0, 0, this.camera.camera.position);
     this.audio.setExcitement(0.3);
     this.audio.play('neigh', { gain: 0.5 });
-    if (this.mode !== 'client') {
-      this.race.startCountdown();
-      this.showCount(3);
-      this.net?.broadcast({ t: 'count', n: 3 });
-    }
     this.raceStarting = false;
+    if (this.mode === 'solo') {
+      this.startCountdownNow();
+    } else if (this.mode === 'host') {
+      // 게스트 전원이 모델 세팅을 끝낼 때까지 대기 (최대 10초) → 동시에 출발
+      this.waitingLoaded = true;
+      this.loadedSlots.clear();
+      this.ui.setCountdown('대기 중…');
+      if (this.loadedTimer) clearTimeout(this.loadedTimer);
+      this.loadedTimer = setTimeout(() => this.checkAllLoaded(true), 10000);
+      this.checkAllLoaded();
+    } else {
+      this.ui.setCountdown('준비…');
+      this.net?.send({ t: 'loaded' });
+      if (this.pendingGo) {
+        this.pendingGo = false;
+        this.showCount(0);
+        this.race.startRacing();
+        this.tryStartBoost();
+      }
+    }
+  }
+
+  /** 호스트: 사람 슬롯이 전부 loaded 를 보냈으면(또는 타임아웃) 카운트다운 */
+  private checkAllLoaded(force = false): void {
+    if (!this.waitingLoaded || this.screen !== 'RACE') return;
+    const humans = this.race.slots.filter((s) => !s.cpu && s.slot !== this.mySlot && this.lobby[s.slot]?.human);
+    const ready = humans.every((s) => this.loadedSlots.has(s.slot));
+    if (!ready && !force) return;
+    this.waitingLoaded = false;
+    if (this.loadedTimer) clearTimeout(this.loadedTimer);
+    this.loadedTimer = null;
+    this.startCountdownNow();
+  }
+
+  private startCountdownNow(): void {
+    this.race.startCountdown();
+    this.lastCount = -1;
+    this.showCount(3);
+    this.net?.broadcast({ t: 'count', n: 3 });
   }
 
   /** 큰 탈것은 화면에 엉덩이만 나오지 않게 카메라를 멀리 */
