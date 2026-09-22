@@ -1,5 +1,6 @@
 import type { TrackGeometry } from '../track/TrackGeometry';
 import { angleDelta, type KartInput, type KartParams, type KartState } from './KartPhysics';
+import type { Obstacle } from './Obstacles';
 
 /** 봇 성격 — 슬롯 seed 로 고정 */
 export interface CpuProfile {
@@ -27,7 +28,7 @@ export function cpuProfile(seed: number): CpuProfile {
  * CPU 입력: 중심선 lookahead 추종 + 앞 말 회피 + 코너 드리프트 + 직선 부스트.
  * 결정적(상태·프로필만 의존) — 호스트에서만 돌린다.
  */
-export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, others: KartState[], prof: CpuProfile, out: KartInput): KartInput {
+export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, others: KartState[], prof: CpuProfile, out: KartInput, obstacles: Obstacle[] = []): KartInput {
   const corner = track.cornerWeight(st.s + 15);
   // 코너는 안쪽으로, 직선은 선호 차선
   let targetLat = corner > 0.3 ? -6 + prof.lanePref * 0.3 : prof.lanePref;
@@ -38,6 +39,15 @@ export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, oth
     if (gap < 2 || gap > 12) continue;
     const dl = o.lat - targetLat;
     if (Math.abs(dl) < 2.8) targetLat += dl > 0 ? -3 : 3;
+  }
+  // 앞 30m 안의 건초·진흙은 피하고, 패드는 밟으러 간다
+  for (const o of obstacles) {
+    const ds = track.wrap(o.s - st.s);
+    if (ds > 30) continue;
+    const dl = o.lat - targetLat;
+    if (o.kind === 'pad') {
+      if (Math.abs(dl) < 6) targetLat = o.lat;
+    } else if (Math.abs(dl) < o.radius + 2.2) targetLat += dl > 0 ? -(o.radius + 2.5) : o.radius + 2.5;
   }
   const limit = track.width / 2 - 2.5;
   targetLat = Math.max(-limit, Math.min(limit, targetLat));

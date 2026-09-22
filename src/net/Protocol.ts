@@ -21,7 +21,7 @@ export type NetMsg =
   | { t: 'ready'; v: boolean }
   | { t: 'lobby'; slots: LobbySlot[] }
   | { t: 'full'; why: 'slots' | 'playing' }
-  | { t: 'start'; slots: SlotConfig[] }
+  | { t: 'start'; slots: SlotConfig[]; seed: number }
   | { t: 'count'; n: number }
   /** 호스트 → 전원: 슬롯별 최신 상태 + 각 상태의 원 발신 타임스탬프 */
   | { t: 'snap'; q: number; k: (number[] | null)[]; ts: number[] }
@@ -31,6 +31,8 @@ export type NetMsg =
   | { t: 'ev'; ev: RaceEventK[] }
   | { t: 'over'; results: RaceResult[] }
   | { t: 'tolobby' }
+  /** 채팅: 클라→호스트는 text 만, 호스트→전원은 from/name 포함. sys = 시스템 안내 */
+  | { t: 'chat'; text: string; from?: number; name?: string; sys?: boolean }
   | { t: 'kicked' }
   | { t: 'hb'; t0: number }
   | { t: 'ping'; t0: number }

@@ -205,6 +205,19 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 .ability .ab-desc { font-size: 13px; line-height: 1.5; color: #3a3a3c; margin-top: 3px; }
 .detail-desc { margin-top: 8px; font-size: 12px; color: #8a8a8e; font-style: italic; }
 
+/* 채팅 (공용 오버레이, 왼쪽 아래) */
+.chat { position: absolute; left: 22px; bottom: 96px; width: min(380px, 60vw); pointer-events: none; z-index: 5; }
+.chat-log { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+.chat-log .msg { font-size: 14px; font-weight: 700; color: #fff; background: rgba(0,0,0,0.55); padding: 3px 8px; border-radius: 4px; -webkit-text-stroke: 0.3px #000; animation: subIn 0.18s ease-out; transition: opacity 0.6s; width: fit-content; max-width: 100%; word-break: break-all; }
+.chat-log .msg.fade { opacity: 0; }
+.chat-log .msg b { color: var(--yellow); margin-right: 4px; }
+.chat-log .msg.me b { color: #ff8bd5; }
+.chat-log .msg.sys { color: #cde; font-style: italic; }
+#chat-input { pointer-events: auto; font-family: var(--font); width: 100%; font-size: 14px; padding: 6px 10px; border: 2px solid #fff; border-radius: 6px; background: rgba(0,0,0,0.78); color: #fff; outline: none; box-shadow: 0 0 0 2px #000; }
+.chat-hint { font-size: 10px; color: #9ab; letter-spacing: 1px; margin-top: 3px; background: rgba(0,0,0,0.45); width: fit-content; padding: 1px 6px; border-radius: 3px; }
+.chat.typing .chat-hint { display: none; }
+.chat.locked .chat-hint { color: #e9a; }
+
 /* ---------- HUD 추가 ---------- */
 .lap-box { display: flex; align-items: baseline; gap: 4px; background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 6px; padding: 4px 12px; pointer-events: none; }
 .lap-label { font-size: 12px; letter-spacing: 3px; font-weight: 900; color: #cde; margin-right: 6px; }

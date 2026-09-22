@@ -343,6 +343,25 @@ export class ParticleManager {
     });
   }
 
+  /** 불똥: 부스트 화염 꼬리에서 튀는 작은 주황 점들 */
+  ember(pos: THREE.Vector3, backward: THREE.Vector3): void {
+    this.emit({
+      pos,
+      count: 3,
+      vel: this.tmp.copy(backward).multiplyScalar(6).setY(1.5),
+      spread: 1.6,
+      size: 0.12,
+      sizeVar: 0.1,
+      life: 0.45,
+      lifeVar: 0.2,
+      colors: [0xffb347, 0xff6a1a, 0xffe14d],
+      gravity: -1,
+      drag: 2,
+      grow: -0.1,
+      alpha: 1,
+    });
+  }
+
   sparkle(pos: THREE.Vector3): void {
     this.emit({
       pos,

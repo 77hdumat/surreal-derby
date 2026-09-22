@@ -12,6 +12,7 @@ import type { RacerStatus } from '../game/RaceState';
 import type { SpecialAbility } from './Racer';
 import type { SlotConfig } from '../game/KartRace';
 import { jockeyById } from './Jockeys';
+import { BoostFlame } from '../effects/BoostFlame';
 
 /**
  * KartState(x/z/yaw/speed…) → 슬롯별 RacerVisual 배치·애니메이션·파티클.
@@ -28,6 +29,7 @@ export class RacerManager {
   private ctx: VisualContext[] = [];
   private dustPhase: number[] = [];
   private wasBoosting: boolean[] = [];
+  private flames: BoostFlame[] = [];
   private exhaustTimer = 0;
   private tmpTan = new THREE.Vector3();
   private tmpBack = new THREE.Vector3();
@@ -102,11 +104,18 @@ export class RacerManager {
       this.ctx.push(this.makeCtx());
       this.dustPhase.push(Math.random());
       this.wasBoosting.push(false);
+      // 부스트 화염: 몸통 뒤 아래쪽에서 뒤로
+      const flame = new BoostFlame(4.4, 1.5);
+      flame.group.position.set(-v.height * 0.55 - 0.2, Math.max(0.45, v.height * 0.28), 0);
+      v.root.add(flame.group);
+      this.flames.push(flame);
     });
     await this.whenReady();
   }
 
   clear(): void {
+    for (const f of this.flames) f.dispose();
+    this.flames = [];
     for (const v of this.visuals) {
       this.scene.remove(v.root);
       v.dispose();
@@ -160,7 +169,6 @@ export class RacerManager {
     const ab = this.defs[slot].specialAbility;
     const ev = ab === 'COSTUME' ? 'COSTUME_CARRY' : ab === 'TROJAN' ? 'TROJAN_AMBUSH' : ab === 'ELEPHANT' ? 'ELEPHANT_SPRAY' : ab === 'HUMAN' ? 'HUMAN_BIPEDAL' : ab === 'COW' ? 'COW_RAGE' : ab === 'CIRCUS' ? 'CIRCUS_ACT' : ab === 'MOTORCYCLE' ? 'MOTORCYCLE_BOOST' : ab === 'LONGBODY' ? 'LONGBODY_STRETCH' : ab === 'GIRAFFE' ? 'GIRAFFE_MEGA_NECK' : 'SUPER_SPRINT';
     v.onEvent(ev, this.ctx[slot]);
-    this.particles.sparkle(v.root.position.clone().setY(1.5));
   }
 
   private boostEndFx(slot: number): void {
@@ -174,7 +182,9 @@ export class RacerManager {
   miniFx(slot: number): void {
     const v = this.visuals[slot];
     if (!v) return;
-    this.particles.sparkle(v.root.position.clone().setY(0.8));
+    this.tmpHoof.set(-v.height * 0.5, 0.4, 0).applyMatrix4(v.root.matrixWorld);
+    this.tmpBack.set(-Math.cos(v.root.rotation.y), 0, Math.sin(v.root.rotation.y));
+    for (let i = 0; i < 4; i++) this.particles.ember(this.tmpHoof, this.tmpBack);
   }
 
   place(slot: number, k: KartState): void {
@@ -217,6 +227,12 @@ export class RacerManager {
       ctx.stateTimer = k.boostT;
       ctx.cornerWeight = Math.max(this.track.cornerWeight(k.s), Math.abs(k.slip) / 0.45);
       ctx.boost = THREE.MathUtils.lerp(ctx.boost, k.boostT > 0 ? 1 : k.miniT > 0 ? 0.5 : 0, Math.min(1, dt * 6));
+      const flame = this.flames[i];
+      if (flame) {
+        const want = k.finished ? 0 : k.boostT > 0 ? 1 : k.miniT > 0 ? 0.55 : 0;
+        flame.setIntensity(THREE.MathUtils.lerp(flame.value, want, Math.min(1, dt * (want > flame.value ? 12 : 5))));
+        flame.update(time + i * 1.7);
+      }
       ctx.bump = k.bumpT;
       ctx.bumpDir = k.bumpDir;
       ctx.distanceToFinish = k.finished ? -50 : 9999;
@@ -277,7 +293,10 @@ export class RacerManager {
         }
       }
       this.dustPhase[i] = phase;
-      if (doExhaust && k.boostT > 0 && distToCam < 80) this.particles.sparkle(v.root.position.clone().setY(1.2));
+      if (doExhaust && (k.boostT > 0 || k.miniT > 0) && distToCam < 80) {
+        this.tmpHoof.set(-v.height * 0.55 - 1.5, 0.5, 0).applyMatrix4(v.root.matrixWorld);
+        this.particles.ember(this.tmpHoof, this.tmpBack);
+      }
     }
     this.scene.updateMatrixWorld();
   }

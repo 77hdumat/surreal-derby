@@ -81,6 +81,7 @@ export class UIManager {
   onKick: ((slot: number) => void) | null = null;
   onAgain: (() => void) | null = null;
   onToLobby: (() => void) | null = null;
+  onChat: ((text: string) => void) | null = null;
   onToggleMute: (() => boolean) | null = null;
   onToggleQuality: (() => boolean) | null = null;
 
@@ -142,6 +143,80 @@ export class UIManager {
     });
     // 터치 기기면 터치 버튼 표시
     if (window.matchMedia('(pointer: coarse)').matches) $('touch').classList.remove('hidden');
+    // 채팅: Enter → 입력창, Enter → 전송 후 입력창 사라짐, Esc → 취소
+    const chatIn = $('chat-input') as HTMLInputElement;
+    chatIn.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        const t = chatIn.value.trim();
+        if (t) this.onChat?.(t);
+        this.closeChat();
+      } else if (e.key === 'Escape') this.closeChat();
+    });
+    chatIn.addEventListener('blur', () => this.closeChat());
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || !this.chatEnabled) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      e.preventDefault();
+      if (!(this.canChat?.() ?? true)) {
+        this.flashChatHint('골인 후에 채팅할 수 있습니다');
+        return;
+      }
+      chatIn.classList.remove('hidden');
+      $('chat').classList.add('typing');
+      chatIn.focus();
+    });
+  }
+
+  private chatEnabled = false;
+  private chatHintTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 지금 채팅을 열 수 있는지 (레이스 중엔 골인한 사람만) */
+  canChat: (() => boolean) | null = null;
+
+  /** 멀티 방에서만 채팅 UI 표시 */
+  setChatEnabled(on: boolean): void {
+    this.chatEnabled = on;
+    $('chat').classList.toggle('hidden', !on);
+    if (!on) this.closeChat();
+  }
+
+  /** 레이스 중 골인 전 안내 문구 */
+  setChatLocked(locked: boolean): void {
+    $('chat').classList.toggle('locked', locked);
+    $('chat-hint').textContent = locked ? '골인 후 채팅 가능' : 'Enter 채팅';
+  }
+
+  private flashChatHint(text: string): void {
+    const h = $('chat-hint');
+    h.textContent = text;
+    if (this.chatHintTimer) clearTimeout(this.chatHintTimer);
+    this.chatHintTimer = setTimeout(() => this.setChatLocked($('chat').classList.contains('locked')), 1500);
+  }
+
+  private closeChat(): void {
+    const chatIn = $('chat-input') as HTMLInputElement;
+    chatIn.value = '';
+    chatIn.classList.add('hidden');
+    $('chat').classList.remove('typing');
+    if (document.activeElement === chatIn) chatIn.blur();
+  }
+
+  clearChat(): void {
+    $('chat-log').innerHTML = '';
+  }
+
+  addChat(name: string, text: string, me: boolean, sys: boolean): void {
+    const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+    const html = sys ? esc(text) : `<b>${esc(name)}</b>${esc(text)}`;
+    const cls = 'msg' + (sys ? ' sys' : '') + (me ? ' me' : '');
+    // 최근 7개, 10초 뒤 사라짐
+    const log = $('chat-log');
+    log.insertAdjacentHTML('beforeend', `<div class="${cls}">${html}</div>`);
+    while (log.children.length > 7) log.removeChild(log.firstChild!);
+    const el = log.lastElementChild as HTMLElement;
+    setTimeout(() => el.classList.add('fade'), 10000);
+    setTimeout(() => el.remove(), 10800);
   }
 
   private load(key: string, def: string): string {

@@ -2,6 +2,7 @@ import type { TrackGeometry } from '../track/TrackGeometry';
 import type { RacerDefinition } from '../racers/Racer';
 import { jockeyById, kartParamsFor } from '../racers/Jockeys';
 import { cpuInput, cpuProfile, type CpuProfile } from './CpuDriver';
+import { generateObstacles, type Obstacle } from './Obstacles';
 import {
   IDLE_INPUT,
   applyStartBoost,
@@ -55,6 +56,8 @@ export class KartRace {
   owned: boolean[] = [];
   /** 결과 판정 권한 (호스트/솔로) */
   authority = true;
+  obstacles: Obstacle[] = [];
+  seed = 0;
   phase: RacePhaseK = 'IDLE';
   time = 0;
   countdown = 0;
@@ -76,8 +79,10 @@ export class KartRace {
   }
 
   /** 출발선에 4명 나란히 (앞뒤 차이 없음). 게이트 뒤(s<0)에서 출발 */
-  setup(slots: SlotConfig[], owned?: (slot: SlotConfig) => boolean): void {
+  setup(slots: SlotConfig[], owned?: (slot: SlotConfig) => boolean, seed = 1): void {
     this.slots = slots.slice(0, MAX_SLOTS).map((s, i) => ({ ...s, slot: i }));
+    this.seed = seed;
+    this.obstacles = generateObstacles(seed, this.track);
     this.owned = this.slots.map((s) => (owned ? owned(s) : true));
     this.karts = [];
     this.params = [];
@@ -156,8 +161,8 @@ export class KartRace {
     for (let i = 0; i < this.karts.length; i++) {
       if (!this.owned[i]) continue;
       const st = this.karts[i];
-      const inp = this.slots[i].cpu ? cpuInput(st, this.params[i], this.track, this.karts, this.profiles[i], this.cpuScratch[i]) : this.inputs[i];
-      for (const e of stepKart(st, inp, this.params[i], this.track, dt, this.time)) this.events.push({ ...e, slot: i });
+      const inp = this.slots[i].cpu ? cpuInput(st, this.params[i], this.track, this.karts, this.profiles[i], this.cpuScratch[i], this.obstacles) : this.inputs[i];
+      for (const e of stepKart(st, inp, this.params[i], this.track, dt, this.time, this.obstacles)) this.events.push({ ...e, slot: i });
     }
     // 충돌: 내가 돌리는 말만 밀린다 (상대는 자기 쪽에서 자기 말을 민다)
     for (let a = 0; a < this.karts.length; a++) {

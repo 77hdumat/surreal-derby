@@ -15,6 +15,7 @@ import { installHsvFog } from '../effects/HsvFog';
 import { KartRace, MAX_SLOTS, type SlotConfig } from './KartRace';
 import { InputManager } from './Input';
 import { Net } from '../net/Net';
+import { ObstacleMeshes } from '../track/ObstacleMeshes';
 import { encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
 import { RemoteKart } from '../net/RemoteKart';
 import { START_BOOST_WINDOW, applyStartBoost, currentLap } from './KartPhysics';
@@ -73,6 +74,7 @@ export class Game {
   private rearEl = document.getElementById('rear-pip') as HTMLElement;
   private rearActive = false;
   private rearLook = new THREE.Vector3();
+  private obstacleMeshes = new ObstacleMeshes();
 
   /** 원격 말 상태 버퍼 (슬롯별) */
   private remotes: RemoteKart[] = [];
@@ -138,6 +140,7 @@ export class Game {
     this.scene.add(this.footprints.mesh);
     this.racers.footprints = this.footprints;
     this.race = new KartRace(this.track, RACER_DEFINITIONS);
+    this.scene.add(this.obstacleMeshes.group);
     this.camera = new GameCamera(this.track, window.innerWidth / window.innerHeight);
     this.effects = new EffectsManager(this.renderer, this.scene, this.camera.camera, fxCanvas);
     this.ui = new UIManager(RACER_DEFINITIONS);
@@ -152,6 +155,9 @@ export class Game {
     this.ui.onKick = (slot) => this.kick(slot);
     this.ui.onAgain = () => this.hostStart();
     this.ui.onToLobby = () => this.toLobby();
+    this.ui.onChat = (text) => this.sendChat(text);
+    // 대기실·결과 화면은 자유, 레이스 중엔 골인한 사람만
+    this.ui.canChat = () => this.screen !== 'RACE' || !!this.race.karts[this.mySlot]?.finished;
     this.ui.onToggleMute = () => {
       this.audio.init();
       this.audio.setMuted(!this.audio.muted);
@@ -285,6 +291,7 @@ export class Game {
     this.mySlot = 0;
     this.lobby = [this.mySlotData(), this.emptySlot(), this.emptySlot(), this.emptySlot()];
     this.screen = 'LOBBY';
+    this.ui.setChatEnabled(false);
     this.ui.showLobby(null, true);
     this.ui.setLobbyMsg('말과 기수를 고르고 레이스 시작. 빈 자리는 CPU 가 채웁니다');
     this.ui.setStartEnabled(true);
@@ -328,10 +335,14 @@ export class Game {
       this.broadcastLobby();
     };
     net.onLeave = (slot) => {
+      const name = this.lobby[slot]?.name;
       this.lobby[slot] = this.emptySlot();
       this.renderLobby();
       this.broadcastLobby();
+      if (name) this.hostChat(`${name} 퇴장`, -1, true);
     };
+    this.ui.setChatEnabled(true);
+    this.ui.clearChat();
     net.onMessage = (m, slot) => this.onHostMessage(m, slot);
     net.host(MAX_SLOTS - 1);
   }
@@ -347,6 +358,10 @@ export class Game {
         s.human = true;
         this.renderLobby();
         this.broadcastLobby();
+        this.hostChat(`${s.name} 입장`, -1, true);
+        break;
+      case 'chat':
+        if (typeof m.text === 'string') this.hostChat(m.text.slice(0, 120), slot, false);
         break;
       case 'pick':
         s.mountId = m.mountId;
@@ -369,6 +384,18 @@ export class Game {
         this.net?.broadcast({ t: 'pong', t0: m.t0 });
         break;
     }
+  }
+
+  /** 호스트: 채팅 표시 + 전원 브로드캐스트 (from -1 = 시스템) */
+  private hostChat(text: string, from: number, sys: boolean): void {
+    const name = sys ? '' : this.lobby[from]?.name ?? 'P' + (from + 1);
+    this.ui.addChat(name, text, from === this.mySlot && !sys, sys);
+    this.net?.broadcast({ t: 'chat', text, from, name, sys });
+  }
+
+  private sendChat(text: string): void {
+    if (this.mode === 'host') this.hostChat(text, 0, false);
+    else if (this.mode === 'client') this.net?.send({ t: 'chat', text });
   }
 
   private broadcastLobby(): void {
@@ -397,6 +424,8 @@ export class Game {
     this.ui.showLobby(code, false);
     this.ui.setLobbyMsg('접속 중…');
     this.ui.setReady(false);
+    this.ui.setChatEnabled(true);
+    this.ui.clearChat();
     this.lobby = [];
     let tries = 0;
     net.onOpen = () => {
@@ -446,7 +475,7 @@ export class Game {
         this.leaveRoom(m.why === 'playing' ? '경기가 진행 중입니다' : '방이 가득 찼습니다');
         break;
       case 'start':
-        void this.beginRace(m.slots);
+        void this.beginRace(m.slots, m.seed);
         break;
       case 'count':
         this.showCount(m.n);
@@ -471,6 +500,9 @@ export class Game {
         break;
       case 'tolobby':
         this.toLobby();
+        break;
+      case 'chat':
+        this.ui.addChat(m.name ?? '', String(m.text).slice(0, 120), m.from === this.mySlot && !m.sys, !!m.sys);
         break;
       case 'kicked':
         this.leaveRoom('방장이 강퇴했습니다');
@@ -516,8 +548,10 @@ export class Game {
     this.input.clear();
     this.audio.stopRacerLoops();
     this.racers.clear();
+    this.obstacleMeshes.clear();
     this.camera.setMode('INTRO');
     this.screen = 'MENU';
+    this.ui.setChatEnabled(false);
     try {
       history.replaceState(null, '', location.pathname);
     } catch {
@@ -532,6 +566,7 @@ export class Game {
     this.input.clear();
     this.audio.stopRacerLoops();
     this.racers.clear();
+    this.obstacleMeshes.clear();
     this.camera.setMode('INTRO');
     this.screen = 'LOBBY';
     if (this.mode === 'client') {
@@ -545,6 +580,7 @@ export class Game {
       this.ui.showLobby(this.mode === 'host' ? this.net?.code ?? '' : null, true);
     }
     this.renderLobby();
+    this.ui.setChatLocked(false);
     if (this.mode === 'host') this.broadcastLobby();
   }
 
@@ -572,11 +608,12 @@ export class Game {
       const j = JOCKEYS[Math.floor(Math.random() * JOCKEYS.length)];
       return { slot: i, name: `CPU ${i + 1}`, mountId: d.id, jockeyId: j.id, cpu: true };
     });
-    this.net?.broadcast({ t: 'start', slots });
-    void this.beginRace(slots);
+    const seed = (Math.random() * 0x7fffffff) >>> 0;
+    this.net?.broadcast({ t: 'start', slots, seed });
+    void this.beginRace(slots, seed);
   }
 
-  private async beginRace(slots: SlotConfig[]): Promise<void> {
+  private async beginRace(slots: SlotConfig[], seed: number): Promise<void> {
     this.raceStarting = true;
     this.audio.init();
     this.ui.hideResult();
@@ -587,7 +624,8 @@ export class Game {
     const me = this.mySlot;
     const mode = this.mode;
     this.race.authority = mode !== 'client';
-    this.race.setup(slots, (s) => (mode === 'solo' ? true : mode === 'host' ? s.cpu || s.slot === me : s.slot === me));
+    this.race.setup(slots, (s) => (mode === 'solo' ? true : mode === 'host' ? s.cpu || s.slot === me : s.slot === me), seed);
+    this.obstacleMeshes.build(this.race.obstacles);
     this.remotes = slots.map(() => new RemoteKart());
     this.latestRemote = slots.map(() => null);
     this.recvSeq = 0;
@@ -656,6 +694,20 @@ export class Game {
         this.audio.play('whoosh', { pos, minGain: me ? 0.7 : 0.25, gain: 0.7, rate: 1.2 });
         if (me) this.camera.shake(0.12);
         break;
+      case 'bale':
+        this.racers.bump(slot, true);
+        this.audio.play('cardboardDrop', { pos, minGain: me ? 0.8 : 0.3, gain: 1.0, cooldown: 0.2 });
+        this.audio.play('impactHeavy', { pos, minGain: me ? 0.6 : 0.2, gain: 0.7, cooldown: 0.2 });
+        if (me) {
+          this.camera.shake(0.6);
+          this.ui.showToast('건초더미!', 900);
+        }
+        break;
+      case 'pad':
+        this.racers.miniFx(slot);
+        this.audio.play('whooshEpic', { pos, minGain: me ? 0.7 : 0.25, gain: 0.8, rate: 1.3 });
+        if (me) this.camera.shake(0.15);
+        break;
       case 'wall':
         this.racers.bump(slot, true);
         this.audio.play('impact', { pos, minGain: me ? 0.7 : 0.2, gain: 0.8, cooldown: 0.2 });
@@ -700,6 +752,7 @@ export class Game {
     const rows = this.ui.resultRows(this.race.results, this.race.slots, this.mySlot);
     const mine = rows.find((r) => r.me);
     this.ui.showResult(rows, this.mode !== 'client', mine ? `당신은 ${mine.rank}위` : '');
+    this.ui.setChatLocked(false);
     this.ui.setStartEnabled(true);
   }
 
@@ -738,6 +791,7 @@ export class Game {
       }
     }
     this.updateSun();
+    this.obstacleMeshes.update(this.globalTime);
     updateWind(this.globalTime, 1 + this.camera.boostNearby * 0.5);
     this.track.updateAmbient(dt);
     this.audio.setCameraPosition(this.camera.camera.position);
@@ -920,6 +974,7 @@ export class Game {
       const d = this.racers.defs[slot];
       return { name: this.race.slots[slot].name, emoji: d?.emoji ?? '', me: slot === this.mySlot, finished: this.race.karts[slot].finished };
     });
+    this.ui.setChatLocked(!myKart.finished);
     this.ui.updateHud({
       lap: currentLap(myKart),
       rank: this.race.rankOf(this.mySlot),

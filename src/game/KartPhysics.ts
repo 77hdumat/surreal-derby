@@ -1,4 +1,5 @@
 import type { TrackGeometry } from '../track/TrackGeometry';
+import type { Obstacle } from './Obstacles';
 
 /** 플레이어/CPU 조작. steer: -1(왼쪽)..1(오른쪽), throttle/brake: 0..1 */
 export interface KartInput {
@@ -51,6 +52,10 @@ export interface KartState {
   miniWindow: number;
   /** 현재 드리프트 지속 시간 */
   driftTime: number;
+  /** 부스트 패드 재사용 대기 (초) */
+  padT: number;
+  /** 진흙 안에 있음 (연출용) */
+  inMud: boolean;
   /** 트랙 좌표 (project 결과) */
   s: number;
   lat: number;
@@ -68,7 +73,7 @@ export interface KartState {
   yawRate: number;
 }
 
-export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'lap'; lap: number } | { k: 'finish' };
+export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'lap'; lap: number } | { k: 'finish' } | { k: 'bale' } | { k: 'pad' };
 
 export const LAPS = 3;
 export const MAX_BOOSTS = 2;
@@ -107,6 +112,8 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     miniT: 0,
     miniWindow: 0,
     driftTime: 0,
+    padT: 0,
+    inMud: false,
     s: 0,
     lat: 0,
     progress: 0,
@@ -180,7 +187,7 @@ export function hitDuringDrift(st: KartState): void {
 /**
  * 한 스텝 물리. 결정적(입력·dt 만 의존). 호스트와 게스트 예측이 같은 코드를 돈다.
  */
-export function stepKart(st: KartState, input: KartInput, p: KartParams, track: TrackGeometry, dt: number, time = 0): KartEvent[] {
+export function stepKart(st: KartState, input: KartInput, p: KartParams, track: TrackGeometry, dt: number, time = 0, obstacles: Obstacle[] = []): KartEvent[] {
   const events: KartEvent[] = [];
   if (dt <= 0) return events;
   const inp = st.finished ? cruiseInput(st, p, track, scratchInput) : input;
@@ -225,6 +232,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   if (st.speed > maxCur) st.speed = Math.max(maxCur, st.speed - (st.speed - maxCur) * 2 * dt);
 
   // ---- 드리프트 판정
+  const gaugeBefore = st.gauge;
   const fast = st.speed > p.maxSpeed * 0.4;
   const wantDrift = !st.finished && inp.drift && fast && (Math.abs(inp.steer) > 0.2 || st.drifting);
   if (st.drifting && !wantDrift) {
@@ -297,6 +305,41 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     st.slip *= 0.5;
   }
   st.bumpT = Math.max(0, st.bumpT - dt);
+  st.padT = Math.max(0, st.padT - dt);
+
+  // ---- 장애물
+  st.inMud = false;
+  for (const o of obstacles) {
+    const dx = st.x - o.x;
+    const dz = st.z - o.z;
+    const d2 = dx * dx + dz * dz;
+    if (o.kind === 'bale') {
+      const minD = o.radius + p.radius * 0.7;
+      if (d2 >= minD * minD || d2 < 1e-6) continue;
+      const d = Math.sqrt(d2);
+      st.x = o.x + (dx / d) * minD;
+      st.z = o.z + (dz / d) * minD;
+      if (st.bumpT <= 0) {
+        st.speed *= 0.55;
+        st.bumpT = 0.5;
+        st.bumpDir = Math.sin(st.yaw) * dx + Math.cos(st.yaw) * dz > 0 ? 1 : -1;
+        hitDuringDrift(st);
+        events.push({ k: 'bale' });
+      }
+    } else if (d2 < o.radius * o.radius) {
+      if (o.kind === 'mud') {
+        st.inMud = true;
+        if (!(st.boostT > 0)) st.speed *= Math.max(0, 1 - 1.3 * dt);
+      } else if (o.kind === 'pad' && st.padT <= 0 && !st.finished) {
+        st.padT = 1.5;
+        st.miniT = Math.max(st.miniT, MINI_DURATION * 1.6);
+        st.speed = Math.max(st.speed, Math.min(p.maxSpeed * MINI_MUL, st.speed + 2.5));
+        events.push({ k: 'pad' });
+      }
+    }
+  }
+  // 진흙에선 게이지가 안 찬다 (이번 스텝 충전분 되돌림)
+  if (st.inMud && st.drifting) st.gauge = Math.max(st.gaugeAtDriftStart, Math.min(st.gauge, gaugeBefore));
 
   // ---- 진행/랩
   st.progress += wrapDelta(st.s - prevS, track.length);

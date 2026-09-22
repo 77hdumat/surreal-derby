@@ -132,6 +132,12 @@
           </div>
         </div>
       </div>
+      <!-- ===== CHAT (대기실·레이스(골인 후)·결과 공용) ===== -->
+      <div id="chat" class="chat hidden">
+        <div id="chat-log" class="chat-log"></div>
+        <input id="chat-input" class="hidden" maxlength="120" placeholder="메시지 (Enter 전송 · Esc 취소)" autocomplete="off" />
+        <div class="chat-hint" id="chat-hint">Enter 채팅</div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
