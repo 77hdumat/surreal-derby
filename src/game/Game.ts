@@ -92,6 +92,8 @@ export class Game {
   private loadedTimer: ReturnType<typeof setTimeout> | null = null;
   /** 클라: 세팅 중에 GO 가 먼저 도착한 경우 */
   private pendingGo = false;
+  /** 레이스 세대 — 세팅(await) 도중 로비/메뉴로 나가면 그 세팅은 버린다 */
+  private raceGen = 0;
   private recvSeq = 0;
   private pingT = 0;
   private netInfoT = 0;
@@ -513,7 +515,7 @@ export class Game {
         break;
       case 'snap':
         if (this.screen !== 'RACE' && this.screen !== 'RESULT') break;
-        if (m.q <= this.recvSeq && this.recvSeq - m.q < 100000) break; // 비순서 채널: 옛 것 버림
+        if (m.q <= this.recvSeq && this.recvSeq - m.q < 300) break; // 비순서 채널: 옛 것 버림 (300 이상 뒤면 호스트 재시작으로 본다)
         this.recvSeq = m.q;
         for (let i = 0; i < m.k.length; i++) {
           const k = m.k[i];
@@ -568,6 +570,9 @@ export class Game {
 
   private leaveRoom(msg = ''): void {
     if (this.mode === 'host') this.net?.broadcast({ t: 'kicked' });
+    this.raceGen++;
+    this.raceStarting = false;
+    this.race.phase = 'IDLE';
     this.net?.close();
     this.net = null;
     this.mode = 'none';
@@ -589,6 +594,9 @@ export class Game {
 
   private toLobby(): void {
     if (this.mode === 'host') this.net?.broadcast({ t: 'tolobby' });
+    this.raceGen++;
+    this.raceStarting = false;
+    this.race.phase = 'IDLE';
     this.input.detach();
     this.input.clear();
     this.audio.stopRacerLoops();
@@ -644,13 +652,18 @@ export class Game {
   }
 
   private async beginRace(slots: SlotConfig[], seed: number): Promise<void> {
+    const gen = ++this.raceGen;
     this.raceStarting = true;
+    // 스냅샷 시퀀스는 세팅 전에 미리 초기화 (호스트가 먼저 보내기 시작해도 안 버리게)
+    this.recvSeq = 0;
+    this.sendSeq = 0;
     this.audio.init();
     this.ui.hideResult();
     this.ui.lockPick(true);
     this.ui.setLobbyMsg('레이스 준비 중…');
     this.ui.setStartEnabled(false, '준비 중…');
     await this.racers.setLineup(slots);
+    if (gen !== this.raceGen) return; // 세팅 중 나감
     const me = this.mySlot;
     const mode = this.mode;
     this.race.authority = mode !== 'client';
@@ -658,8 +671,6 @@ export class Game {
     this.obstacleMeshes.build(this.race.obstacles);
     this.remotes = slots.map(() => new RemoteKart());
     this.latestRemote = slots.map(() => null);
-    this.recvSeq = 0;
-    this.sendSeq = 0;
     this.sendAccum = 0;
     this.particles.clear();
     this.footprints.clear();
