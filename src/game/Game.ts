@@ -75,6 +75,8 @@ export class Game {
   private rearEl = document.getElementById('rear-pip') as HTMLElement;
   private rearActive = false;
   private rearLook = new THREE.Vector3();
+  /** 아이템 명중 시 피격자를 잠시 보여주는 PiP (슬롯, 종료 시각 ms) */
+  private hitCam: { slot: number; until: number; label: string } | null = null;
   private obstacleMeshes = new ObstacleMeshes();
   private itemVisuals = new ItemVisuals();
   private lastFinishCount = -1;
@@ -704,6 +706,7 @@ export class Game {
     this.itemVisuals.build(this.race.items.boxes);
     this.itemVisuals.setSlots(slots.length, this.racers.visuals.map((v) => v.height));
     this.lastFinishCount = -1;
+    this.hitCam = null;
     this.remotes = slots.map(() => new RemoteKart());
     this.latestRemote = slots.map(() => null);
     this.sendAccum = 0;
@@ -908,9 +911,15 @@ export class Game {
         else if (e.kind === 'ufo') {
           this.audio.play('engineRev2', { gain: 0.6, rate: 0.7 });
           if (e.target === this.mySlot) this.ui.showToast('🛸 UFO 에 잡혔다!', 1500);
+          if (e.slot === this.mySlot && e.target >= 0) this.hitCam = { slot: e.target, until: performance.now() + 3500, label: '🛸 UFO!' };
         }
         break;
-      case 'hit':
+      case 'hit': {
+        // 내가 쏜 투사체가 맞았으면 피격자를 화면 구석에 3초 보여준다
+        const pr = this.race.items.projectiles.find((p) => p.id === e.pid);
+        if (pr && pr.owner === this.mySlot && e.slot !== this.mySlot) {
+          this.hitCam = { slot: e.slot, until: performance.now() + 3000, label: e.blocked ? '🛡️ 막힘' : `${ITEM_INFO[e.kind].emoji} HIT!` };
+        }
         if (e.blocked) {
           this.audio.play('bell', { pos, minGain: me ? 0.7 : 0.3, gain: 0.7, rate: 2 });
           if (me) this.ui.showToast('🛡️ 막았다!', 900);
@@ -923,6 +932,7 @@ export class Game {
           }
         }
         break;
+      }
     }
   }
 
@@ -1089,24 +1099,42 @@ export class Game {
       }
       return;
     }
+    if (this.hitCam && performance.now() > this.hitCam.until) this.hitCam = null;
+    const hit = this.hitCam && this.race.karts[this.hitCam.slot] ? this.hitCam : null;
     let gap = Infinity;
     for (let i = 0; i < this.race.karts.length; i++) {
       if (i === this.mySlot) continue;
       const g = my.progress - this.race.karts[i].progress;
       if (g > 0.5 && g < gap) gap = g;
     }
-    const want = this.rearActive ? gap < 28 : gap < 22;
+    const want = !!hit || (this.rearActive ? gap < 28 : gap < 22);
     if (want !== this.rearActive) {
       this.rearActive = want;
       this.rearEl.classList.toggle('hidden', !want);
     }
     if (!want) return;
-    (document.getElementById('pip-gap') as HTMLElement).textContent = `${gap.toFixed(0)}m`;
-    const fx = Math.cos(my.yaw);
-    const fz = -Math.sin(my.yaw);
-    this.rearCam.position.set(my.x - fx * 1.0, 3.0, my.z - fz * 1.0);
-    this.rearLook.set(my.x - fx * 16, 0.8, my.z - fz * 16);
-    this.rearCam.lookAt(this.rearLook);
+    const label = this.rearEl.querySelector('.pip-label') as HTMLElement;
+    let hideSelf = true;
+    if (hit) {
+      // 명중 캠: 피격자를 뒤·위에서 (멀어도 보인다)
+      const t = this.race.karts[hit.slot];
+      const tx = Math.cos(t.yaw);
+      const tz = -Math.sin(t.yaw);
+      this.rearCam.position.set(t.x - tx * 7, 4.5, t.z - tz * 7);
+      this.rearLook.set(t.x + tx * 2, 1.2, t.z + tz * 2);
+      this.rearCam.lookAt(this.rearLook);
+      label.textContent = hit.label;
+      (document.getElementById('pip-gap') as HTMLElement).textContent = this.race.slots[hit.slot]?.name ?? '';
+      hideSelf = false;
+    } else {
+      label.textContent = 'REAR';
+      (document.getElementById('pip-gap') as HTMLElement).textContent = `${gap.toFixed(0)}m`;
+      const fx = Math.cos(my.yaw);
+      const fz = -Math.sin(my.yaw);
+      this.rearCam.position.set(my.x - fx * 1.0, 3.0, my.z - fz * 1.0);
+      this.rearLook.set(my.x - fx * 16, 0.8, my.z - fz * 16);
+      this.rearCam.lookAt(this.rearLook);
+    }
     const rect = this.rearEl.getBoundingClientRect();
     const W = window.innerWidth;
     const H = window.innerHeight;
@@ -1124,11 +1152,11 @@ export class Game {
     r.setViewport(Math.round(rect.left), Math.round(H - rect.bottom), w, h);
     r.setScissor(Math.round(rect.left), Math.round(H - rect.bottom), w, h);
     r.clearDepth();
-    // 내 말은 가려서 뒤쫓는 상대만 보이게
+    // 후방 캠에선 내 말을 가려서 뒤쫓는 상대만 보이게 (명중 캠은 그대로)
     const myVisual = this.racers.visuals[this.mySlot];
-    if (myVisual) myVisual.root.visible = false;
+    if (myVisual && hideSelf) myVisual.root.visible = false;
     r.render(this.scene, this.rearCam);
-    if (myVisual) myVisual.root.visible = true;
+    if (myVisual && hideSelf) myVisual.root.visible = true;
     r.setScissorTest(false);
     r.setViewport(0, 0, W, H);
     r.autoClear = true;
