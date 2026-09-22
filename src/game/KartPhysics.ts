@@ -286,8 +286,8 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   } else if (st.speed < 0) {
     st.speed = Math.min(0, st.speed + 3 * dt);
   }
-  // 최고속 초과분(부스트 종료 후)은 완만히 감속
-  if (st.speed > maxCur) st.speed = Math.max(maxCur, st.speed - (st.speed - maxCur) * 2 * dt);
+  // 최고속 초과분(부스트 종료 후)은 아주 완만히 감속 — 부스트 사이 관성이 유지돼 연속 부스트가 끊기지 않는다
+  if (st.speed > maxCur) st.speed = Math.max(maxCur, st.speed - (st.speed - maxCur) * 0.6 * dt);
 
   // ---- 드리프트 판정
   const gaugeBefore = st.gauge;
@@ -308,18 +308,23 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const grip = Math.min(1, Math.abs(st.speed) / 10); // 저속에서는 잘 안 돌아감
   let yawRate = inp.steer * p.handling * 2.2 * grip * (1 - 0.35 * speedFrac);
   if (st.slipT > 0) yawRate += Math.sin(time * 23 + st.slipT * 9) * 2.5; // 바나나: 비틀거림
-  if (st.drifting) yawRate *= 1.8;
+  // 드리프트 완급: 누른 시간이 길수록 깊어진다 (0 → 0.8s). 얕은 드리프트 = 살짝 미끄러지며 게이지 효율 ↑, 깊은 드리프트 = 유턴급 회전
+  const deep = st.drifting ? Math.min(1, st.driftTime / 0.8) : 0;
+  // 드리프트 중 ↑ 를 떼면 덜 미끄러지고 더 꺾인다 (카트라이더 완급 조절)
+  const easing = st.drifting && inp.throttle <= 0 ? 1 : 0;
+  if (st.drifting) yawRate *= (1.4 + 1.6 * deep) * (1 + 0.15 * easing);
   if (st.speed < 0) yawRate = -yawRate;
   st.yaw -= yawRate * dt;
 
   // ---- 슬립 (드리프트 시 옆으로 미끄러짐)
   if (st.drifting) {
-    const target = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) * MAX_SLIP : st.slip * Math.max(0, 1 - dt);
-    st.slip += (target - st.slip) * Math.min(1, 4 * dt);
-    st.speed *= Math.max(0, 1 - 0.35 * dt);
+    const slideMul = (0.55 + 0.45 * deep) * (1 - 0.45 * easing); // ↑ 떼면 슬립 절반
+    const target = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) * MAX_SLIP * slideMul : st.slip * Math.max(0, 1 - dt);
+    st.slip += (target - st.slip) * Math.min(1, (5 + 4 * easing) * dt);
+    st.speed *= Math.max(0, 1 - (0.2 + 0.4 * deep + 0.25 * easing) * dt); // 깊을수록·↑ 뗄수록 속도 손실
     if (st.boosts < MAX_BOOSTS) {
-      // 부스터 중 드리프트는 1.6배 (카트라이더의 부스터 드리프트 충전 보너스)
-      const bonus = boosting ? 1.6 : mini ? 1.25 : 1;
+      // 부스터 중 드리프트는 1.6배 (카트라이더의 부스터 드리프트 충전 보너스). 얕은 드리프트가 충전 효율이 좋다
+      const bonus = (boosting ? 1.6 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep);
       st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * bonus * dt;
       if (st.gauge >= 1) {
         st.boosts++;
@@ -387,8 +392,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       }
     } else if (d2 < o.radius * o.radius) {
       if (o.kind === 'mud') {
-        st.inMud = true;
-        if (!(st.boostT > 0)) st.speed *= Math.max(0, 1 - 1.3 * dt);
+        st.inMud = true; // 꾸밈 요소 — 감속 없음
       } else if (o.kind === 'pad' && st.padT <= 0 && !st.finished) {
         st.padT = 1.5;
         st.miniT = Math.max(st.miniT, MINI_DURATION * 1.6);
@@ -397,8 +401,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       }
     }
   }
-  // 진흙에선 게이지가 안 찬다 (이번 스텝 충전분 되돌림)
-  if (st.inMud && st.drifting) st.gauge = Math.max(st.gaugeAtDriftStart, Math.min(st.gauge, gaugeBefore));
+  void gaugeBefore;
 
   // ---- 진행/랩
   st.progress += wrapDelta(st.s - prevS, track.length);

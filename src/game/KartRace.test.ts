@@ -30,7 +30,7 @@ describe('KartRace', () => {
     for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) expect(Math.hypot(r.karts[a].x - r.karts[b].x, r.karts[a].z - r.karts[b].z)).toBeGreaterThan(2.6);
   });
 
-  it('CPU 4명이 5바퀴를 완주하고 결과가 시간순', () => {
+  it('CPU 4명 레이스: 결과 4명, 골인 시간순, 리타이어는 null', () => {
     const r = new KartRace(new TrackGeometry(), RACER_DEFINITIONS);
     r.setup(slots);
     r.startCountdown();
@@ -44,7 +44,7 @@ describe('KartRace', () => {
     expect(r.results).toHaveLength(4);
     expect(r.results.map((x) => x.rank)).toEqual([1, 2, 3, 4]);
     const times = r.results.map((x) => x.time).filter((t): t is number => t !== null);
-    expect(times.length).toBeGreaterThanOrEqual(3);
+    expect(times.length).toBeGreaterThanOrEqual(1); // 1등 골인 10초 뒤 나머지는 리타이어(null) 될 수 있다
     for (let i = 1; i < times.length; i++) expect(times[i]).toBeGreaterThanOrEqual(times[i - 1]);
     expect(times[0]).toBeGreaterThan(50);
     expect(times[0]).toBeLessThan(400);

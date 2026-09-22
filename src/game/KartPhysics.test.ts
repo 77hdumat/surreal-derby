@@ -48,8 +48,9 @@ describe('stepKart', () => {
     expect(st.boostT).toBeCloseTo(BOOST_DURATION - DT, 6);
     for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.2);
-    for (let i = 0; i < 500; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
-    expect(st.speed).toBeCloseTo(P.maxSpeed, 2);
+    for (let i = 0; i < 600; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT); // 관성이 오래 남는다
+    expect(st.speed).toBeLessThan(P.maxSpeed * 1.01);
+    expect(st.speed).toBeGreaterThanOrEqual(P.maxSpeed);
   });
 
   it('벽에 닿으면 lat 이 클램프되고 wall 이벤트 + 감속', () => {
