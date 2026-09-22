@@ -88,6 +88,7 @@ export class Game {
   /** 호스트: 카운트다운 전 게스트 준비 대기 */
   private waitingLoaded = false;
   private loadedSlots = new Set<number>();
+  private pendingSeed = -1;
   private loadedTimer: ReturnType<typeof setTimeout> | null = null;
   /** 클라: 세팅 중에 GO 가 먼저 도착한 경우 */
   private pendingGo = false;
@@ -378,8 +379,11 @@ export class Game {
         if (typeof m.text === 'string') this.hostChat(m.text.slice(0, 120), slot, false);
         break;
       case 'loaded':
-        this.loadedSlots.add(slot);
-        this.checkAllLoaded();
+        // 이번 레이스(seed) 의 신호만. 방장 세팅이 끝나기 전에 와도 저장해 둔다
+        if (m.seed === this.pendingSeed) {
+          this.loadedSlots.add(slot);
+          this.checkAllLoaded();
+        }
         break;
       case 'pick':
         s.mountId = m.mountId;
@@ -632,6 +636,9 @@ export class Game {
       return { slot: i, name: `CPU ${i + 1}`, mountId: d.id, jockeyId: j.id, cpu: true };
     });
     const seed = (Math.random() * 0x7fffffff) >>> 0;
+    // 게스트 준비 신호는 브로드캐스트 직후부터 들어올 수 있으니 여기서 초기화
+    this.pendingSeed = seed;
+    this.loadedSlots.clear();
     this.net?.broadcast({ t: 'start', slots, seed });
     void this.beginRace(slots, seed);
   }
@@ -681,14 +688,13 @@ export class Game {
     } else if (this.mode === 'host') {
       // 게스트 전원이 모델 세팅을 끝낼 때까지 대기 (최대 10초) → 동시에 출발
       this.waitingLoaded = true;
-      this.loadedSlots.clear();
       this.ui.setCountdown('대기 중…');
       if (this.loadedTimer) clearTimeout(this.loadedTimer);
-      this.loadedTimer = setTimeout(() => this.checkAllLoaded(true), 10000);
+      this.loadedTimer = setTimeout(() => this.checkAllLoaded(true), 5000);
       this.checkAllLoaded();
     } else {
       this.ui.setCountdown('준비…');
-      this.net?.send({ t: 'loaded' });
+      this.net?.send({ t: 'loaded', seed });
       if (this.pendingGo) {
         this.pendingGo = false;
         this.showCount(0);

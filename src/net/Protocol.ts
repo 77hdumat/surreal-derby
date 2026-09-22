@@ -23,7 +23,7 @@ export type NetMsg =
   | { t: 'full'; why: 'slots' | 'playing' }
   | { t: 'start'; slots: SlotConfig[]; seed: number }
   /** 클라 → 호스트: 레이스 모델 세팅 끝남 (호스트는 전원 준비 후 카운트다운) */
-  | { t: 'loaded' }
+  | { t: 'loaded'; seed: number }
   | { t: 'count'; n: number }
   /** 호스트 → 전원: 슬롯별 최신 상태 + 각 상태의 원 발신 타임스탬프 */
   | { t: 'snap'; q: number; k: (number[] | null)[]; ts: number[] }
