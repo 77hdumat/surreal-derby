@@ -4,6 +4,7 @@ import { jockeyById, kartParamsFor } from '../racers/Jockeys';
 import { cpuInput, cpuProfile, type CpuProfile } from './CpuDriver';
 import {
   IDLE_INPUT,
+  applyStartBoost,
   createKartState,
   resolveKartCollision,
   stepKart,
@@ -139,6 +140,13 @@ export class KartRace {
       if (this.countdown <= 0) {
         this.countdown = 0;
         this.phase = 'RACING';
+        // 능숙한 봇은 출발 부스터를 쓴다
+        this.slots.forEach((s, i) => {
+          if (s.cpu && this.owned[i] && this.profiles[i].skill > 0.94) {
+            applyStartBoost(this.karts[i]);
+            this.events.push({ k: 'boost', slot: i });
+          }
+        });
       }
       return;
     }

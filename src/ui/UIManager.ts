@@ -367,7 +367,7 @@ export class UIManager {
     g.classList.toggle('boosting', h.boosting);
     $('pip-0').classList.toggle('on', h.boosts >= 1);
     $('pip-1').classList.toggle('on', h.boosts >= 2);
-    $('gauge-label').textContent = h.boosting ? 'BOOST!!' : h.boosts >= 2 ? 'MAX · CTRL → BOOST' : h.boosts >= 1 ? 'CTRL → BOOST' : 'DRIFT → 게이지';
+    $('gauge-label').textContent = h.boosting ? 'BOOST!!' : h.boosts >= 2 ? 'MAX · CTRL/SPACE → BOOST' : h.boosts >= 1 ? 'CTRL/SPACE → BOOST' : 'DRIFT → 게이지';
     const key = h.order.map((o) => o.name + (o.finished ? '!' : '')).join('|');
     if (key !== this.lastRankKey) {
       this.lastRankKey = key;

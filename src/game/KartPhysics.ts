@@ -78,6 +78,14 @@ export const MINI_DURATION = 0.55;
 export const MINI_MUL = 1.18;
 export const MINI_WINDOW = 0.35;
 export const MINI_MIN_DRIFT = 0.12;
+/** 출발 부스터: GO 직전 이 시간(초) 안에 ↑ 를 누르면 */
+export const START_BOOST_WINDOW = 0.45;
+export const START_BOOST_DURATION = 1.1;
+
+/** 출발 부스터 부여 */
+export function applyStartBoost(st: KartState): void {
+  st.boostT = START_BOOST_DURATION;
+}
 export const MAX_SLIP = 0.45;
 /** 벽 판정 여유 — 트랙 폭 절반에서 뺀다 */
 export const WALL_MARGIN = 1.0;
@@ -243,7 +251,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     st.slip += (target - st.slip) * Math.min(1, 4 * dt);
     st.speed *= Math.max(0, 1 - 0.35 * dt);
     if (st.boosts < MAX_BOOSTS) {
-      st.gauge += (Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * dt;
+      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * dt;
       if (st.gauge >= 1) {
         st.boosts++;
         st.gauge = st.boosts < MAX_BOOSTS ? st.gauge - 1 : 0;

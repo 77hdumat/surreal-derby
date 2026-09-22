@@ -17,7 +17,7 @@ import { InputManager } from './Input';
 import { Net } from '../net/Net';
 import { encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
 import { RemoteKart } from '../net/RemoteKart';
-import { currentLap } from './KartPhysics';
+import { START_BOOST_WINDOW, applyStartBoost, currentLap } from './KartPhysics';
 import { JOCKEYS } from '../racers/Jockeys';
 
 type Mode = 'none' | 'solo' | 'host' | 'client';
@@ -75,6 +75,9 @@ export class Game {
   private latestRemote: ({ ts: number; k: number[] } | null)[] = [];
   private sendSeq = 0;
   private sendAccum = 0;
+  /** 출발 부스터 판정: ↑ 를 누르기 시작한 시각 (performance.now, ms) */
+  private throttleSince = -1;
+  private startBoostDone = false;
   private recvSeq = 0;
   private pingT = 0;
   private netInfoT = 0;
@@ -438,7 +441,10 @@ export class Game {
         break;
       case 'count':
         this.showCount(m.n);
-        if (m.n === 0 && this.race.phase !== 'RACING') this.race.startRacing();
+        if (m.n === 0 && this.race.phase !== 'RACING') {
+          this.race.startRacing();
+          this.tryStartBoost();
+        }
         break;
       case 'snap':
         if (this.screen !== 'RACE' && this.screen !== 'RESULT') break;
@@ -586,6 +592,8 @@ export class Game {
     this.finishTimer = 0;
     this.excitement = 0.3;
     this.accum = 0;
+    this.throttleSince = -1;
+    this.startBoostDone = false;
     this.input.attach();
     this.input.clear();
     this.screen = 'RACE';
@@ -773,11 +781,17 @@ export class Game {
     const myKart = this.race.karts[this.mySlot];
     if (!myKart) return;
     const input = this.input.update(dt);
+    if (input.throttle > 0) {
+      if (this.throttleSince < 0) this.throttleSince = performance.now();
+    } else this.throttleSince = -1;
     this.race.setInput(this.mySlot, input);
     this.stepSim(dt);
     if (this.mode !== 'client') {
       if (this.race.phase === 'COUNTDOWN') this.hostCount(Math.ceil(this.race.countdown));
-      else if (this.race.phase === 'RACING' && this.lastCount !== 0) this.hostCount(0);
+      else if (this.race.phase === 'RACING' && this.lastCount !== 0) {
+        this.hostCount(0);
+        this.tryStartBoost();
+      }
       if (this.race.phase === 'OVER') {
         this.net?.broadcast({ t: 'over', results: this.race.results });
         this.showResult();
@@ -859,6 +873,20 @@ export class Game {
       this.finishTimer = 0;
       const lines = this.race.ranking.slice(0, 4).map((slot, i) => `${i + 1}. ${this.race.slots[slot].name}`);
       this.track.updateBigScreen('초현실 경마 그랑프리 · 대결', lines, this.race.time);
+    }
+  }
+
+  /** GO 직전 START_BOOST_WINDOW 안에 ↑ 를 누르기 시작했으면 출발 부스터 */
+  private tryStartBoost(): void {
+    if (this.startBoostDone) return;
+    this.startBoostDone = true;
+    const my = this.race.karts[this.mySlot];
+    if (!my || this.throttleSince < 0) return;
+    const held = (performance.now() - this.throttleSince) / 1000;
+    if (held <= START_BOOST_WINDOW) {
+      applyStartBoost(my);
+      this.onRaceEvent({ k: 'boost', slot: this.mySlot });
+      this.ui.showToast('출발 부스터!', 1200);
     }
   }
 

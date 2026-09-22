@@ -4,7 +4,7 @@ import type { KartState } from '../game/KartPhysics';
 
 export type GameCameraMode = 'INTRO' | 'CHASE' | 'RESULT';
 
-const BASE_FOV = 55;
+const BASE_FOV = 58;
 
 /**
  * 인트로 스윙 / 플레이어 추적(카트라이더식 3인칭) / 결과 궤도 카메라.
@@ -92,9 +92,10 @@ export class GameCamera {
         const fz = -Math.sin(h);
         const rx = -fz; // 오른쪽 = (sin h, 0, cos h)
         const rz = fx;
-        const speedK = THREE.MathUtils.clamp(Math.abs(kart.speed) / 25, 0, 1.3);
-        const back = 6.5 + speedK * 2.2 + boost * 1.2;
-        const up = 3.0 + speedK * 0.5;
+        const speedK = THREE.MathUtils.clamp(Math.abs(kart.speed) / 30, 0, 1.3);
+        // 빨라질수록 카메라가 낮고 가깝게 붙어 속도감 ↑
+        const back = 6.0 + speedK * 1.2 + boost * 0.6;
+        const up = 3.0 - speedK * 0.7;
         // 드리프트 중엔 미끄러지는 반대쪽으로 살짝 빠져 옆모습이 보이게
         const wantSide = -kart.slip * 5;
         this.sideOffset += (wantSide - this.sideOffset) * Math.min(1, 4 * dt);
@@ -124,8 +125,8 @@ export class GameCamera {
     }
 
     this.boostNearby = THREE.MathUtils.lerp(this.boostNearby, this.mode === 'CHASE' ? boost : 0, Math.min(1, dt * 5));
-    const speedFov = kart && this.mode === 'CHASE' ? THREE.MathUtils.clamp(Math.abs(kart.speed) / 30, 0, 1) * 6 : 0;
-    const target = BASE_FOV + this.boostNearby * 14 + speedFov;
+    const speedFov = kart && this.mode === 'CHASE' ? THREE.MathUtils.clamp(Math.abs(kart.speed) / 30, 0, 1.2) * 14 : 0;
+    const target = BASE_FOV + this.boostNearby * 16 + speedFov;
     this.fovCur = THREE.MathUtils.lerp(this.fovCur, target, Math.min(1, dt * 5));
     if (Math.abs(this.camera.fov - this.fovCur) > 0.01) {
       this.camera.fov = this.fovCur;

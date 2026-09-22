@@ -43,12 +43,12 @@ export function jockeyById(id: string): Jockey {
 export function kartParamsFor(def: RacerDefinition, j: Jockey): KartParams {
   const m = j.mul;
   return {
-    maxSpeed: def.speed * 1.5 * m.maxSpeed,
-    accel: def.acceleration * 1.8 * m.accel,
+    maxSpeed: def.speed * 1.75 * m.maxSpeed,
+    accel: def.acceleration * 2.1 * m.accel,
     handling: (0.85 + def.cornering * 0.6) * m.handling,
     // 85kg 사람부터 4t 코끼리까지 — 압축해서 3:1 정도로
     mass: (50 + Math.pow(def.weight, 0.6)) * m.mass,
-    gaugeRate: 0.34 * m.gaugeRate,
+    gaugeRate: 0.5 * m.gaugeRate,
     boostMul: m.boostMul,
     radius: 1.3,
   };
@@ -59,10 +59,10 @@ export function statBars(def: RacerDefinition, j: Jockey): { label: string; valu
   const p = kartParamsFor(def, j);
   const n = (v: number, lo: number, hi: number) => Math.max(0.05, Math.min(1, (v - lo) / (hi - lo)));
   return [
-    { label: '최고속', value: n(p.maxSpeed, 20, 28) },
-    { label: '가속', value: n(p.accel, 2.5, 10) },
+    { label: '최고속', value: n(p.maxSpeed, 24, 33) },
+    { label: '가속', value: n(p.accel, 3, 12) },
     { label: '조향', value: n(p.handling, 0.85, 1.5) },
-    { label: '충전', value: n(p.gaugeRate, 0.25, 0.48) },
+    { label: '충전', value: n(p.gaugeRate, 0.4, 0.7) },
     { label: '부스트', value: n(p.boostMul, 1.2, 1.6) },
     { label: '질량', value: n(p.mass, 60, 260) },
   ];
