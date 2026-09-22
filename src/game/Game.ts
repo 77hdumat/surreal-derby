@@ -843,6 +843,7 @@ export class Game {
       total: this.race.karts.length,
       speed: myKart.speed,
       gauge: myKart.gauge,
+      boosts: myKart.boosts,
       boosting: myKart.boostT > 0,
       time: this.race.time,
       order,

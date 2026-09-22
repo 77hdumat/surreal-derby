@@ -21,6 +21,7 @@ export interface HudState {
   total: number;
   speed: number;
   gauge: number;
+  boosts: number;
   boosting: boolean;
   time: number;
   /** 순위 순 이름 (상위부터) */
@@ -362,9 +363,11 @@ export class UIManager {
     const fill = $('gauge-fill');
     fill.style.width = `${Math.round(Math.min(1, h.gauge) * 100)}%`;
     const g = fill.parentElement!;
-    g.classList.toggle('full', h.gauge >= 1 && !h.boosting);
+    g.classList.toggle('full', h.boosts >= 2 && !h.boosting);
     g.classList.toggle('boosting', h.boosting);
-    $('gauge-label').textContent = h.boosting ? 'BOOST!!' : h.gauge >= 1 ? 'SPACE → BOOST' : 'DRIFT → BOOST';
+    $('pip-0').classList.toggle('on', h.boosts >= 1);
+    $('pip-1').classList.toggle('on', h.boosts >= 2);
+    $('gauge-label').textContent = h.boosting ? 'BOOST!!' : h.boosts >= 2 ? 'MAX · CTRL → BOOST' : h.boosts >= 1 ? 'CTRL → BOOST' : 'DRIFT → 게이지';
     const key = h.order.map((o) => o.name + (o.finished ? '!' : '')).join('|');
     if (key !== this.lastRankKey) {
       this.lastRankKey = key;

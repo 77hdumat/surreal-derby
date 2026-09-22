@@ -37,8 +37,12 @@ export interface KartState {
   /** 드리프트 슬립각 — 진행 방향 = yaw + slip */
   slip: number;
   drifting: boolean;
-  /** 0..1 */
+  /** 0..1 — 가득 차면 boosts 로 넘어가고 0 부터 다시 */
   gauge: number;
+  /** 모아 둔 부스터 개수 (최대 MAX_BOOSTS) */
+  boosts: number;
+  /** 이번 드리프트 시작 시점 게이지 — 부딪히면 여기로 되돌린다 */
+  gaugeAtDriftStart: number;
   /** 남은 부스트 시간 (초) */
   boostT: number;
   /** 남은 순간부스터 시간 (초) — 드리프트 직후 ↑ */
@@ -67,6 +71,7 @@ export interface KartState {
 export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'lap'; lap: number } | { k: 'finish' };
 
 export const LAPS = 3;
+export const MAX_BOOSTS = 2;
 export const BOOST_DURATION = 2.0;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
 export const MINI_DURATION = 0.55;
@@ -88,6 +93,8 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     slip: 0,
     drifting: false,
     gauge: 0,
+    boosts: 0,
+    gaugeAtDriftStart: 0,
     boostT: 0,
     miniT: 0,
     miniWindow: 0,
@@ -153,6 +160,15 @@ export function cruiseInput(st: KartState, p: KartParams, track: TrackGeometry, 
 
 const scratchInput: KartInput = { steer: 0, throttle: 0, brake: 0, drift: false, boost: false };
 
+/** 부딪힘: 드리프트 중이었다면 이번 드리프트로 모은 게이지를 잃고 드리프트가 끊긴다 (카트라이더 규칙) */
+export function hitDuringDrift(st: KartState): void {
+  if (!st.drifting) return;
+  st.gauge = st.gaugeAtDriftStart;
+  st.drifting = false;
+  st.driftTime = 0;
+  st.miniWindow = 0;
+}
+
 /**
  * 한 스텝 물리. 결정적(입력·dt 만 의존). 호스트와 게스트 예측이 같은 코드를 돈다.
  */
@@ -164,9 +180,9 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const prevYaw = st.yaw;
 
   // ---- 부스트
-  if (!st.finished && inp.boost && st.gauge >= 1 && st.boostT <= 0) {
+  if (!st.finished && inp.boost && st.boosts > 0 && st.boostT <= 0) {
     st.boostT = BOOST_DURATION;
-    st.gauge = 0;
+    st.boosts--;
     st.speed = Math.max(st.speed, p.maxSpeed * 1.05);
     events.push({ k: 'boost' });
   }
@@ -207,6 +223,8 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     // 드리프트 종료 → 순간부스터 입력 창 (너무 짧은 드리프트는 제외)
     if (st.driftTime >= MINI_MIN_DRIFT) st.miniWindow = MINI_WINDOW;
     st.driftTime = 0;
+  } else if (!st.drifting && wantDrift) {
+    st.gaugeAtDriftStart = st.gauge;
   }
   st.drifting = wantDrift;
   if (st.drifting) st.driftTime += dt;
@@ -224,7 +242,14 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     const target = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) * MAX_SLIP : st.slip * Math.max(0, 1 - dt);
     st.slip += (target - st.slip) * Math.min(1, 4 * dt);
     st.speed *= Math.max(0, 1 - 0.35 * dt);
-    st.gauge = Math.min(1, st.gauge + (Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * dt);
+    if (st.boosts < MAX_BOOSTS) {
+      st.gauge += (Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * dt;
+      if (st.gauge >= 1) {
+        st.boosts++;
+        st.gauge = st.boosts < MAX_BOOSTS ? st.gauge - 1 : 0;
+        st.gaugeAtDriftStart = 0; // 이미 확보한 부스터는 부딪혀도 안 잃는다
+      }
+    }
   } else {
     st.slip += (0 - st.slip) * Math.min(1, 6 * dt);
     if (Math.abs(st.slip) < 1e-3) st.slip = 0;
@@ -251,6 +276,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       st.speed *= 0.6;
       st.bumpT = 0.4;
       st.bumpDir = -Math.sign(st.lat);
+      hitDuringDrift(st);
       events.push({ k: 'wall' });
     } else {
       st.speed *= Math.max(0, 1 - 1.5 * dt);
@@ -311,6 +337,7 @@ export function resolveKartCollision(a: KartState, pa: KartParams, b: KartState,
     if (a.bumpT <= 0) {
       a.bumpT = 0.3;
       a.bumpDir = ra > 0 ? -1 : 1;
+      hitDuringDrift(a);
     }
   }
   if (moveB) {
@@ -321,6 +348,7 @@ export function resolveKartCollision(a: KartState, pa: KartParams, b: KartState,
     if (b.bumpT <= 0) {
       b.bumpT = 0.3;
       b.bumpDir = ra > 0 ? 1 : -1;
+      hitDuringDrift(b);
     }
   }
   return true;

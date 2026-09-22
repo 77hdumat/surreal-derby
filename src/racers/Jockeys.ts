@@ -48,7 +48,7 @@ export function kartParamsFor(def: RacerDefinition, j: Jockey): KartParams {
     handling: (0.85 + def.cornering * 0.6) * m.handling,
     // 85kg 사람부터 4t 코끼리까지 — 압축해서 3:1 정도로
     mass: (50 + Math.pow(def.weight, 0.6)) * m.mass,
-    gaugeRate: 0.55 * m.gaugeRate,
+    gaugeRate: 0.34 * m.gaugeRate,
     boostMul: m.boostMul,
     radius: 1.3,
   };
@@ -62,7 +62,7 @@ export function statBars(def: RacerDefinition, j: Jockey): { label: string; valu
     { label: '최고속', value: n(p.maxSpeed, 20, 28) },
     { label: '가속', value: n(p.accel, 2.5, 10) },
     { label: '조향', value: n(p.handling, 0.85, 1.5) },
-    { label: '충전', value: n(p.gaugeRate, 0.4, 0.75) },
+    { label: '충전', value: n(p.gaugeRate, 0.25, 0.48) },
     { label: '부스트', value: n(p.boostMul, 1.2, 1.6) },
     { label: '질량', value: n(p.mass, 60, 260) },
   ];

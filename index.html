@@ -29,13 +29,14 @@
         <div id="net-info"></div>
         <div class="gauge-wrap">
           <div class="speed"><span id="hud-speed">0</span><span class="unit">km/h</span></div>
-          <div class="gauge"><div id="gauge-fill"></div><div class="gauge-label" id="gauge-label">DRIFT → BOOST</div></div>
+          <div class="boost-slots"><span class="pip" id="pip-0"></span><span class="pip" id="pip-1"></span></div>
+          <div class="gauge"><div id="gauge-fill"></div><div class="gauge-label" id="gauge-label">DRIFT → 게이지</div></div>
         </div>
         <div class="controls">
           <button id="btn-quality" class="quality" title="렌더링 품질">HD</button>
           <button id="btn-mute" title="소리">🔊</button>
         </div>
-        <div class="keys-hint">↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트</div>
+        <div class="keys-hint">↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Ctrl 부스트 · 드리프트 직후 ↑ 순간부스터</div>
         <div id="touch" class="hidden">
           <div class="touch-left">
             <button data-key="left">◀</button>
@@ -71,7 +72,7 @@
                 <button id="btn-join" class="text-btn">참가</button>
               </div>
               <div id="menu-msg" class="msg"></div>
-              <div class="hint">↑↓←→ 이동 · Shift 드리프트(게이지 충전) · Space 부스터 · 3바퀴 먼저 도는 사람이 승리</div>
+              <div class="hint">↑↓←→ 이동 · Shift 드리프트(게이지 충전, 최대 2개 저장) · Ctrl 부스터 · 드리프트 직후 ↑ 순간부스터 · 부딪히면 모으던 게이지 손실 · 3바퀴 먼저 도는 사람이 승리</div>
             </div>
           </div>
         </div>

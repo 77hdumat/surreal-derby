@@ -59,10 +59,11 @@ export function encodeKart(k: KartState): number[] {
     r2(k.s),
     r2(k.lat),
     r2(k.miniT),
+    k.boosts,
   ];
 }
 
-export const KART_FIELDS = 17;
+export const KART_FIELDS = 18;
 
 /** 스냅샷 값 → 상태. 위치(x,z,yaw)는 보간 대상이라 applyPos=false 로 건너뛸 수 있다 */
 export function decodeKart(a: number[], into: KartState, applyPos = true): KartState {
@@ -85,6 +86,7 @@ export function decodeKart(a: number[], into: KartState, applyPos = true): KartS
   into.s = a[14];
   into.lat = a[15];
   into.miniT = a[16] ?? 0;
+  into.boosts = a[17] ?? 0;
   return into;
 }
 

@@ -36,14 +36,14 @@ describe('stepKart', () => {
     expect(Math.abs(st.slip)).toBeLessThan(0.05);
   });
 
-  it('게이지가 가득 차야 부스트가 나가고, 부스트 중 최고속이 올라간다', () => {
+  it('부스터가 있어야 발동하고, 부스트 중 최고속이 올라간다', () => {
     const st = spawn();
     st.gauge = 0.5;
     expect(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT)).toEqual([]);
-    st.gauge = 1;
+    st.boosts = 1;
     const ev = stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT);
     expect(ev).toEqual([{ k: 'boost' }]);
-    expect(st.gauge).toBe(0);
+    expect(st.boosts).toBe(0);
     expect(st.boostT).toBeCloseTo(BOOST_DURATION - DT, 6);
     for (let i = 0; i < 100; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.2);
@@ -83,6 +83,35 @@ describe('stepKart', () => {
     expect(st.lapsDone).toBe(LAPS);
     expect(st.finishTime).toBeGreaterThan(0);
     expect(st.progress).toBeGreaterThanOrEqual(finishDistance(track));
+  });
+});
+
+describe('게이지 규칙', () => {
+  it('가득 차면 부스터 1개로 바뀌고 최대 2개까지', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    st.gauge = 0.99;
+    st.gaugeAtDriftStart = 0.99;
+    for (let i = 0; i < 10; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    expect(st.boosts).toBe(1);
+    expect(st.gauge).toBeLessThan(0.2);
+    st.boosts = 2;
+    st.gauge = 0.99;
+    for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: -1, drift: true }), P, track, DT);
+    expect(st.boosts).toBe(2);
+    expect(st.gauge).toBeCloseTo(0.99, 6); // 꽉 차면 더 안 찬다
+  });
+  it('드리프트 중 벽에 부딪히면 이번 드리프트 게이지를 잃는다', () => {
+    const st = spawn(10, 0);
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    st.gauge = 0.3;
+    let wall = false;
+    for (let i = 0; i < 240 && !wall; i++) {
+      for (const e of stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT)) if (e.k === 'wall') wall = true;
+    }
+    expect(wall).toBe(true);
+    expect(st.gauge).toBeCloseTo(0.3, 6);
+    expect(st.drifting).toBe(false);
   });
 });
 

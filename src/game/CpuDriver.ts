@@ -53,6 +53,6 @@ export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, oth
   out.drift = corner > prof.driftEager && st.speed > p.maxSpeed * 0.55 && Math.abs(out.steer) > 0.12;
   if (out.drift && Math.abs(out.steer) < 0.35) out.steer = Math.sign(out.steer || -1) * 0.35;
   // 직선에서 게이지가 차 있으면 부스트
-  out.boost = st.gauge >= 1 && track.cornerWeight(st.s + 30) < 0.2;
+  out.boost = st.boosts > 0 && track.cornerWeight(st.s + 30) < 0.2;
   return out;
 }
