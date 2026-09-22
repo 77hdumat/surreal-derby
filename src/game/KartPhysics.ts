@@ -79,7 +79,7 @@ export interface KartState {
 
 export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'lap'; lap: number } | { k: 'finish' } | { k: 'bale' } | { k: 'pad' };
 
-export const LAPS = 5;
+export const LAPS = 3; // 서킷 2.4km × 3
 export const MAX_BOOSTS = 2;
 export const BOOST_DURATION = 3.0;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
@@ -132,24 +132,28 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
   };
 }
 
+/** 결승선 통과 횟수 (출발 그리드가 선 바로 앞이라 시작 시 1) */
+function crossings(progress: number, track: TrackGeometry): number {
+  return progress >= track.finishS ? Math.floor((progress - track.finishS) / track.length) + 1 : 0;
+}
+
 /** 트랙 좌표를 위치에서 다시 계산하고 progress 기준점을 맞춘다 (배치 직후 호출) */
 export function syncKartToTrack(st: KartState, track: TrackGeometry): void {
   const c = track.project(st.x, st.z);
   st.s = c.s;
   st.lat = c.lat;
-  // 출발 지점이 s=0 근처(게이트 뒤, wrap 되면 L-4)면 음수 progress 로 시작
   st.progress = c.s > track.length / 2 ? c.s - track.length : c.s;
-  st.lapsDone = 0;
+  st.lapsDone = crossings(st.progress, track);
 }
 
-/** 완주 거리: 결승선(finishS) 을 LAPS 번 지난다 */
+/** 완주 거리: 출발선 앞에서 시작해 결승선을 LAPS 번 더 지난다 */
 export function finishDistance(track: TrackGeometry): number {
-  return track.finishS + (LAPS - 1) * track.length;
+  return track.finishS + LAPS * track.length;
 }
 
 /** 표시용 현재 랩 (1..LAPS) */
 export function currentLap(st: KartState): number {
-  return Math.min(LAPS, st.lapsDone + 1);
+  return Math.max(1, Math.min(LAPS, st.lapsDone));
 }
 
 function wrapDelta(d: number, L: number): number {
@@ -353,16 +357,16 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   if (!st.finished) {
     // 부스트 중 늘어난 목/몸통은 코끝 기준으로 먼저 결승선을 지난다
     const reach = st.progress + (st.boostT > 0 ? p.boostReach : 0);
-    const done = reach >= track.finishS ? Math.floor((reach - track.finishS) / track.length) + 1 : 0;
+    const done = crossings(reach, track);
     if (done > st.lapsDone) {
       st.lapsDone = done;
-      if (done >= LAPS) {
+      if (done >= LAPS + 1) {
         st.finished = true;
         st.finishTime = time;
         st.drifting = false;
         events.push({ k: 'finish' });
       } else {
-        events.push({ k: 'lap', lap: done });
+        events.push({ k: 'lap', lap: done }); // done = 새로 들어선 랩 번호 (2..LAPS)
       }
     }
   }

@@ -14,10 +14,6 @@ export type { TrackFrame } from './TrackGeometry';
 export class RaceTrack extends TrackGeometry {
   readonly group = new THREE.Group();
 
-  gate = new THREE.Group();
-  private gateDoors: THREE.Object3D[] = [];
-  private gateOpen = 0;
-  private gateDrive = 0;
 
   private screenCanvas!: HTMLCanvasElement;
   private screenCtx!: CanvasRenderingContext2D;
@@ -35,6 +31,8 @@ export class RaceTrack extends TrackGeometry {
   private pond?: THREE.Mesh;
   private dancers?: Dancers;
   private lake?: THREE.Mesh;
+  /** 호수/연못 자리 (트랙에서 가장 먼 곳) */
+  private lakeSpot = new THREE.Vector3();
   sky!: Sky;
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
   static readonly SUN_DIR = new THREE.Vector3(0.35, 1.05, 0.3).normalize();
@@ -50,8 +48,7 @@ export class RaceTrack extends TrackGeometry {
     this.buildGround();
     this.buildTrackSurface();
     this.buildRails();
-    this.buildFinishLine();
-    this.buildGate();
+    this.buildStartLine();
     this.buildBillboards();
     this.buildBigScreen();
     this.buildInfield();
@@ -155,141 +152,33 @@ export class RaceTrack extends TrackGeometry {
     }
   }
 
-  private makeTextTexture(
-    text: string,
-    w: number,
-    h: number,
-    bg: string,
-    fg: string,
-    font = 'bold 90px sans-serif',
-  ): THREE.CanvasTexture {
+  /** 출발선 = 결승선: s=0 바닥에 체커 무늬 띠 (게이트 없음) */
+  private buildStartLine(): void {
+    const f = this.getFrame(0);
     const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
+    c.width = 256;
+    c.height = 32;
     const ctx = c.getContext('2d')!;
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = fg;
-    ctx.font = font;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, w / 2, h / 2);
+    for (let i = 0; i < 32; i++) {
+      for (let j = 0; j < 4; j++) {
+        ctx.fillStyle = (i + j) % 2 === 0 ? '#ffffff' : '#111111';
+        ctx.fillRect(i * 8, j * 8, 8, 8);
+      }
+    }
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }
-
-  private buildFinishLine(): void {
-    const f = this.getFrame(this.finishS);
-    const line = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.2, this.width + 1),
-      new THREE.MeshBasicMaterial({ color: 0xffffff }),
-    );
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(1.6, this.width + 1), new THREE.MeshBasicMaterial({ map: tex }));
     line.rotation.x = -Math.PI / 2;
     line.position.copy(f.pos);
     line.position.y = 0.03;
     line.rotation.z = Math.atan2(f.tan.x, f.tan.z) - Math.PI / 2;
     this.group.add(line);
-
-    // 결승 게이트·현수막 없음 — 바닥 흰 선만 (카메라 시야를 가리지 않게)
   }
 
-  private buildGate(): void {
-    const f = this.getFrame(0);
-    this.gate.position.copy(f.pos);
-    this.gate.rotation.y = Math.atan2(f.tan.x, f.tan.z);
-    const laneW = this.width / this.laneCount;
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0x3b6fd6, roughness: 0.95, metalness: 0 });
-    const doorMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.95, metalness: 0 });
-    const grille = new THREE.MeshStandardMaterial({ color: 0x9fb8e8, transparent: true, opacity: 0.6, roughness: 0.95, metalness: 0 });
-    // 로컬 좌표: 진행방향 = +z, 오른쪽 = +x? gate.rotation 은 tan 을 +z 에 맞춤. right 는 -x.
-    for (let i = 0; i <= this.laneCount; i++) {
-      const lat = -this.width / 2 + i * laneW;
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.8, 0.16), frameMat);
-      post.position.set(-lat, 1.4, 0);
-      this.gate.add(post);
-      const back = post.clone();
-      back.position.z = -3.2;
-      this.gate.add(back);
-      const top = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 3.2), frameMat);
-      top.position.set(-lat, 2.8, -1.6);
-      this.gate.add(top);
-    }
-    // 지붕 없음 — 칸막이 위가 트여 있어 출발 장면에서 말이 가려지지 않는다
-    for (let i = 0; i < this.laneCount; i++) {
-      const lat = this.laneToLat(i);
-      // 양문형 도어 — 힌지가 좌우 포스트에 있음
-      for (const side of [-1, 1]) {
-        const hinge = new THREE.Group();
-        hinge.position.set(-lat + side * (laneW / 2 - 0.1), 0, 0.02);
-        const door = new THREE.Mesh(new THREE.BoxGeometry(laneW / 2 - 0.12, 2.3, 0.06), doorMat);
-        door.position.set(-side * (laneW / 4 - 0.06), 1.25, 0);
-        hinge.add(door);
-        const num = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.6, 0.6),
-          new THREE.MeshBasicMaterial({
-            map: this.makeTextTexture(String(i + 1), 128, 128, '#ffffff', '#111111', 'bold 96px sans-serif'),
-          }),
-        );
-        num.position.set(-side * (laneW / 4 - 0.06), 1.9, 0.04);
-        hinge.add(num);
-        hinge.userData.side = side;
-        this.gate.add(hinge);
-        this.gateDoors.push(hinge);
-      }
-      // 뒷문(닫힘)
-      const rear = new THREE.Mesh(new THREE.BoxGeometry(laneW - 0.2, 2.0, 0.06), grille);
-      rear.position.set(-lat, 1.1, -3.2);
-      this.gate.add(rear);
-    }
-    // 바퀴 (게이트는 견인차량이다)
-    const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 10);
-    wheelGeo.rotateZ(Math.PI / 2);
-    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.95, metalness: 0 });
-    for (let i = 0; i < 4; i++) {
-      const w = new THREE.Mesh(wheelGeo, wheelMat);
-      w.position.set(-this.width / 2 + 1 + (i * (this.width - 2)) / 3, 0.4, -3.6);
-      w.visible = false; // 출발 후 이동 시 표시
-      w.userData.wheel = true;
-      this.gate.add(w);
-    }
-    this.group.add(this.gate);
-  }
-
-  /** 0..1 게이트 문 열림 */
-  setGateOpen(v: number): void {
-    this.gateOpen = v;
-    for (const h of this.gateDoors) {
-      const side = h.userData.side as number;
-      h.rotation.y = side * v * (Math.PI * 0.55);
-    }
-  }
-
-  /** 출발 후 게이트가 트랙 밖으로 이동 (0..1) */
-  setGateDrive(v: number): void {
-    this.gateDrive = v;
-    const f = this.getFrame(0);
-    const off = THREE.MathUtils.smoothstep(v, 0, 1) * 40;
-    this.gate.position.copy(f.pos).addScaledVector(f.right, off);
-    this.gate.position.y = 0;
-    this.gate.children.forEach((c) => {
-      if (c.userData.wheel) c.visible = v > 0.02;
-    });
-    this.gate.visible = v < 0.999;
-  }
-
-  resetGate(): void {
-    this.setGateOpen(0);
-    this.setGateDrive(0);
-    this.gate.visible = true;
-  }
-
-  get gateOpenAmount(): number {
-    return this.gateOpen;
-  }
-  get gateDriveAmount(): number {
-    return this.gateDrive;
-  }
+  /** 게이트 없음 — 호환용 no-op */
+  setGateOpen(_v: number): void {}
+  setGateDrive(_v: number): void {}
+  resetGate(): void {}
 
   /** 관중 — 몸/머리/팔을 분리한 저폴리 실루엣 인스턴스. seats = 서 있는 발 위치(월드) */
   /**
@@ -303,7 +192,7 @@ export class RaceTrack extends TrackGeometry {
         if (!protos.length) return;
         for (const slot of this.treeSlots) {
           // 트랙 가까운 슬롯은 큰 나무, 먼 슬롯은 가벼운(폴리 적은) 나무
-          const near = Math.hypot(slot.group.position.x, slot.group.position.z) < this.straight / 2 + this.radius + 25;
+          const near = Math.abs(this.project(slot.group.position.x, slot.group.position.z).lat) < 70;
           const pool = near ? protos : protos.slice(0, Math.max(1, Math.ceil(protos.length / 2)));
           const tree = cloneTree(pool[Math.floor(Math.random() * pool.length)], slot.height);
           slot.group.clear();
@@ -317,8 +206,10 @@ export class RaceTrack extends TrackGeometry {
       }),
     );
     // 관중석 모듈 + 그 앞에서 춤추는 엽기 관중 (스펀지밥·뚱이·슈렉·피카츄·바나나·게·토끼·비보이)
-    const frontZ = this.radius + this.width / 2 + 6;
-    const standLen = this.straight + 40;
+    // 출발 직선(z=60, +x 방향)의 오른쪽(+lat)에 관중석
+    const startF = this.getFrame(60);
+    const frontZ = startF.pos.z + this.width / 2 + 6;
+    const standLen = 240;
     tasks.push(
       loadGrandstand(frontZ, standLen).then((stand) => {
         this.group.add(stand.group);
@@ -336,7 +227,7 @@ export class RaceTrack extends TrackGeometry {
     // 호수: 반사 물
     try {
       const lake = makeLake(22 * 1.6, 22, sunDir);
-      lake.position.set(-40, 0.04, -8);
+      lake.position.copy(this.lakeSpot).setY(0.04);
       if (this.pond) this.group.remove(this.pond);
       this.group.add(lake);
       this.lake = lake;
@@ -460,13 +351,15 @@ export class RaceTrack extends TrackGeometry {
       ['외부 디자인도 그대로 가져오기', 'Figma·이미지 → 사이트', '#ffffff', '#111111', '#111111'],
     ];
     const boardW = 14;
-    const positions: number[] = [];
-    // 뒷 직선주로 + 코너 바깥
-    const L1 = this.straight;
-    const arc = Math.PI * this.radius;
-    for (let i = 0; i < 6; i++) positions.push(L1 + arc + 15 + i * ((L1 - 30) / 5));
-    positions.push(L1 + arc * 0.3, L1 + arc * 0.7, 2 * L1 + arc + arc * 0.3, 2 * L1 + arc + arc * 0.7);
-    positions.forEach((s, i) => {
+    const positions: [number, number][] = [];
+    // 서킷 전체에 ~120m 간격, 좌우 번갈아. 출발 직선(관중석) 구간은 건너뛴다
+    const count = Math.floor(this.length / 120);
+    for (let i = 0; i < count; i++) {
+      const s = (i + 0.5) * (this.length / count);
+      if (s < 280) continue;
+      positions.push([s, i % 2 === 0 ? 1 : -1]);
+    }
+    positions.forEach(([s, side], i) => {
       const ad = ads[i % ads.length];
       const f = this.getFrame(s);
       const board = new THREE.Mesh(
@@ -476,9 +369,9 @@ export class RaceTrack extends TrackGeometry {
           side: THREE.DoubleSide,
         }),
       );
-      board.position.copy(f.pos).addScaledVector(f.right, this.width / 2 + 4);
+      board.position.copy(f.pos).addScaledVector(f.right, side * (this.width / 2 + 4));
       board.position.y = 2.2;
-      board.lookAt(board.position.clone().addScaledVector(f.right, -1));
+      board.lookAt(board.position.clone().addScaledVector(f.right, -side));
       this.group.add(board);
       const legMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.95, metalness: 0 });
       for (const side of [-1, 1]) {
@@ -518,8 +411,10 @@ export class RaceTrack extends TrackGeometry {
       leg.position.set(x, 2.5, 0);
       group.add(leg);
     }
-    // 인필드, 결승선 부근에서 정면 직선주로(+z) 를 향함
-    group.position.set(this.finishS - this.straight / 2 - 30, 0, 12);
+    // 결승선 60m 전, 트랙 왼쪽(관중석 반대편) 에서 트랙을 향함
+    const sf = this.getFrame(this.finishS - 60);
+    group.position.copy(sf.pos).addScaledVector(sf.right, -(this.width / 2 + 16));
+    group.rotation.y = Math.atan2(sf.right.x, sf.right.z);
     this.group.add(group);
     this.updateBigScreen('제1회 초현실 경마 그랑프리', [], 0);
   }
@@ -549,72 +444,61 @@ export class RaceTrack extends TrackGeometry {
   }
 
   private buildInfield(): void {
-    // 연못 (살짝 반사되는 물)
+    // 연못: 트랙에서 가장 먼 안쪽 자리 (실사 호수가 나중에 덮어쓴다)
+    this.lakeSpot = this.farthestPoint(50);
     const pond = new THREE.Mesh(
       new THREE.CircleGeometry(22, 32),
       new THREE.MeshStandardMaterial({ color: 0x5a7aa2, roughness: 0.12, metalness: 0.15 }),
     );
     pond.rotation.x = -Math.PI / 2;
-    pond.position.set(-40, 0.02, -8);
+    pond.position.copy(this.lakeSpot).setY(0.02);
     pond.scale.set(1.6, 1, 1);
     pond.userData.noShadow = true;
     this.group.add(pond);
     this.pond = pond;
-    const inPond = (x: number, z: number) => Math.hypot(x + 40, (z + 8) / 1.6) < 24;
-    const finishCam = this.getPoint(this.finishS + 1.5, -this.width / 2 - 11);
-    const nearFinishCam = (x: number, z: number) => Math.hypot(x - finishCam.x, z - finishCam.z) < 18;
-    const nearScreen = (x: number, z: number) => Math.abs(x - (this.finishS - this.straight / 2 - 30)) < 22 && z > 0 && z < 24;
-    // 결승선 주변(카메라 시야) 60m 는 나무 금지
+    const lk = this.lakeSpot;
+    const inPond = (x: number, z: number) => Math.hypot((x - lk.x) / 1.6, z - lk.z) < 24;
+    const halfW = this.width / 2;
+    const coord = { s: 0, lat: 0 };
+    /** 트랙 띠(폭 + 여유) 안이면 true */
+    const onTrack = (x: number, z: number, margin = 4) => Math.abs(this.project(x, z, coord).lat) < halfW + margin;
+    // 관중석 앞(출발 직선 오른쪽) 은 비운다
+    const stand = this.getFrame(60).pos.z;
+    const nearStand = (x: number, z: number) => x > -150 && x < 150 && z > stand + halfW && z < stand + halfW + 60;
     const finishPt = this.getPoint(this.finishS, 0);
     const nearFinish = (x: number, z: number) => Math.hypot(x - finishPt.x, z - finishPt.z) < 60;
-    // 인필드 나무
+    const B = this.bounds;
+    const rx = () => THREE.MathUtils.lerp(B.minX - 60, B.maxX + 60, Math.random());
+    const rz = () => THREE.MathUtils.lerp(B.minZ - 60, B.maxZ + 60, Math.random());
+
+    // 나무: 서킷 주변 넓게 (트랙 띠·관중석·호수·결승선 제외)
     const trees = new THREE.Group();
-    for (let i = 0; i < 16; i++) {
-      const x = (Math.random() - 0.5) * (this.straight + 30);
-      const z = (Math.random() - 0.5) * 70;
-      if (inPond(x, z) || nearScreen(x, z) || nearFinish(x, z)) continue;
-      const t = makeTree(1 + Math.random() * 0.6);
+    let placed = 0;
+    for (let tries = 0; tries < 2000 && placed < 90; tries++) {
+      const x = rx();
+      const z = rz();
+      const lat = Math.abs(this.project(x, z, coord).lat);
+      if (lat < halfW + 8 || lat > 110 || inPond(x, z) || nearStand(x, z) || nearFinish(x, z)) continue;
+      const big = lat < 40;
+      const t = makeTree(big ? 1.2 + Math.random() * 1.2 : 1 + Math.random() * 0.6);
       t.position.set(x, 0, z);
       t.rotation.y = Math.random() * Math.PI * 2;
       trees.add(t);
-      this.treeSlots.push({ group: t, height: 7 + Math.random() * 4 });
-    }
-    // 트랙 바깥 나무 (관중석 반대편·코너)
-    for (let i = 0; i < 30; i++) {
-      const s = Math.random() * this.length;
-      const f = this.getFrame(s);
-      if (f.pos.z > 20 && Math.abs(f.pos.x) < this.straight / 2 + 40) continue;
-      const p = f.pos.clone().addScaledVector(f.right, this.width / 2 + 10 + Math.random() * 60);
-      if (nearFinish(p.x, p.z)) continue;
-      const t = makeTree(1.2 + Math.random() * 1.2);
-      t.position.set(p.x, 0, p.z);
-      t.rotation.y = Math.random() * Math.PI * 2;
-      trees.add(t);
-      this.treeSlots.push({ group: t, height: 9 + Math.random() * 7 });
+      this.treeSlots.push({ group: t, height: (big ? 9 : 7) + Math.random() * 6 });
+      placed++;
     }
     this.group.add(trees);
 
-    // 바람에 흔들리는 잔디: 인필드 + 트랙 바깥 띠
-    const halfW = this.width / 2;
-    const infield = makeGrassField(9000, () => {
-      const x = (Math.random() - 0.5) * (this.straight + 2 * this.radius - 2 * halfW - 8);
-      const z = (Math.random() - 0.5) * (2 * this.radius - 2 * halfW - 8);
-      // 타원 내부 판정 (스타디움형)
-      const cx = THREE.MathUtils.clamp(x, -this.straight / 2, this.straight / 2);
-      const rIn = this.radius - halfW - 3;
-      if (Math.hypot(x - cx, z) > rIn) return null;
-      if (inPond(x, z) || nearScreen(x, z) || nearFinishCam(x, z)) return null;
-      return [x, z];
-    });
-    this.group.add(infield);
-    const outer = makeGrassField(11000, () => {
+    // 바람에 흔들리는 잔디: 트랙 양옆 띠
+    const grass = makeGrassField(18000, () => {
       const s = Math.random() * this.length;
       const f = this.getFrame(s);
-      if (f.pos.z > 20 && Math.abs(f.pos.x) < this.straight / 2 + 30) return null; // 관중석 앞 제외
-      const p = f.pos.clone().addScaledVector(f.right, halfW + 2 + Math.random() * 28);
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const p = f.pos.clone().addScaledVector(f.right, side * (halfW + 2 + Math.random() * 30));
+      if (nearStand(p.x, p.z) || inPond(p.x, p.z) || onTrack(p.x, p.z, 1)) return null;
       return [p.x, p.z];
     });
-    this.group.add(outer);
+    this.group.add(grass);
   }
 
   private buildBackground(): void {
@@ -637,12 +521,13 @@ export class RaceTrack extends TrackGeometry {
   private buildLightTowers(): void {
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.95, metalness: 0 });
     const lampMat = new THREE.MeshBasicMaterial({ color: 0xfff6d5 });
-    const spots: [number, number][] = [
-      [-this.straight / 2 - 30, this.radius + 30],
-      [this.straight / 2 + 30, this.radius + 30],
-      [-this.straight / 2 - 30, -this.radius - 30],
-      [this.straight / 2 + 30, -this.radius - 30],
-    ];
+    const spots: [number, number][] = [];
+    for (let i = 0; i < 6; i++) {
+      const f = this.getFrame((i + 0.5) * (this.length / 6));
+      const side = i % 2 === 0 ? 1 : -1;
+      const p = f.pos.clone().addScaledVector(f.right, side * (this.width / 2 + 30));
+      spots.push([p.x, p.z]);
+    }
     for (const [x, z] of spots) {
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.2, 38, 8), poleMat);
       pole.position.set(x, 19, z);

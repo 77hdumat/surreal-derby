@@ -35,8 +35,8 @@ export function cpuProfile(seed: number): CpuProfile {
  */
 export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, others: KartState[], prof: CpuProfile, out: KartInput, obstacles: Obstacle[] = [], dt = 1 / 60): KartInput {
   const corner = track.cornerWeight(st.s + 15);
-  // 코너는 안쪽으로, 직선은 선호 차선
-  let targetLat = corner > 0.3 ? -6 + prof.lanePref * 0.3 : prof.lanePref;
+  // 코너는 중앙 가까이, 직선은 선호 차선
+  let targetLat = corner > 0.3 ? prof.lanePref * 0.3 : prof.lanePref;
   // 바로 앞(3~12m) 에 다른 말이 비슷한 횡위치면 옆으로 비킨다
   for (const o of others) {
     if (o === st) continue;
@@ -62,8 +62,11 @@ export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, oth
   const want = Math.atan2(-(t.z - st.z), t.x - st.x);
   const err = angleDelta(want - st.yaw);
   out.steer = Math.max(-1, Math.min(1, -err * 2.2));
-  out.throttle = prof.skill;
-  out.brake = 0;
+  // 급코너(헤어핀) 진입: 빠르면 가속을 늦춰 벽에 안 박히게
+  const ahead2 = track.cornerWeight(st.s + 35);
+  const tooFast = ahead2 > 0.7 && st.speed > p.maxSpeed * 0.62 && st.boostT <= 0;
+  out.throttle = tooFast ? 0 : prof.skill;
+  out.brake = tooFast && st.speed > p.maxSpeed * 0.8 ? 0.6 : 0;
   // 코너: 빠르면 드리프트로 게이지 충전. 한 번 시작하면 최소 0.7s 유지, 끝나면 1.2s 뒤에야 다시 (순간부스터 남발 방지)
   prof.driftHold = Math.max(0, prof.driftHold - dt);
   prof.driftCooldown = Math.max(0, prof.driftCooldown - dt);

@@ -15,21 +15,84 @@ export interface TrackCoord {
 }
 
 /**
- * 타원형(스타디움형) 트랙의 순수 기하. Three.js 씬 객체 없음 → 물리·테스트에서 그대로 사용.
- * s = 트랙 중심선을 따라 진행한 거리. s=0 은 정면 직선주로 시작(출발 게이트).
- * lat = 중심선 기준 횡방향 위치, 음수 = 안쪽(왼쪽, 좌회전 트랙).
+ * 서킷 제어점 (x, z). 닫힌 Catmull-Rom 스플라인으로 잇는다.
+ * 첫 구간이 출발 직선주로(+x 방향, z=60) — 관중석·출발선이 여기 붙는다.
+ * WKT 브라질 서킷 느낌: 긴 직선 → 헤어핀 → S자 → 긴 스위퍼 → 시케인 → 마지막 헤어핀.
+ */
+export const CIRCUIT_POINTS: [number, number][] = [
+  [-200, 60], // 출발 직선 (+x)
+  [-60, 60],
+  [60, 60],
+  [135, 60],
+  [172, 25], // T1 우 90°
+  [172, -30],
+  [140, -70], // T2 우 90°
+  [80, -72],
+  [48, -105], // T3 좌 90°
+  [48, -165],
+  [92, -205], // T4 좌 90° → 우측 직선
+  [165, -205],
+  [228, -203],
+  [262, -160], // T5 좌 90° 위로 (U턴 준비)
+  [262, -100],
+  [300, -62], // T6 시케인
+  [352, -92],
+  [382, -152],
+  [365, -240], // T7 우 헤어핀
+  [305, -282],
+  [232, -262], // T8 S자
+  [200, -312],
+  [242, -362],
+  [318, -400], // T9 우 스위퍼
+  [332, -468],
+  [274, -522], // T10 U턴
+  [182, -502],
+  [122, -452], // T11 시케인
+  [62, -482],
+  [0, -520],
+  [-90, -502], // T12 우 90°
+  [-132, -432],
+  [-92, -372], // T13
+  [-32, -352],
+  [-60, -292], // T14 좌 헤어핀
+  [-140, -272],
+  [-202, -320], // T15
+  [-272, -300],
+  [-302, -222], // T16 U턴
+  [-252, -162],
+  [-172, -160], // T17
+  [-132, -100],
+  [-200, -60], // T18 좌
+  [-272, -20],
+  [-282, 48], // T19 → 출발 직선
+  [-240, 60],
+];
+
+
+interface Sample {
+  x: number;
+  z: number;
+  tx: number;
+  tz: number;
+  k: number;
+}
+
+/**
+ * 스플라인 서킷 기하. 1m 간격 호 길이 샘플 테이블 + 격자 색인으로 투영.
+ * s = 중심선 진행 거리(출발선 앞 s=0), lat = 횡방향(+ = 진행 방향 오른쪽).
  */
 export class TrackGeometry {
-  readonly straight = 200;
-  readonly radius = 60;
-  readonly width = 30;
-  readonly laneCount = 10;
+  readonly width = 24;
+  readonly laneCount = 8;
   readonly length: number;
-  /** 결승선 s 위치 (정면 직선주로 중간) */
-  readonly finishS = 165;
-  /** 전체 레이스 거리 (1바퀴 + 결승선까지) — 관람 모드 호환용 */
+  /** 출발선 = 결승선 (s=0). 출발 그리드는 선 바로 앞(s>0)이라 첫 통과가 실제 1바퀴 뒤 */
+  readonly finishS = 0;
+  /** 관람 모드 호환용: 1바퀴 + 결승선 */
   readonly raceDistance: number;
-
+  readonly samples: Sample[] = [];
+  readonly bounds = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
+  private cell = 20;
+  private grid = new Map<string, number[]>();
   private tmpFrame: TrackFrame = {
     pos: new THREE.Vector3(),
     tan: new THREE.Vector3(),
@@ -37,9 +100,150 @@ export class TrackGeometry {
     curvature: 0,
   };
 
-  constructor() {
-    this.length = 2 * this.straight + 2 * Math.PI * this.radius;
-    this.raceDistance = this.length + this.finishS;
+  constructor(points: [number, number][] = CIRCUIT_POINTS) {
+    const curve = new THREE.CatmullRomCurve3(
+      points.map(([x, z]) => new THREE.Vector3(x, 0, z)),
+      true,
+      'centripetal',
+    );
+    const rawLen = curve.getLength();
+    // 1m 등간격 샘플 → 최소 회전 반지름이 MIN_RADIUS 이상이 될 때까지 이동 평균으로 다듬는다
+    let pts = curve.getSpacedPoints(Math.max(64, Math.round(rawLen))).slice(0, -1).map((p) => [p.x, p.z] as [number, number]);
+    for (let pass = 0; pass < 80; pass++) {
+      pts = TrackGeometry.resample(pts, 1);
+      if (TrackGeometry.maxCurvature(pts) < 1 / TrackGeometry.MIN_RADIUS) break;
+      pts = TrackGeometry.smoothTight(pts, 1 / TrackGeometry.MIN_RADIUS, 6);
+    }
+    pts = TrackGeometry.resample(pts, 1);
+    const n = pts.length;
+    let L = 0;
+    for (let i = 0; i < n; i++) L += Math.hypot(pts[(i + 1) % n][0] - pts[i][0], pts[(i + 1) % n][1] - pts[i][1]);
+    this.length = L;
+    this.raceDistance = L + this.finishS;
+    for (let i = 0; i < n; i++) {
+      const a = pts[(i - 1 + n) % n];
+      const b = pts[(i + 1) % n];
+      let tx = b[0] - a[0];
+      let tz = b[1] - a[1];
+      const m = Math.hypot(tx, tz) || 1;
+      tx /= m;
+      tz /= m;
+      this.samples.push({ x: pts[i][0], z: pts[i][1], tx, tz, k: 0 });
+    }
+    // 곡률: 인접 접선 각 변화 / 거리, ±6m 창으로 부드럽게
+    const th = this.samples.map((s) => Math.atan2(-s.tz, s.tx));
+    const raw = this.samples.map((_, i) => {
+      const a = th[(i - 1 + n) % n];
+      const b = th[(i + 1) % n];
+      const d = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+      return Math.abs(d) / (2 * (L / n));
+    });
+    for (let i = 0; i < n; i++) {
+      let acc = 0;
+      for (let w = -6; w <= 6; w++) acc += raw[(i + w + n) % n];
+      this.samples[i].k = acc / 13;
+    }
+    // 격자 색인
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    this.samples.forEach((s, i) => {
+      minX = Math.min(minX, s.x);
+      maxX = Math.max(maxX, s.x);
+      minZ = Math.min(minZ, s.z);
+      maxZ = Math.max(maxZ, s.z);
+      const key = this.cellKey(s.x, s.z);
+      const arr = this.grid.get(key);
+      if (arr) arr.push(i);
+      else this.grid.set(key, [i]);
+    });
+    this.bounds.minX = minX;
+    this.bounds.maxX = maxX;
+    this.bounds.minZ = minZ;
+    this.bounds.maxZ = maxZ;
+  }
+
+  /** 최소 회전 반지름 (m) — 이보다 급한 굽이는 다듬는다 */
+  static MIN_RADIUS = 26;
+
+  /** 닫힌 폴리라인을 step(m) 간격으로 재샘플 */
+  static resample(pts: [number, number][], step: number): [number, number][] {
+    const n = pts.length;
+    const cum: number[] = [0];
+    for (let i = 0; i < n; i++) cum.push(cum[i] + Math.hypot(pts[(i + 1) % n][0] - pts[i][0], pts[(i + 1) % n][1] - pts[i][1]));
+    const L = cum[n];
+    const m = Math.max(16, Math.round(L / step));
+    const out: [number, number][] = [];
+    let j = 0;
+    for (let i = 0; i < m; i++) {
+      const d = (i / m) * L;
+      while (j < n - 1 && cum[j + 1] < d) j++;
+      const a = pts[j];
+      const b = pts[(j + 1) % n];
+      const t = (d - cum[j]) / Math.max(1e-6, cum[j + 1] - cum[j]);
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+    return out;
+  }
+
+  /** 닫힌 폴리라인 이동 평균 (±w 샘플) */
+  static smooth(pts: [number, number][], w: number): [number, number][] {
+    const n = pts.length;
+    return pts.map((_, i) => {
+      let x = 0;
+      let z = 0;
+      for (let k = -w; k <= w; k++) {
+        const p = pts[(i + k + n) % n];
+        x += p[0];
+        z += p[1];
+      }
+      return [x / (2 * w + 1), z / (2 * w + 1)] as [number, number];
+    });
+  }
+
+  /** 곡률이 한계를 넘는 구간(±12m)만 국소 이동 평균 — 다른 코너의 각은 살린다 */
+  static smoothTight(pts: [number, number][], kLimit: number, w: number): [number, number][] {
+    const n = pts.length;
+    const k = TrackGeometry.curvatures(pts);
+    const hot = new Array<boolean>(n).fill(false);
+    for (let i = 0; i < n; i++) if (k[i] > kLimit) for (let d = -12; d <= 12; d++) hot[(i + d + n) % n] = true;
+    return pts.map((p, i) => {
+      if (!hot[i]) return p;
+      let x = 0;
+      let z = 0;
+      for (let d = -w; d <= w; d++) {
+        const q = pts[(i + d + n) % n];
+        x += q[0];
+        z += q[1];
+      }
+      return [x / (2 * w + 1), z / (2 * w + 1)] as [number, number];
+    });
+  }
+
+  /** 1m 간격 폴리라인의 곡률 배열 (±5 샘플 각 변화) */
+  static curvatures(pts: [number, number][]): number[] {
+    const n = pts.length;
+    const out: number[] = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = pts[(i - 5 + n) % n];
+      const b = pts[i];
+      const c = pts[(i + 5) % n];
+      const t1 = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      const t2 = Math.atan2(c[1] - b[1], c[0] - b[0]);
+      const d = Math.abs(Math.atan2(Math.sin(t2 - t1), Math.cos(t2 - t1)));
+      out[i] = d / 5;
+    }
+    return out;
+  }
+
+  /** 1m 간격 폴리라인의 최대 곡률 (±5 샘플 각 변화) */
+  static maxCurvature(pts: [number, number][]): number {
+    return Math.max(...TrackGeometry.curvatures(pts));
+  }
+
+  private cellKey(x: number, z: number): string {
+    return `${Math.floor(x / this.cell)},${Math.floor(z / this.cell)}`;
   }
 
   laneToLat(lane: number): number {
@@ -52,48 +256,29 @@ export class TrackGeometry {
   }
 
   isCorner(s: number): boolean {
-    return this.getFrame(s).curvature > 0;
+    return this.cornerWeight(s) > 0.3;
   }
 
-  /** 0..1 코너 진입/이탈 부드러운 가중치 */
+  /** 0..1 코너 강도 (곡률 기준: 반지름 60m 이하면 1) */
   cornerWeight(s: number): number {
-    const w = this.wrap(s);
-    const L1 = this.straight;
-    const arc = Math.PI * this.radius;
-    const blend = 12;
-    const seg = (start: number, end: number) => {
-      const a = THREE.MathUtils.clamp((w - start) / blend, 0, 1);
-      const b = THREE.MathUtils.clamp((end - w) / blend, 0, 1);
-      return Math.min(a, b);
-    };
-    return Math.max(seg(L1, L1 + arc), seg(2 * L1 + arc, 2 * L1 + 2 * arc));
+    const n = this.samples.length;
+    const u = (this.wrap(s) / this.length) * n;
+    const i = Math.floor(u) % n;
+    const t = u - Math.floor(u);
+    const k = this.samples[i].k * (1 - t) + this.samples[(i + 1) % n].k * t;
+    return THREE.MathUtils.clamp(k * 60, 0, 1);
   }
 
   getFrame(sIn: number, out: TrackFrame = this.tmpFrame): TrackFrame {
-    const s = this.wrap(sIn);
-    const L1 = this.straight;
-    const R = this.radius;
-    const arc = Math.PI * R;
-    if (s < L1) {
-      out.pos.set(-L1 / 2 + s, 0, R);
-      out.tan.set(1, 0, 0);
-      out.curvature = 0;
-    } else if (s < L1 + arc) {
-      const th = (s - L1) / R;
-      out.pos.set(L1 / 2 + R * Math.sin(th), 0, R * Math.cos(th));
-      out.tan.set(Math.cos(th), 0, -Math.sin(th));
-      out.curvature = 1 / R;
-    } else if (s < 2 * L1 + arc) {
-      const u = s - L1 - arc;
-      out.pos.set(L1 / 2 - u, 0, -R);
-      out.tan.set(-1, 0, 0);
-      out.curvature = 0;
-    } else {
-      const th = (s - 2 * L1 - arc) / R;
-      out.pos.set(-L1 / 2 - R * Math.sin(th), 0, -R * Math.cos(th));
-      out.tan.set(-Math.cos(th), 0, Math.sin(th));
-      out.curvature = 1 / R;
-    }
+    const n = this.samples.length;
+    const u = (this.wrap(sIn) / this.length) * n;
+    const i = Math.floor(u) % n;
+    const t = u - Math.floor(u);
+    const a = this.samples[i];
+    const b = this.samples[(i + 1) % n];
+    out.pos.set(a.x + (b.x - a.x) * t, 0, a.z + (b.z - a.z) * t);
+    out.tan.set(a.tx + (b.tx - a.tx) * t, 0, a.tz + (b.tz - a.tz) * t).normalize();
+    out.curvature = a.k + (b.k - a.k) * t;
     out.right.crossVectors(out.tan, UP).normalize();
     return out;
   }
@@ -114,38 +299,79 @@ export class TrackGeometry {
   }
 
   /**
-   * 월드 (x,z) → 트랙 좌표 (s, lat). getPoint 의 역변환.
+   * 월드 (x,z) → 트랙 좌표 (s, lat). 격자에서 가까운 샘플을 찾고 접선 방향으로 보정한다.
    * 트랙 밖의 점도 가장 가까운 중심선 위치를 돌려준다 (벽 판정용).
    */
   project(x: number, z: number, out: TrackCoord = { s: 0, lat: 0 }): TrackCoord {
-    const L1 = this.straight;
-    const R = this.radius;
-    const arc = Math.PI * R;
-    const hx = L1 / 2;
-    // 직선 구간: 앞(z>0, s 증가 방향 +x) / 뒤(z<0, -x)
-    if (Math.abs(x) <= hx) {
-      if (z >= 0) {
-        out.s = x + hx;
-        out.lat = z - R; // right = (0,0,1)
-      } else {
-        out.s = L1 + arc + (hx - x);
-        out.lat = -z - R; // right = (0,0,-1)
+    const n = this.samples.length;
+    const cx = Math.floor(x / this.cell);
+    const cz = Math.floor(z / this.cell);
+    let best = -1;
+    let bestD = Infinity;
+    // 반경을 넓혀 가며 후보 탐색 (트랙에서 멀리 떨어진 점도 결국 찾는다)
+    for (let r = 1; r <= 40 && best < 0; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          const arr = this.grid.get(`${cx + dx},${cz + dz}`);
+          if (!arr) continue;
+          for (const i of arr) {
+            const s = this.samples[i];
+            const d = (s.x - x) * (s.x - x) + (s.z - z) * (s.z - z);
+            if (d < bestD) {
+              bestD = d;
+              best = i;
+            }
+          }
+        }
       }
-      return out;
+      // 한 링 더 확인해 경계 오차 제거
+      if (best >= 0 && r < 40) {
+        const rr = r + 1;
+        for (let dx = -rr; dx <= rr; dx++) {
+          for (let dz = -rr; dz <= rr; dz++) {
+            if (Math.abs(dx) !== rr && Math.abs(dz) !== rr) continue;
+            const arr = this.grid.get(`${cx + dx},${cz + dz}`);
+            if (!arr) continue;
+            for (const i of arr) {
+              const s = this.samples[i];
+              const d = (s.x - x) * (s.x - x) + (s.z - z) * (s.z - z);
+              if (d < bestD) {
+                bestD = d;
+                best = i;
+              }
+            }
+          }
+        }
+        break;
+      }
     }
-    if (x > hx) {
-      // 오른쪽 반원, 중심 (hx, 0). th = atan2(x - hx, z)
-      const dx = x - hx;
-      const th = Math.atan2(dx, z);
-      out.s = L1 + th * R;
-      out.lat = Math.hypot(dx, z) - R;
-      return out;
-    }
-    // 왼쪽 반원, 중심 (-hx, 0). pos = (-hx - R sin th, -R cos th)
-    const dx = x + hx;
-    const th = Math.atan2(-dx, -z);
-    out.s = 2 * L1 + arc + th * R;
-    out.lat = Math.hypot(dx, z) - R;
+    if (best < 0) best = 0;
+    // 접선 방향 보정: 가장 가까운 샘플과 이웃 사이 선분에 투영
+    const step = this.length / n;
+    const a = this.samples[best];
+    const along = (x - a.x) * a.tx + (z - a.z) * a.tz; // m
+    const s = this.wrap(best * step + THREE.MathUtils.clamp(along, -step, step));
+    const f = this.getFrame(s);
+    out.s = s;
+    out.lat = (x - f.pos.x) * f.right.x + (z - f.pos.z) * f.right.z;
     return out;
+  }
+
+  /** 트랙 중심선에서 가장 먼 지점 (호수 등 큰 오브젝트 배치용) */
+  farthestPoint(margin = 40): THREE.Vector3 {
+    let best = new THREE.Vector3();
+    let bestD = -1;
+    const c = { s: 0, lat: 0 };
+    for (let x = this.bounds.minX + margin; x <= this.bounds.maxX - margin; x += 10) {
+      for (let z = this.bounds.minZ + margin; z <= this.bounds.maxZ - margin; z += 10) {
+        this.project(x, z, c);
+        const d = Math.abs(c.lat);
+        if (d > bestD) {
+          bestD = d;
+          best = new THREE.Vector3(x, 0, z);
+        }
+      }
+    }
+    return best;
   }
 }

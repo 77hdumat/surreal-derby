@@ -18,7 +18,7 @@ import { Net } from '../net/Net';
 import { ObstacleMeshes } from '../track/ObstacleMeshes';
 import { encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
 import { RemoteKart } from '../net/RemoteKart';
-import { START_BOOST_WINDOW, applyStartBoost, currentLap } from './KartPhysics';
+import { LAPS, START_BOOST_WINDOW, applyStartBoost, currentLap } from './KartPhysics';
 import { JOCKEYS } from '../racers/Jockeys';
 
 type Mode = 'none' | 'solo' | 'host' | 'client';
@@ -57,7 +57,6 @@ export class Game {
   private clock = new THREE.Clock();
   private globalTime = 0;
   private accum = 0;
-  private gateTimer = -1;
   private lastCount = -1;
   private raceStarting = false;
   private finishTimer = 0;
@@ -688,8 +687,6 @@ export class Game {
     this.sendAccum = 0;
     this.particles.clear();
     this.footprints.clear();
-    this.track.resetGate();
-    this.gateTimer = -1;
     this.lastCount = -1;
     this.finishTimer = 0;
     this.excitement = 0.3;
@@ -774,7 +771,6 @@ export class Game {
       this.ui.setCountdown('GO!');
       this.audio.play('bell', { gain: 0.9 });
       this.audio.crowdRoar(0.8);
-      this.gateTimer = 0;
       setTimeout(() => this.ui.setCountdown(''), 900);
     }
   }
@@ -828,10 +824,10 @@ export class Game {
         break;
       case 'lap':
         if (me) {
-          this.ui.showToast(e.lap === 2 ? 'FINAL LAP!' : `LAP ${(e.lap ?? 0) + 1}`);
+          this.ui.showToast(e.lap === LAPS ? 'FINAL LAP!' : `LAP ${e.lap}`);
           this.audio.play('bell', { gain: 0.5, rate: 1.2 });
         }
-        if (e.lap === 2) this.excitement = Math.max(this.excitement, 0.8);
+        if (e.lap === LAPS) this.excitement = Math.max(this.excitement, 0.8);
         break;
       case 'finish': {
         const first = this.race.karts.every((k, i) => i === slot || !k.finished || (k.finishTime ?? 0) >= (this.race.karts[slot].finishTime ?? 0));
@@ -1124,13 +1120,6 @@ export class Game {
       }
     }
 
-    // 게이트
-    if (this.gateTimer >= 0) {
-      this.gateTimer += dt;
-      this.track.setGateOpen(THREE.MathUtils.clamp(this.gateTimer / 0.35, 0, 1));
-      if (this.gateTimer > 2.5) this.track.setGateDrive(THREE.MathUtils.clamp((this.gateTimer - 2.5) / 5, 0, 1));
-    }
-
     const boost = myKart.boostT > 0 ? 1 : myKart.miniT > 0 ? 0.45 : 0;
     this.audio.setBoostRush(boost);
     this.racers.update(this.race.karts, this.race.params, dt, this.race.time, this.camera.camera.position);
@@ -1144,7 +1133,7 @@ export class Game {
     if (myKart.drifting) this.camera.shake(dt * 0.08);
 
     // 분위기: 마지막 랩일수록 관중 열기 ↑
-    const lapFrac = THREE.MathUtils.clamp(myKart.progress / (this.track.finishS + 2 * this.track.length), 0, 1);
+    const lapFrac = THREE.MathUtils.clamp(myKart.progress / (this.track.finishS + LAPS * this.track.length), 0, 1);
     this.excitement = THREE.MathUtils.lerp(this.excitement, 0.3 + lapFrac * 0.6, Math.min(1, dt * 0.5));
     this.audio.setExcitement(this.excitement);
     this.track.updateCrowd(this.globalTime, this.excitement);

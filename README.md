@@ -1,6 +1,6 @@
 # 초현실 경마 그랑프리 — 대결 모드 (Surreal Derby Kart Battle)
 
-브라우저에서 바로 실행되는 3D 엽기 경마 레이싱. 말 9종 × 기수 6명 조합을 골라 최대 4인이 5바퀴 대결한다.
+브라우저에서 바로 실행되는 3D 엽기 경마 레이싱. 말 9종 × 기수 6명 조합을 골라 3.3km 굴곡 서킷(코너 35개)에서 최대 4인이 3바퀴 대결한다.
 Vite + TypeScript + Three.js, 멀티플레이는 PeerJS(WebRTC) P2P — 별도 서버 없음.
 
 ```bash
@@ -54,7 +54,7 @@ src/
   racers/RacerManager.ts     KartState → 비주얼 배치·애니메이션·파티클
   racers/rig/                리깅 GLB 비주얼
   camera/GameCamera.ts       인트로 / 추적 / 결과 카메라
-  track/TrackGeometry.ts     트랙 기하 (project: 월드 → 트랙 좌표)
+  track/TrackGeometry.ts     서킷 기하: 제어점 → 닫힌 스플라인 → 1m 샘플 (project: 월드 → 트랙 좌표). 코스 수정은 CIRCUIT_POINTS
   track/RaceTrack.ts         경마장 씬
   effects/                   후처리·파티클·발자국
   audio/AudioManager.ts      효과음 (public/sfx)

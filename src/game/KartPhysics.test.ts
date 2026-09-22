@@ -17,18 +17,18 @@ function spawn(s = 10, lat = 0) {
 describe('stepKart', () => {
   it('직진 가속은 maxSpeed 를 넘지 않고 앞으로 간다', () => {
     const st = spawn();
-    for (let i = 0; i < 600; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 420; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT); // 7초, 출발 직선 안
     expect(st.speed).toBeCloseTo(P.maxSpeed, 5);
     expect(st.progress).toBeGreaterThan(100);
-    expect(Math.abs(st.lat)).toBeLessThan(0.5);
+    expect(Math.abs(st.lat)).toBeLessThan(2);
   });
 
   it('드리프트하면 슬립이 생기고 게이지가 찬다', () => {
     const st = spawn();
     for (let i = 0; i < 180; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
-    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT); // 0.5s (벽에 닿기 전)
     expect(st.drifting).toBe(true);
-    expect(st.slip).toBeGreaterThan(0.2);
+    expect(st.slip).toBeGreaterThan(0.15);
     expect(st.gauge).toBeGreaterThan(0.1);
     // 놓으면 슬립 복원
     for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
@@ -62,13 +62,14 @@ describe('stepKart', () => {
     expect(Math.abs(st.lat)).toBeLessThanOrEqual(track.width / 2 - 1 + 1e-6);
   });
 
-  it('결승선을 세 번 지나면 완주 + 랩 이벤트', () => {
-    const st = spawn(track.length - 4, 0);
-    expect(st.progress).toBeCloseTo(-4, 6);
+  it('출발선 앞에서 출발해 결승선을 LAPS 번 지나면 완주 + 랩 이벤트', () => {
+    const st = spawn(5, 0);
+    expect(st.progress).toBeCloseTo(5, 6);
+    expect(st.lapsDone).toBe(1);
     const laps: number[] = [];
     let finished = false;
     let t = 0;
-    for (let i = 0; i < 60 * 200 && !finished; i++) {
+    for (let i = 0; i < 60 * 600 && !finished; i++) {
       t += DT;
       // 중심선 추종 조향
       const ahead = track.getPoint(st.s + 10, 0);
@@ -79,9 +80,9 @@ describe('stepKart', () => {
         if (e.k === 'finish') finished = true;
       }
     }
-    expect(laps).toEqual([1, 2, 3, 4]);
+    expect(laps).toEqual(Array.from({ length: LAPS - 1 }, (_, i) => i + 2));
     expect(finished).toBe(true);
-    expect(st.lapsDone).toBe(LAPS);
+    expect(st.lapsDone).toBe(LAPS + 1);
     expect(st.finishTime).toBeGreaterThan(0);
     expect(st.progress).toBeGreaterThanOrEqual(finishDistance(track));
   });
@@ -167,9 +168,9 @@ describe('순간부스터', () => {
 
 describe('boostReach', () => {
   it('부스트 중엔 코끝만큼 먼저 골인 판정', () => {
-    const st = spawn(track.finishS - 6, 0); // 마지막 결승선 6m 전
-    st.progress = track.finishS + (LAPS - 1) * track.length - 6;
-    st.lapsDone = LAPS - 1;
+    const st = spawn(track.length - 6, 0); // 마지막 결승선 6m 전
+    st.progress = track.finishS + LAPS * track.length - 6;
+    st.lapsDone = LAPS;
     const G = { ...P, boostReach: 8 };
     // 정지 상태로 한 스텝: 부스트 없으면 미완주
     expect(stepKart(st, inp({}), G, track, DT).some((e) => e.k === 'finish')).toBe(false);

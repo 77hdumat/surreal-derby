@@ -41,7 +41,7 @@ export function generateObstacles(seed: number, track: TrackGeometry, count = 12
   let guard = 0;
   while (out.length < count && guard++ < 400) {
     const s = rnd() * L;
-    if (s < 70 || Math.abs(s - track.finishS) < 20) continue;
+    if (s < 70 || s > track.length - 50) continue; // 출발 직후·결승선 앞은 비운다
     // 코너 안쪽 레코드 라인은 살짝 비켜서 (바깥쪽 위주)
     const corner = track.cornerWeight(s) > 0.5;
     const lat = corner ? -halfW * 0.4 + rnd() * halfW * 1.1 : (rnd() * 2 - 1) * (halfW - 3);

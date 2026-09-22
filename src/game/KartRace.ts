@@ -78,7 +78,7 @@ export class KartRace {
     return this.defs.find((d) => d.id === id) ?? this.defs[0];
   }
 
-  /** 출발선에 4명 나란히 (앞뒤 차이 없음). 게이트 뒤(s<0)에서 출발 */
+  /** 출발선(=결승선) 바로 앞에 4명 나란히 (앞뒤 차이 없음) */
   setup(slots: SlotConfig[], owned?: (slot: SlotConfig) => boolean, seed = 1): void {
     this.slots = slots.slice(0, MAX_SLOTS).map((s, i) => ({ ...s, slot: i }));
     this.seed = seed;
@@ -91,7 +91,7 @@ export class KartRace {
     this.cpuScratch = [];
     const n = this.slots.length;
     this.slots.forEach((cfg, i) => {
-      const s = -4;
+      const s = 5;
       // 폭 30m 에 6m 간격으로 가운데 정렬
       const lat = (i - (n - 1) / 2) * 6;
       const p = this.track.getPoint(s, lat);
