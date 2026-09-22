@@ -161,7 +161,7 @@ export class KartRace {
     for (let i = 0; i < this.karts.length; i++) {
       if (!this.owned[i]) continue;
       const st = this.karts[i];
-      const inp = this.slots[i].cpu ? cpuInput(st, this.params[i], this.track, this.karts, this.profiles[i], this.cpuScratch[i], this.obstacles) : this.inputs[i];
+      const inp = this.slots[i].cpu ? cpuInput(st, this.params[i], this.track, this.karts, this.profiles[i], this.cpuScratch[i], this.obstacles, dt) : this.inputs[i];
       for (const e of stepKart(st, inp, this.params[i], this.track, dt, this.time, this.obstacles)) this.events.push({ ...e, slot: i });
     }
     // 충돌: 내가 돌리는 말만 밀린다 (상대는 자기 쪽에서 자기 말을 민다)

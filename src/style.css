@@ -132,6 +132,8 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 .text-btn { font-family: var(--font); background: transparent; border: 2px solid #d2d2d7; color: #6e6e73; border-radius: 999px; padding: 8px 16px; font-weight: 700; cursor: pointer; }
 .text-btn:hover { border-color: #1d1d1f; color: #1d1d1f; }
 .hint { margin-top: 10px; font-size: 12px; color: #8a8a8e; line-height: 1.6; }
+.hint-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: #6e6e73; line-height: 1.7; }
+.hint-list b { color: #1d1d1f; font-family: 'Courier New', monospace; background: #f5f5f7; padding: 0 5px; border-radius: 4px; }
 .section-title { font-size: 12px; letter-spacing: 3px; font-weight: 800; color: #8a8a8e; margin: 6px 0 8px; }
 
 /* 메뉴 */

@@ -94,7 +94,7 @@ export class GameCamera {
         const fz = -Math.sin(h);
         const rx = -fz; // 오른쪽 = (sin h, 0, cos h)
         const rz = fx;
-        const speedK = THREE.MathUtils.clamp(Math.abs(kart.speed) / 30, 0, 1.3);
+        const speedK = THREE.MathUtils.clamp(Math.abs(kart.speed) / 45, 0, 1.3);
         // 빨라질수록 카메라가 낮고 가깝게 붙어 속도감 ↑
         // 말에 가깝게, 살짝 위에서 내려다보는 시점
         const ds = this.distanceScale;
@@ -130,8 +130,8 @@ export class GameCamera {
     }
 
     this.boostNearby = THREE.MathUtils.lerp(this.boostNearby, this.mode === 'CHASE' ? boost : 0, Math.min(1, dt * 5));
-    const speedFov = kart && this.mode === 'CHASE' ? THREE.MathUtils.clamp(Math.abs(kart.speed) / 30, 0, 1.2) * 14 : 0;
-    const target = BASE_FOV + this.boostNearby * 16 + speedFov;
+    const speedFov = kart && this.mode === 'CHASE' ? THREE.MathUtils.clamp(Math.abs(kart.speed) / 50, 0, 1.2) * 14 : 0;
+    const target = BASE_FOV + this.boostNearby * 24 + speedFov;
     this.fovCur = THREE.MathUtils.lerp(this.fovCur, target, Math.min(1, dt * 5));
     if (Math.abs(this.camera.fov - this.fovCur) > 0.01) {
       this.camera.fov = this.fovCur;
@@ -139,7 +139,7 @@ export class GameCamera {
     }
 
     this.trauma = Math.max(0, this.trauma - dt * 1.4);
-    const sh = this.trauma * this.trauma * 0.7 + this.boostNearby * 0.03;
+    const sh = this.trauma * this.trauma * 0.7 + this.boostNearby * 0.05;
     const t = performance.now() * 0.001;
     this.tmp2.set(Math.sin(t * 37.1) * sh * 0.45, Math.sin(t * 43.7 + 1) * sh * 0.35, Math.sin(t * 29.3 + 2) * sh * 0.3);
     this.lastCamPos.copy(this.camera.position);

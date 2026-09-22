@@ -40,7 +40,7 @@ export interface RiderAssetConfig {
   helmetOffset?: [number, number, number];
 }
 
-export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'lie' | 'flail' | 'matador';
+export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'pull' | 'lie' | 'flail' | 'matador';
 
 export interface RiderColors {
   silks: number;
@@ -433,10 +433,11 @@ uniform float sideCenter;`,
       }
       case 'run':
       case 'lift':
-      case 'push': {
+      case 'push':
+      case 'pull': {
         // 두 발 달리기: 한 보폭 = 두 걸음. 다리는 반 보폭 어긋나고 팔은 같은 쪽 다리와 반대.
         const e = Math.max(0.15, energy);
-        const lean = o.lean ?? (o.mode === 'push' ? 0.55 : o.mode === 'lift' ? 0.12 : 0.3);
+        const lean = o.lean ?? (o.mode === 'push' ? 0.55 : o.mode === 'pull' ? 0.7 : o.mode === 'lift' ? 0.12 : 0.3);
         torso(lean);
         R(B.head, AXIS_Z, lean * 0.7);
         lift = Math.abs(Math.sin(Math.PI * 2 * ph)) * 0.05 * e;
@@ -447,6 +448,7 @@ uniform float sideCenter;`,
           leg(s, thigh, kneeFold, 0.06, 0.35 * Math.max(0, Math.sin(Math.PI * 2 * p + 0.5)) * e);
           if (o.mode === 'run') arm(s, 0.2 - 0.8 * e * Math.cos(Math.PI * 2 * p), 1.35, 0.15);
           else if (o.mode === 'lift') arm(s, THREE.MathUtils.lerp(0.4, 2.9, o.armRaise ?? 1) + Math.sin(time * 11 + s) * 0.05, 0.15, 0.25); // 머리 위로
+          else if (o.mode === 'pull') arm(s, -0.75 + Math.sin(time * 10 + s) * 0.05 * e, 0.12, 0.2); // 뒤로 뻗어 밧줄 잡기
           else arm(s, 1.55 + Math.sin(time * 10 + s) * 0.06 * e, 0.3, 0.1); // 앞으로 수평
         }
         break;

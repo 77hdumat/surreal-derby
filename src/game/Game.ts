@@ -701,9 +701,10 @@ export class Game {
       case 'boost':
         this.racers.boostFx(slot);
         this.playBoostSound(slot, pos, me);
+        this.audio.jetBoost(me ? 1 : 0.35);
         if (me) {
-          this.camera.shake(0.25);
-          this.effects.flashScreen(0.25);
+          this.camera.shake(0.35);
+          this.effects.flashScreen(0.3);
         }
         break;
       case 'mini':
@@ -816,6 +817,7 @@ export class Game {
 
   private showResult(): void {
     if (this.screen === 'RESULT') return;
+    this.audio.setBoostRush(0);
     this.screen = 'RESULT';
     this.input.detach();
     this.input.clear();
@@ -1011,11 +1013,14 @@ export class Game {
     }
 
     const boost = myKart.boostT > 0 ? 1 : myKart.miniT > 0 ? 0.45 : 0;
+    this.audio.setBoostRush(boost);
     this.racers.update(this.race.karts, this.race.params, dt, this.race.time, this.camera.camera.position);
     this.particles.update(dt);
     this.camera.update(dt, myKart, boost);
-    this.effects.setAfterimage(this.camera.boostNearby * 0.55);
-    this.effects.setSpeedLines(this.camera.boostNearby);
+    // 속도감: 부스트 잔상·스피드라인 강하게, 고속 주행 자체도 살짝
+    const speedK = THREE.MathUtils.clamp((Math.abs(myKart.speed) - 28) / 25, 0, 1);
+    this.effects.setAfterimage(Math.max(this.camera.boostNearby * 0.75, speedK * 0.25));
+    this.effects.setSpeedLines(Math.max(this.camera.boostNearby * 1.3, speedK * 0.35));
     this.effects.setSlowMo(0);
     if (myKart.drifting) this.camera.shake(dt * 0.08);
 

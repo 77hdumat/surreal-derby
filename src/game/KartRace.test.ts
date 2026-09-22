@@ -30,7 +30,7 @@ describe('KartRace', () => {
     for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) expect(Math.hypot(r.karts[a].x - r.karts[b].x, r.karts[a].z - r.karts[b].z)).toBeGreaterThan(2.6);
   });
 
-  it('CPU 4명이 3바퀴를 완주하고 결과가 시간순', () => {
+  it('CPU 4명이 5바퀴를 완주하고 결과가 시간순', () => {
     const r = new KartRace(new TrackGeometry(), RACER_DEFINITIONS);
     r.setup(slots);
     r.startCountdown();
@@ -47,7 +47,7 @@ describe('KartRace', () => {
     expect(times.length).toBeGreaterThanOrEqual(3);
     for (let i = 1; i < times.length; i++) expect(times[i]).toBeGreaterThanOrEqual(times[i - 1]);
     expect(times[0]).toBeGreaterThan(50);
-    expect(times[0]).toBeLessThan(140);
+    expect(times[0]).toBeLessThan(200);
     // 봇이 벽에 마구 박지는 않아야 한다
     expect(wall).toBeLessThan(40);
   });

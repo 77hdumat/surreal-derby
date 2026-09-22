@@ -46,9 +46,9 @@ describe('stepKart', () => {
     expect(ev).toEqual([{ k: 'boost' }]);
     expect(st.boosts).toBe(0);
     expect(st.boostT).toBeCloseTo(BOOST_DURATION - DT, 6);
-    for (let i = 0; i < 100; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.2);
-    for (let i = 0; i < 400; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 500; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeCloseTo(P.maxSpeed, 2);
   });
 
@@ -79,7 +79,7 @@ describe('stepKart', () => {
         if (e.k === 'finish') finished = true;
       }
     }
-    expect(laps).toEqual([1, 2]);
+    expect(laps).toEqual([1, 2, 3, 4]);
     expect(finished).toBe(true);
     expect(st.lapsDone).toBe(LAPS);
     expect(st.finishTime).toBeGreaterThan(0);

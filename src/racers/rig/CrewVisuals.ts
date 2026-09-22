@@ -3,7 +3,7 @@ import type { RacerDefinition } from '../Racer';
 import type { RacerVisual, VisualContext } from '../RacerVisual';
 import type { RaceEventType } from '../../events/RaceEvent';
 import { AnimalVisual } from './AnimalVisual';
-import { BoneSocket, AXIS_Z } from './BoneTools';
+import { BoneSocket, AXIS_Y, AXIS_Z } from './BoneTools';
 import { RiderRig, type RiderColors, type RiderPose } from './RiderRig';
 import { HORSE_ASSET, RIDER_ASSET_CFG } from './AssetConfigs';
 
@@ -562,6 +562,11 @@ export class TrojanRig extends AnimalVisual {
   private pushToFinish = false;
   private hatch?: THREE.Mesh;
   private soldiers: RiderRig[] = [];
+  /** 앞에서 밧줄로 끄는 병사들 + 밧줄 */
+  private pullers: RiderRig[] = [];
+  private ropes: THREE.Mesh[] = [];
+  private ropeA = new THREE.Vector3();
+  private ropeB = new THREE.Vector3();
   private sword?: THREE.Group;
 
   constructor(def: RacerDefinition, fallback: RacerVisual) {
@@ -643,6 +648,25 @@ export class TrojanRig extends AnimalVisual {
       this.body.add(s.group);
       this.soldiers.push(s);
     }
+    // 앞에서 끄는 병사 6명(두 줄) + 밧줄 (목마 가슴에서 병사 손까지)
+    const ropeMat = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.95 });
+    for (let i = 0; i < 6; i++) {
+      const s = new RiderRig(RIDER_ASSET_CFG, { silks: 0xb08d57, sleeves: 0xd9b27a, helmet: 0xb08d57, breeches: 0x8b1a1a, boots: 0x5a3a1e }, 'feet');
+      // 목마 몸통에 가리지 않게 양옆 두 줄(z=±2.3, ±3.4)로 앞쪽 7.5~10.5m
+      const side = i % 2 === 0 ? -1 : 1;
+      const rank = Math.floor(i / 2);
+      s.group.position.set(7.5 + rank * 1.5, 0, side * (2.3 + (rank % 2) * 1.1));
+      s.group.userData.baseX = s.group.position.x;
+      s.group.userData.baseZ = s.group.position.z;
+      s.group.visible = false;
+      this.body.add(s.group);
+      this.pullers.push(s);
+      const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1, 6), ropeMat);
+      rope.geometry.translate(0, 0.5, 0); // 원점 = 한쪽 끝, +y 로 길이 1
+      rope.visible = false;
+      this.body.add(rope);
+      this.ropes.push(rope);
+    }
   }
 
   private footTmp = new THREE.Vector3();
@@ -701,7 +725,8 @@ export class TrojanRig extends AnimalVisual {
       this.sword.position.copy(this.rider.handR);
       this.sword.rotation.set(0, 0, 0.35 + Math.sin(time * 5) * 0.06 * (0.3 + a));
     }
-    const army = ctx.extension > 0.5 ? 8 : 5;
+    // 대결 모드: 뒤에서 미는 병사는 안 쓴다 (앞에서 밧줄로 끈다)
+    const army = 0;
     this.soldiers.forEach((s, i) => {
       if (!s.loaded) return;
       const visible = a > 0.05 && i < army;
@@ -714,6 +739,27 @@ export class TrojanRig extends AnimalVisual {
       const lift = s.animate({ mode: 'push', ph: ph * 2 + i * 0.17, energy: Math.max(0.3, ctx.speedNorm), time });
       // body 는 뒷발 서기로 들려 있으므로 그만큼 내려 병사 발이 땅에 닿게 한다
       s.group.position.set(THREE.MathUtils.lerp(0.3, baseX, out), lift - this.body.position.y, THREE.MathUtils.lerp(0, baseZ, out));
+    });
+    // 앞에서 끄는 병사들: 문에서 나와 앞으로 달려가 밧줄을 팽팽히 당긴다
+    this.pullers.forEach((s, i) => {
+      const rope = this.ropes[i];
+      if (!s.loaded) return;
+      const visible = a > 0.05;
+      s.group.visible = visible;
+      rope.visible = visible && a > 0.5;
+      if (!visible) return;
+      const out = THREE.MathUtils.clamp((a - 0.05) / 0.6, 0, 1);
+      const baseX = s.group.userData.baseX as number;
+      const baseZ = s.group.userData.baseZ as number;
+      const lift = s.animate({ mode: 'pull', ph: ph * 2 + i * 0.23, energy: Math.max(0.3, ctx.speedNorm), time });
+      s.group.position.set(THREE.MathUtils.lerp(0.3, baseX, out), lift - this.body.position.y, THREE.MathUtils.lerp(0, baseZ, out));
+      // 밧줄: 목마 가슴(앞 위) → 병사 손(등 뒤 허리 높이)
+      this.ropeA.set(2.6, 2.3 - this.body.position.y, Math.sign(baseZ) * 0.7);
+      this.ropeB.copy(s.group.position).add(this.footTmp.set(-0.35, 0.95, 0));
+      rope.position.copy(this.ropeA);
+      const len = this.ropeA.distanceTo(this.ropeB);
+      rope.scale.set(1, len, 1);
+      rope.quaternion.setFromUnitVectors(AXIS_Y, this.footTmp.subVectors(this.ropeB, this.ropeA).normalize());
     });
     // 나무 덜컹거림
     const rattle = ctx.speedNorm * (0.6 + a * 0.6);
@@ -764,5 +810,7 @@ export class TrojanRig extends AnimalVisual {
     this.ambush = 0;
     this.pushToFinish = false;
     for (const s of this.soldiers) s.group.visible = false;
+    for (const s of this.pullers) s.group.visible = false;
+    for (const r of this.ropes) r.visible = false;
   }
 }

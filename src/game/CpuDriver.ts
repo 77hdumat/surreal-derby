@@ -10,6 +10,9 @@ export interface CpuProfile {
   skill: number;
   /** 코너에서 드리프트 시작 임계 */
   driftEager: number;
+  /** 드리프트 유지/재시작 타이머 (봇이 Shift 를 깜빡거리며 순간부스터를 남발하지 않게) */
+  driftHold: number;
+  driftCooldown: number;
 }
 
 export function cpuProfile(seed: number): CpuProfile {
@@ -21,6 +24,8 @@ export function cpuProfile(seed: number): CpuProfile {
     lanePref: (r(1) - 0.5) * 12,
     skill: 0.9 + r(2) * 0.1,
     driftEager: 0.25 + r(3) * 0.3,
+    driftHold: 0,
+    driftCooldown: 0,
   };
 }
 
@@ -28,7 +33,7 @@ export function cpuProfile(seed: number): CpuProfile {
  * CPU 입력: 중심선 lookahead 추종 + 앞 말 회피 + 코너 드리프트 + 직선 부스트.
  * 결정적(상태·프로필만 의존) — 호스트에서만 돌린다.
  */
-export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, others: KartState[], prof: CpuProfile, out: KartInput, obstacles: Obstacle[] = []): KartInput {
+export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, others: KartState[], prof: CpuProfile, out: KartInput, obstacles: Obstacle[] = [], dt = 1 / 60): KartInput {
   const corner = track.cornerWeight(st.s + 15);
   // 코너는 안쪽으로, 직선은 선호 차선
   let targetLat = corner > 0.3 ? -6 + prof.lanePref * 0.3 : prof.lanePref;
@@ -52,15 +57,24 @@ export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, oth
   const limit = track.width / 2 - 2.5;
   targetLat = Math.max(-limit, Math.min(limit, targetLat));
 
-  const ahead = st.s + 9 + Math.max(0, st.speed) * 0.45;
+  const ahead = st.s + 9 + Math.max(0, st.speed) * 0.55;
   const t = track.getPoint(ahead, targetLat);
   const want = Math.atan2(-(t.z - st.z), t.x - st.x);
   const err = angleDelta(want - st.yaw);
   out.steer = Math.max(-1, Math.min(1, -err * 2.2));
   out.throttle = prof.skill;
   out.brake = 0;
-  // 코너: 빠르면 드리프트로 게이지 충전
-  out.drift = corner > prof.driftEager && st.speed > p.maxSpeed * 0.55 && Math.abs(out.steer) > 0.12;
+  // 코너: 빠르면 드리프트로 게이지 충전. 한 번 시작하면 최소 0.7s 유지, 끝나면 1.2s 뒤에야 다시 (순간부스터 남발 방지)
+  prof.driftHold = Math.max(0, prof.driftHold - dt);
+  prof.driftCooldown = Math.max(0, prof.driftCooldown - dt);
+  const wantDrift = corner > prof.driftEager && st.speed > p.maxSpeed * 0.55 && Math.abs(out.steer) > 0.12;
+  if (st.drifting) {
+    out.drift = wantDrift || prof.driftHold > 0;
+    if (!out.drift) prof.driftCooldown = 1.2;
+  } else {
+    out.drift = wantDrift && prof.driftCooldown <= 0;
+    if (out.drift) prof.driftHold = 0.7;
+  }
   if (out.drift && Math.abs(out.steer) < 0.35) out.steer = Math.sign(out.steer || -1) * 0.35;
   // 직선에서 게이지가 차 있으면 부스트
   out.boost = st.boosts > 0 && track.cornerWeight(st.s + 30) < 0.2;

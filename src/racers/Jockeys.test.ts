@@ -6,8 +6,8 @@ describe('kartParamsFor', () => {
   const horse = RACER_DEFINITIONS.find((d) => d.id === 'classic')!;
   it('올라운더는 배수 1', () => {
     const p = kartParamsFor(horse, jockeyById('balance'));
-    expect(p.maxSpeed).toBeCloseTo(horse.speed * 1.75, 6);
-    expect(p.boostMul).toBe(1.35);
+    expect(p.maxSpeed).toBeCloseTo(horse.speed * 2.4, 6);
+    expect(p.boostMul).toBe(1.57);
   });
   it('스피드 기수는 최고속이 더 높고 조향은 낮다', () => {
     const b = kartParamsFor(horse, jockeyById('balance'));

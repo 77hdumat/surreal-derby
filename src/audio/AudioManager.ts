@@ -61,6 +61,11 @@ export class AudioManager {
   private crowdTarget = 0.12;
   private roar = 0;
   private windGain!: GainNode;
+  /** 부스트 중 바람 가르는 소리 (하이패스 노이즈) */
+  private rushGain: GainNode | null = null;
+  private rushFilter: BiquadFilterNode | null = null;
+  private rushTarget = 0;
+  private noiseBuf: AudioBuffer | null = null;
   private racerLoops = new Map<string, LoopNode>();
   private ambientStarted = false;
   private _muted = false;
@@ -94,7 +99,105 @@ export class AudioManager {
     this.windGain = ctx.createGain();
     this.windGain.gain.value = 0;
     this.windGain.connect(this.master);
+    this.setupRush();
     void this.loadAll();
+  }
+
+  /** 화이트 노이즈 2초 버퍼 (제트·바람 합성용) */
+  private noise(): AudioBuffer {
+    if (this.noiseBuf) return this.noiseBuf;
+    const ctx = this.ctx!;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    this.noiseBuf = buf;
+    return buf;
+  }
+
+  /** 부스트 중 계속 나는 바람 가르는 소리: 밴드패스 노이즈 루프, 게인은 update 에서 따라감 */
+  private setupRush(): void {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise();
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 1400;
+    f.Q.value = 0.6;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    src.connect(f);
+    f.connect(g);
+    g.connect(this.master);
+    src.start();
+    this.rushGain = g;
+    this.rushFilter = f;
+  }
+
+  /** 부스트 바람 세기 0..1 (로컬 플레이어 기준) */
+  setBoostRush(v: number): void {
+    this.rushTarget = THREE.MathUtils.clamp(v, 0, 1);
+  }
+
+  /**
+   * 부스트 발동: 전투기 애프터버너 느낌의 합성음.
+   * 노이즈 스위프(600→3200Hz, 0.35s) + 톱니파 저음 상승(70→160Hz) + 짧은 하이 '킥'. 3초에 걸쳐 감쇠.
+   */
+  jetBoost(strength = 1): void {
+    if (!this.ctx || this._muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.value = 0.0001;
+    out.gain.exponentialRampToValueAtTime(0.9 * strength, t + 0.06);
+    out.gain.exponentialRampToValueAtTime(0.35 * strength, t + 0.9);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + 3.0);
+    out.connect(this.sfx);
+    // 1) 노이즈 스위프 (제트 분사)
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise();
+    n.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(600, t);
+    bp.frequency.exponentialRampToValueAtTime(3200, t + 0.35);
+    bp.frequency.exponentialRampToValueAtTime(900, t + 3.0);
+    const ng = ctx.createGain();
+    ng.gain.value = 0.8;
+    n.connect(bp);
+    bp.connect(ng);
+    ng.connect(out);
+    n.start(t);
+    n.stop(t + 3.1);
+    // 2) 저음 톱니파 (터빈 회전 상승)
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(70, t);
+    o.frequency.exponentialRampToValueAtTime(160, t + 0.5);
+    o.frequency.exponentialRampToValueAtTime(90, t + 3.0);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 500;
+    const og = ctx.createGain();
+    og.gain.value = 0.35;
+    o.connect(lp);
+    lp.connect(og);
+    og.connect(out);
+    o.start(t);
+    o.stop(t + 3.1);
+    // 3) 킥 (점화 순간)
+    const k = ctx.createOscillator();
+    k.type = 'sine';
+    k.frequency.setValueAtTime(220, t);
+    k.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+    const kg = ctx.createGain();
+    kg.gain.setValueAtTime(0.9, t);
+    kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    k.connect(kg);
+    kg.connect(out);
+    k.start(t);
+    k.stop(t + 0.35);
   }
 
   private async loadAll(): Promise<void> {
@@ -309,6 +412,10 @@ export class AudioManager {
     this.roar = Math.max(0, this.roar - dt * 0.8);
     this.crowdGain.gain.setTargetAtTime(this.crowdTarget + this.roar * 0.3, t, 0.2);
     const wind = THREE.MathUtils.clamp((cameraVel - 8) / 40, 0, 0.5);
-    this.windGain.gain.setTargetAtTime(wind, t, 0.25);
+    this.windGain.gain.setTargetAtTime(wind + this.rushTarget * 0.35, t, 0.25);
+    if (this.rushGain && this.rushFilter) {
+      this.rushGain.gain.setTargetAtTime(this.rushTarget * 0.32, t, this.rushTarget > 0 ? 0.08 : 0.3);
+      this.rushFilter.frequency.setTargetAtTime(900 + this.rushTarget * 1600, t, 0.2);
+    }
   }
 }

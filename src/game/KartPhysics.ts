@@ -77,7 +77,7 @@ export interface KartState {
 
 export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'lap'; lap: number } | { k: 'finish' } | { k: 'bale' } | { k: 'pad' };
 
-export const LAPS = 3;
+export const LAPS = 5;
 export const MAX_BOOSTS = 2;
 export const BOOST_DURATION = 3.0;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
@@ -140,7 +140,7 @@ export function syncKartToTrack(st: KartState, track: TrackGeometry): void {
   st.lapsDone = 0;
 }
 
-/** 3바퀴 완주 거리: 결승선(finishS) 을 세 번 지난다 */
+/** 완주 거리: 결승선(finishS) 을 LAPS 번 지난다 */
 export function finishDistance(track: TrackGeometry): number {
   return track.finishS + (LAPS - 1) * track.length;
 }
@@ -203,7 +203,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   if (!st.finished && boostPressed && st.boosts > 0 && st.boostT <= 0) {
     st.boosts--;
     st.boostT = BOOST_DURATION;
-    st.speed = Math.max(st.speed, p.maxSpeed * 1.05);
+    st.speed = Math.max(st.speed, p.maxSpeed * 1.15); // 점화 순간 확 튀어나간다
     events.push({ k: 'boost' });
   }
   const boosting = st.boostT > 0;
@@ -221,7 +221,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const mini = st.miniT > 0;
   if (mini) st.miniT = Math.max(0, st.miniT - dt);
   const maxCur = p.maxSpeed * (boosting ? p.boostMul : mini ? MINI_MUL : 1);
-  const accel = p.accel * (boosting ? 2 : mini ? 2.2 : 1);
+  const accel = p.accel * (boosting ? 4.5 : mini ? 2.6 : 1);
 
   // ---- 종방향
   if (inp.throttle > 0) {
@@ -252,7 +252,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
 
   // ---- 조향
   const speedFrac = Math.min(1, Math.abs(st.speed) / p.maxSpeed);
-  const grip = Math.min(1, Math.abs(st.speed) / 8); // 저속에서는 잘 안 돌아감
+  const grip = Math.min(1, Math.abs(st.speed) / 10); // 저속에서는 잘 안 돌아감
   let yawRate = inp.steer * p.handling * 2.2 * grip * (1 - 0.35 * speedFrac);
   if (st.drifting) yawRate *= 1.8;
   if (st.speed < 0) yawRate = -yawRate;
