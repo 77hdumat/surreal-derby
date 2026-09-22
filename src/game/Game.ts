@@ -165,6 +165,7 @@ export class Game {
     this.ui.onAgain = () => this.hostStart();
     this.ui.onToLobby = () => this.toLobby();
     this.ui.onChat = (text) => this.sendChat(text);
+    this.ui.onNick = (name) => this.changeNick(name);
     // 대기실·결과 화면은 자유, 레이스 중엔 골인한 사람만
     this.ui.canChat = () => this.screen !== 'RACE' || !!this.race.karts[this.mySlot]?.finished;
     this.ui.onToggleMute = () => {
@@ -286,11 +287,11 @@ export class Game {
   // ---------------------------------------------------------------- lobby
 
   private emptySlot(): LobbySlot {
-    return { name: '', mountId: RACER_DEFINITIONS[0].id, jockeyId: 'balance', ready: false, cpu: false, human: false };
+    return { name: '', mountId: RACER_DEFINITIONS[0].id, jockeyId: 'balance', ready: false, cpu: false, human: false, wins: 0 };
   }
 
   private mySlotData(): LobbySlot {
-    return { name: this.ui.displayNick, mountId: this.ui.mountId, jockeyId: this.ui.jockeyId, ready: true, cpu: false, human: true };
+    return { name: this.ui.displayNick, mountId: this.ui.mountId, jockeyId: this.ui.jockeyId, ready: true, cpu: false, human: true, wins: this.ui.wins };
   }
 
   private startSolo(): void {
@@ -372,6 +373,7 @@ export class Game {
         s.name = String(m.name || 'P' + (slot + 1)).slice(0, 12);
         s.mountId = m.mountId;
         s.jockeyId = m.jockeyId;
+        s.wins = Math.max(0, Number(m.wins) || 0);
         s.human = true;
         this.renderLobby();
         this.broadcastLobby();
@@ -380,6 +382,17 @@ export class Game {
       case 'chat':
         if (typeof m.text === 'string') this.hostChat(m.text.slice(0, 120), slot, false);
         break;
+      case 'name': {
+        const nn = String(m.name || '').trim().slice(0, 12);
+        if (nn && nn !== s.name) {
+          this.hostChat(`${s.name} → ${nn}`, -1, true);
+          s.name = nn;
+          if (this.race.slots[slot]) this.race.slots[slot].name = nn;
+          this.renderLobby();
+          this.broadcastLobby();
+        }
+        break;
+      }
       case 'loaded':
         // 이번 레이스(seed) 의 신호만. 방장 세팅이 끝나기 전에 와도 저장해 둔다
         if (m.seed === this.pendingSeed) {
@@ -489,7 +502,7 @@ export class Game {
     switch (m.t) {
       case 'welcome':
         this.mySlot = m.slot;
-        net.send({ t: 'hello', name: this.ui.displayNick, mountId: this.ui.mountId, jockeyId: this.ui.jockeyId });
+        net.send({ t: 'hello', name: this.ui.displayNick, mountId: this.ui.mountId, jockeyId: this.ui.jockeyId, wins: this.ui.wins });
         break;
       case 'lobby':
         this.lobby = m.slots;
@@ -525,6 +538,7 @@ export class Game {
         break;
       case 'over':
         this.race.results = m.results;
+        this.recordWin();
         this.showResult();
         break;
       case 'tolobby':
@@ -890,6 +904,35 @@ export class Game {
     }
   }
 
+  /** 1등이 사람이면 승수 +1. 내 승수는 브라우저에 저장, 호스트는 로비 슬롯에도 반영해 전원에게 보여준다 */
+  private recordWin(): void {
+    const winner = this.race.results[0];
+    if (!winner || this.screen === 'RESULT') return;
+    const cfg = this.race.slots[winner.slot];
+    if (!cfg || cfg.cpu) return;
+    if (winner.slot === this.mySlot) {
+      const w = this.ui.addWin();
+      if (this.lobby[this.mySlot]) this.lobby[this.mySlot].wins = w;
+    }
+    if (this.mode === 'host' && this.lobby[winner.slot]?.human) {
+      if (winner.slot !== this.mySlot) this.lobby[winner.slot].wins = (this.lobby[winner.slot].wins ?? 0) + 1;
+      this.broadcastLobby();
+    }
+  }
+
+  private changeNick(name: string): void {
+    if (this.mode === 'client') {
+      this.net?.send({ t: 'name', name });
+      return;
+    }
+    if (this.lobby[this.mySlot]) {
+      this.lobby[this.mySlot].name = name;
+      if (this.race.slots[this.mySlot]) this.race.slots[this.mySlot].name = name;
+      this.renderLobby();
+      this.broadcastLobby();
+    }
+  }
+
   private showResult(): void {
     if (this.screen === 'RESULT') return;
     this.audio.setBoostRush(0);
@@ -1069,6 +1112,7 @@ export class Game {
       }
       if (this.race.phase === 'OVER') {
         this.net?.broadcast({ t: 'over', results: this.race.results });
+        this.recordWin();
         this.showResult();
         return;
       }

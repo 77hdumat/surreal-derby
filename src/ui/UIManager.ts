@@ -82,6 +82,7 @@ export class UIManager {
   onAgain: (() => void) | null = null;
   onToLobby: (() => void) | null = null;
   onChat: ((text: string) => void) | null = null;
+  onNick: ((name: string) => void) | null = null;
   onToggleMute: (() => boolean) | null = null;
   onToggleQuality: (() => boolean) | null = null;
 
@@ -93,10 +94,26 @@ export class UIManager {
     if (!JOCKEYS.some((j) => j.id === this.jockeyId)) this.jockeyId = 'balance';
     this.nick = this.load('surreal-derby-nick', '');
     const nick = $('nick') as HTMLInputElement;
+    const lobbyNick = $('lobby-nick') as HTMLInputElement;
     nick.value = this.nick;
+    lobbyNick.value = this.nick;
     nick.addEventListener('input', () => {
       this.nick = nick.value.trim();
+      lobbyNick.value = nick.value;
       this.save('surreal-derby-nick', this.nick);
+    });
+    // 대기실에서 닉네임 변경: 입력 멈추고 0.4초 뒤 방에 알림
+    let nickTimer: ReturnType<typeof setTimeout> | null = null;
+    lobbyNick.addEventListener('input', () => {
+      this.nick = lobbyNick.value.trim();
+      nick.value = lobbyNick.value;
+      this.save('surreal-derby-nick', this.nick);
+      if (nickTimer) clearTimeout(nickTimer);
+      nickTimer = setTimeout(() => this.onNick?.(this.displayNick), 400);
+    });
+    lobbyNick.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') lobbyNick.blur();
     });
     this.buildMountList();
     this.buildJockeyList();
@@ -236,6 +253,17 @@ export class UIManager {
 
   get displayNick(): string {
     return this.nick || '플레이어';
+  }
+
+  /** 누적 1등 횟수 (브라우저 저장) */
+  get wins(): number {
+    return Number(this.load('surreal-derby-wins', '0')) || 0;
+  }
+
+  addWin(): number {
+    const w = this.wins + 1;
+    this.save('surreal-derby-wins', String(w));
+    return w;
   }
 
   // ---------------------------------------------------------------- picker
@@ -407,10 +435,11 @@ export class UIManager {
       const d = this.defs.find((x) => x.id === s.mountId);
       const j = jockeyById(s.jockeyId);
       const badge = i === 0 ? '<span class="badge host">HOST</span>' : s.cpu ? '<span class="badge cpu">CPU</span>' : s.human ? (s.ready ? '<span class="badge ready">READY</span>' : '<span class="badge">대기</span>') : '';
+      const wins = s.human ? `<span class="wins" title="누적 1등">🏆 ${s.wins ?? 0}승</span>` : '';
       const kick = isHost && s.human && i !== 0 ? `<button class="kick" data-slot="${i}" title="강퇴">✕</button>` : '';
       li.innerHTML = empty
         ? `<span class="num">${i + 1}</span><div class="txt"><div class="nm">빈 자리</div><div class="sub">시작하면 CPU 가 들어옵니다</div></div>`
-        : `<span class="num">${i + 1}</span><div class="txt"><div class="nm">${s.name}${i === mySlot ? ' (나)' : ''}</div><div class="sub">${d ? d.emoji + ' ' + d.name : ''} · ${j.emoji} ${j.name}</div></div>${badge}${kick}`;
+        : `<span class="num">${i + 1}</span><div class="txt"><div class="nm">${s.name}${i === mySlot ? ' (나)' : ''}</div><div class="sub">${d ? d.emoji + ' ' + d.name : ''} · ${j.emoji} ${j.name}</div></div>${wins}${badge}${kick}`;
       list.appendChild(li);
     });
     list.querySelectorAll<HTMLButtonElement>('.kick').forEach((b) => b.addEventListener('click', () => this.onKick?.(Number(b.dataset.slot))));

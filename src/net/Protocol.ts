@@ -7,6 +7,8 @@ export interface LobbySlot {
   jockeyId: string;
   ready: boolean;
   cpu: boolean;
+  /** 누적 1등 횟수 (각자 브라우저에 저장, 호스트가 세션 중 갱신) */
+  wins: number;
   /** 사람 접속 여부 (false + cpu=false = 빈 자리) */
   human: boolean;
 }
@@ -16,7 +18,8 @@ export type InputTuple = [number, number, number, number];
 
 export type NetMsg =
   | { t: 'welcome'; slot: number }
-  | { t: 'hello'; name: string; mountId: string; jockeyId: string }
+  | { t: 'hello'; name: string; mountId: string; jockeyId: string; wins: number }
+  | { t: 'name'; name: string }
   | { t: 'pick'; mountId: string; jockeyId: string }
   | { t: 'ready'; v: boolean }
   | { t: 'lobby'; slots: LobbySlot[] }
