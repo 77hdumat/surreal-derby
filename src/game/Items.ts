@@ -6,11 +6,11 @@ export type ItemKind = 'missile' | 'waterfly' | 'banana' | 'boost' | 'shield' | 
 
 export const ITEM_INFO: Record<ItemKind, { name: string; emoji: string; desc: string }> = {
   missile: { name: '미사일', emoji: '🚀', desc: '앞 말을 추적해 스핀' },
-  waterfly: { name: '물파리', emoji: '🪰', desc: '앞 말을 쫓아가 물방울에 가둠' },
-  banana: { name: '바나나', emoji: '🍌', desc: '뒤에 떨어뜨려 미끄러뜨림' },
+  waterfly: { name: '물파리', emoji: '🪰', desc: '바로 앞 등수를 쫓아가 2초간 공중에 가둠' },
+  banana: { name: '바나나', emoji: '🍌', desc: '뒤에 3개 떨어뜨림 — 밟으면 1초 미끄러짐' },
   boost: { name: '부스터', emoji: '🔥', desc: '즉시 부스트 3초' },
   shield: { name: '실드', emoji: '🛡️', desc: '공격 1회 막음 (8초)' },
-  magnet: { name: '자석', emoji: '🧲', desc: '앞 말 쪽으로 강하게 당겨짐' },
+  magnet: { name: '자석', emoji: '🧲', desc: '바로 앞 등수에게 350km/h 로 달라붙음' },
   ufo: { name: 'UFO', emoji: '🛸', desc: '1등을 붙잡아 멈춤' },
   gas: { name: '환각 가스', emoji: '🍄', desc: '맞으면 3초간 조작이 반대로' },
 };
@@ -47,7 +47,7 @@ export type ItemEvent =
   | { k: 'hit'; slot: number; kind: ItemKind; pid: number; blocked: boolean }
   | { k: 'got'; slot: number; kind: ItemKind };
 
-export const BOX_RESPAWN = 10;
+export const BOX_RESPAWN = 8;
 export const BOX_RADIUS = 2.2;
 const MISSILE_SPEED = 75;
 const MISSILE_LIFE = 5;
@@ -56,14 +56,14 @@ const BOMB_FLIGHT = 1.1;
 const BOMB_RADIUS = 6.5;
 const BANANA_LIFE = 40;
 
-/** 한 랩에 3구간 × 4개 상자 */
+/** 한 랩에 5구간 × 5개 상자 */
 export function generateBoxes(track: TrackGeometry): ItemBox[] {
   const out: ItemBox[] = [];
   let id = 0;
-  for (let row = 0; row < 3; row++) {
-    const s = ((row + 0.5) / 3) * track.length;
-    for (let i = 0; i < 4; i++) {
-      const lat = -8 + i * (16 / 3);
+  for (let row = 0; row < 5; row++) {
+    const s = ((row + 0.5) / 5) * track.length;
+    for (let i = 0; i < 5; i++) {
+      const lat = -9 + i * 4.5;
       const p = track.getPoint(s, lat);
       out.push({ id: id++, s, lat, x: p.x, z: p.z, takenT: -1 });
     }
@@ -126,7 +126,7 @@ export class ItemSystem {
     for (let i = 0; i < karts.length; i++) {
       if (!owned[i]) continue;
       const k = karts[i];
-      if (k.finished || k.item) continue;
+      if (k.finished || (k.item && k.item2)) continue;
       for (const b of this.boxes) {
         if (b.takenT >= 0) continue;
         const dx = k.x - b.x;
@@ -134,18 +134,42 @@ export class ItemSystem {
         if (dx * dx + dz * dz > BOX_RADIUS * BOX_RADIUS) continue;
         b.takenT = time;
         const rank = ranking.indexOf(i) + 1;
-        k.item = rollItem(rank, karts.length, this.rnd);
+        const got = rollItem(rank, karts.length, this.rnd);
+        if (k.item) k.item2 = got;
+        else k.item = got;
         this.events.push({ k: 'box', id: b.id, slot: i });
-        this.events.push({ k: 'got', slot: i, kind: k.item as ItemKind });
+        this.events.push({ k: 'got', slot: i, kind: got });
         break;
       }
+    }
+    // 자석: 내 소유 말이 자석 중이면 대상 쪽으로 코를 돌리고, 닿으면 끝
+    for (let i = 0; i < karts.length; i++) {
+      const k = karts[i];
+      if (!owned[i] || k.magnetT <= 0) continue;
+      const t = karts[k.magnetTarget];
+      if (!t) {
+        k.magnetT = 0;
+        continue;
+      }
+      const dx = t.x - k.x;
+      const dz = t.z - k.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 4) {
+        k.magnetT = 0;
+        k.speed = Math.min(k.speed, t.speed + 8);
+        continue;
+      }
+      const want = Math.atan2(-dz, dx);
+      const err = Math.atan2(Math.sin(want - k.yaw), Math.cos(want - k.yaw));
+      k.yaw += Math.max(-6 * dt, Math.min(6 * dt, err));
+      k.slip = 0;
     }
     // 투사체
     for (const pr of this.projectiles) {
       if (pr.done) continue;
       pr.age += dt;
       if (pr.kind === 'missile' || pr.kind === 'waterfly') {
-        const turn = pr.kind === 'waterfly' ? MISSILE_TURN * 1.6 : MISSILE_TURN;
+        const turn = pr.kind === 'waterfly' ? 8 : MISSILE_TURN;
         if (pr.target >= 0 && karts[pr.target] && !karts[pr.target].finished) {
           const t = karts[pr.target];
           const want = Math.atan2(-(t.z - pr.z), t.x - pr.x);
@@ -155,9 +179,9 @@ export class ItemSystem {
         pr.x += Math.cos(pr.yaw) * pr.speed * dt;
         pr.z += -Math.sin(pr.yaw) * pr.speed * dt;
         pr.y = pr.kind === 'waterfly' ? 1.6 + Math.sin(pr.age * 14) * 0.3 : 1.0;
-        if (pr.age > (pr.kind === 'waterfly' ? MISSILE_LIFE * 1.6 : MISSILE_LIFE)) pr.done = true;
-        // 트랙 밖으로 나가면 소멸
-        if (Math.abs(this.track.project(pr.x, pr.z).lat) > this.track.width / 2 + 3) pr.done = true;
+        if (pr.age > (pr.kind === 'waterfly' ? 12 : MISSILE_LIFE)) pr.done = true;
+        // 트랙 밖으로 나가면 소멸 (물파리는 날아다니므로 예외)
+        if (pr.kind === 'missile' && Math.abs(this.track.project(pr.x, pr.z).lat) > this.track.width / 2 + 3) pr.done = true;
       } else if (pr.kind === 'gas') {
         if (pr.age < BOMB_FLIGHT) {
           pr.x += Math.cos(pr.yaw) * pr.speed * dt;
@@ -183,7 +207,7 @@ export class ItemSystem {
         const dz = k.z - pr.z;
         const d2 = dx * dx + dz * dz;
         let hit = false;
-        if (pr.kind === 'missile' || pr.kind === 'waterfly') hit = d2 < 2.6 * 2.6;
+        if (pr.kind === 'missile' || pr.kind === 'waterfly') hit = d2 < 3.2 * 3.2;
         else if (pr.kind === 'gas') hit = pr.age >= BOMB_FLIGHT && d2 < BOMB_RADIUS * BOMB_RADIUS;
         else hit = d2 < 1.8 * 1.8;
         if (!hit) continue;
@@ -200,9 +224,9 @@ export class ItemSystem {
 
   private applyHit(k: KartState, kind: ItemKind): void {
     if (kind === 'missile') k.stunT = 1.6;
-    else if (kind === 'waterfly') k.bubbleT = 2.4;
+    else if (kind === 'waterfly') k.bubbleT = 2.0; // 2초 공중에 갇혔다 떨어진다
     else if (kind === 'ufo') k.bubbleT = 2.7; // 2.45 초과 = UFO 연출 (ItemVisuals)
-    else if (kind === 'banana') k.slipT = 1.3;
+    else if (kind === 'banana') k.slipT = 1.0;
     else if (kind === 'gas') {
       k.confuseT = 3;
       return; // 취하는 건 게이지 손실 없음
@@ -218,7 +242,16 @@ export class ItemSystem {
     const kind = k.item as ItemKind;
     if (kind === 'boost' && k.boostT > 0) return null; // 부스트 중엔 못 쓴다 (아이템 유지)
     let target = -1;
-    if (kind === 'missile' || kind === 'waterfly') {
+    const myRank = ranking.indexOf(slot);
+    /** 바로 앞 등수 (골인 안 한 사람) */
+    const justAhead = (): number => {
+      for (let r = myRank - 1; r >= 0; r--) if (!karts[ranking[r]].finished) return ranking[r];
+      return -1;
+    };
+    if (kind === 'waterfly' || kind === 'magnet') {
+      target = justAhead();
+      if (target < 0) return null; // 1등은 쏠 대상 없음 (아이템 유지)
+    } else if (kind === 'missile') {
       // 앞에서 가장 가까운 말 (progress 기준 0~120m 앞)
       let best = Infinity;
       karts.forEach((o, i) => {
@@ -233,7 +266,8 @@ export class ItemSystem {
       target = ranking.find((s) => s !== slot && !karts[s].finished) ?? -1;
       if (target < 0) return null;
     }
-    k.item = '';
+    k.item = k.item2;
+    k.item2 = '';
     const ev: ItemEvent = { k: 'use', slot, kind, id: this.nextId++, x: k.x, z: k.z, yaw: k.yaw, target };
     this.apply(ev, karts, /* owned */ null);
     return ev;
@@ -251,14 +285,22 @@ export class ItemSystem {
         this.projectiles.push({ id: ev.id, kind: 'missile', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2.5, z: ev.z - Math.sin(ev.yaw) * 2.5, y: 1, yaw: ev.yaw, speed: MISSILE_SPEED, age: 0, target: ev.target, done: false });
         break;
       case 'waterfly':
-        this.projectiles.push({ id: ev.id, kind: 'waterfly', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2.5, z: ev.z - Math.sin(ev.yaw) * 2.5, y: 1.6, yaw: ev.yaw, speed: 58, age: 0, target: ev.target, done: false });
+        this.projectiles.push({ id: ev.id, kind: 'waterfly', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2.5, z: ev.z - Math.sin(ev.yaw) * 2.5, y: 1.6, yaw: ev.yaw, speed: 85, age: 0, target: ev.target, done: false });
         break;
       case 'gas':
         this.projectiles.push({ id: ev.id, kind: 'gas', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2, z: ev.z - Math.sin(ev.yaw) * 2, y: 1, yaw: ev.yaw, speed: 38, age: 0, target: -1, done: false });
         break;
-      case 'banana':
-        this.projectiles.push({ id: ev.id, kind: 'banana', owner: ev.slot, x: ev.x - Math.cos(ev.yaw) * 3, z: ev.z + Math.sin(ev.yaw) * 3, y: 0, yaw: ev.yaw, speed: 0, age: 0, target: -1, done: false });
+      case 'banana': {
+        // 뒤에 3개: 가운데 + 좌우 3m
+        const bx = ev.x - Math.cos(ev.yaw) * 3.5;
+        const bz = ev.z + Math.sin(ev.yaw) * 3.5;
+        const rx = Math.sin(ev.yaw);
+        const rz = Math.cos(ev.yaw);
+        for (let i = -1; i <= 1; i++) {
+          this.projectiles.push({ id: ev.id * 4 + (i + 1), kind: 'banana', owner: ev.slot, x: bx + rx * i * 3.2 - Math.cos(ev.yaw) * Math.abs(i) * 1.5, z: bz + rz * i * 3.2 + Math.sin(ev.yaw) * Math.abs(i) * 1.5, y: 0, yaw: ev.yaw, speed: 0, age: 0, target: -1, done: false });
+        }
         break;
+      }
       case 'boost':
         if (mine && k) {
           k.boostT = Math.max(k.boostT, BOOST_DURATION);
@@ -269,7 +311,10 @@ export class ItemSystem {
         if (mine && k) k.shieldT = 8;
         break;
       case 'magnet':
-        if (mine && k) k.magnetT = 2.2;
+        if (mine && k) {
+          k.magnetT = 3.0;
+          k.magnetTarget = ev.target;
+        }
         break;
       case 'ufo': {
         const t = karts[ev.target];

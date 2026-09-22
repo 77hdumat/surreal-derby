@@ -1317,6 +1317,7 @@ export class Game {
       boosts: myKart.boosts,
       boosting: myKart.boostT > 0,
       item: myKart.item ? `${ITEM_INFO[myKart.item as ItemKind].emoji} ${ITEM_INFO[myKart.item as ItemKind].name}` : '',
+      item2: myKart.item2 ? ITEM_INFO[myKart.item2 as ItemKind].emoji : '',
       time: this.race.time,
       order,
     });

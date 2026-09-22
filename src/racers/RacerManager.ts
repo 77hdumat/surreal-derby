@@ -13,6 +13,7 @@ import type { SpecialAbility } from './Racer';
 import type { SlotConfig } from '../game/KartRace';
 import { jockeyById } from './Jockeys';
 import { BoostFlame } from '../effects/BoostFlame';
+import { bubbleLift } from '../effects/ItemVisuals';
 
 /**
  * KartState(x/z/yaw/speed…) → 슬롯별 RacerVisual 배치·애니메이션·파티클.
@@ -191,8 +192,10 @@ export class RacerManager {
   place(slot: number, k: KartState): void {
     const v = this.visuals[slot];
     if (!v) return;
-    v.root.position.set(k.x, 0, k.z);
-    v.root.rotation.y = k.yaw;
+    v.root.position.set(k.x, bubbleLift(k.bubbleT), k.z);
+    // 미사일 피격·바나나: 빙글 돈다
+    const spin = k.stunT > 0 ? k.stunT * 9 : k.slipT > 0 ? Math.sin(k.slipT * 12) * 0.6 : 0;
+    v.root.rotation.y = k.yaw + spin;
     v.root.updateMatrixWorld();
     this.tmpTan.set(Math.cos(k.yaw), 0, -Math.sin(k.yaw));
     v.setWorldForward(this.tmpTan);

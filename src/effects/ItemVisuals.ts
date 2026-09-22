@@ -2,6 +2,13 @@ import * as THREE from 'three';
 import type { ItemBox, Projectile } from '../game/Items';
 import type { KartState } from '../game/KartPhysics';
 
+/** 물방울/UFO 에 갇힌 동안 공중 높이 (초반 빠르게 떠오르고 마지막 0.4초에 떨어진다) */
+export function bubbleLift(bubbleT: number): number {
+  if (bubbleT <= 0) return 0;
+  const fall = Math.min(1, bubbleT / 0.4); // 마지막 0.4초 낙하
+  return 4.5 * fall;
+}
+
 /**
  * 아이템 상자·투사체·말 위 효과(물방울·실드·UFO·환각) 씬 객체.
  */
@@ -110,9 +117,9 @@ export class ItemVisuals {
     }
     if (p.kind === 'gas') return new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 10), this.gasMat);
     // 바나나: 휘어진 토러스 조각
-    const b = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.16, 8, 12, Math.PI * 0.9), this.bananaMat);
+    const b = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.3, 8, 14, Math.PI * 0.9), this.bananaMat);
     b.rotation.set(Math.PI / 2, 0, 0.5);
-    b.position.y = 0.2;
+    b.position.y = 0.35;
     return b;
   }
 
@@ -161,7 +168,9 @@ export class ItemVisuals {
       const h = bub.geometry.boundingSphere?.radius ?? 2;
       bub.visible = k.bubbleT > 0;
       if (bub.visible) {
-        bub.position.set(this.tmp.x, h * 0.9 + Math.sin(time * 4) * 0.15, this.tmp.z);
+        // 물방울에 갇혀 공중으로 떠올랐다가 끝날 때 떨어진다 (root 높이는 RacerManager 가 같은 곡선으로 올린다)
+        const lift = bubbleLift(k.bubbleT);
+        bub.position.set(this.tmp.x, h * 0.9 + lift + Math.sin(time * 4) * 0.15, this.tmp.z);
         bub.scale.setScalar(0.9 + Math.sin(time * 6) * 0.05);
       }
       sh.visible = k.shieldT > 0;

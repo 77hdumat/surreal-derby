@@ -25,6 +25,8 @@ export interface HudState {
   boosting: boolean;
   /** 들고 있는 아이템 표시 문자열 ('' = 없음) */
   item: string;
+  /** 두 번째 칸 (이모지) */
+  item2: string;
   time: number;
   /** 순위 순 이름 (상위부터) */
   order: { name: string; emoji: string; me: boolean; finished: boolean }[];
@@ -477,6 +479,11 @@ export class UIManager {
     if (slot.textContent !== (h.item || '—')) {
       slot.textContent = h.item || '—';
       slot.classList.toggle('has', !!h.item);
+    }
+    const slot2 = $('item-slot2');
+    if (slot2.textContent !== (h.item2 || '·')) {
+      slot2.textContent = h.item2 || '·';
+      slot2.classList.toggle('has', !!h.item2);
     }
     $('pip-0').classList.toggle('on', h.boosts >= 1);
     $('pip-1').classList.toggle('on', h.boosts >= 2);

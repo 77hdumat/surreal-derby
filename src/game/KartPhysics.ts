@@ -73,8 +73,11 @@ export interface KartState {
   magnetT: number;
   /** 환각: 조작이 반대로 (좌우·가속/브레이크) */
   confuseT: number;
-  /** 들고 있는 아이템 (없으면 '') */
+  /** 들고 있는 아이템 2칸 (없으면 ''). item 이 먼저 쓰인다 */
   item: string;
+  item2: string;
+  /** 자석 대상 슬롯 (-1 = 없음). magnetT 동안 그쪽으로 끌려간다 */
+  magnetTarget: number;
   /** 트랙 좌표 (project 결과) */
   s: number;
   lat: number;
@@ -142,6 +145,8 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     magnetT: 0,
     confuseT: 0,
     item: '',
+    item2: '',
+    magnetTarget: -1,
     s: 0,
     lat: 0,
     progress: 0,
@@ -273,8 +278,9 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const mini = st.miniT > 0;
   if (mini) st.miniT = Math.max(0, st.miniT - dt);
   const magnet = st.magnetT > 0;
-  const maxCur = p.maxSpeed * (boosting ? p.boostMul : magnet ? 1.45 : mini ? MINI_MUL : 1) * (st.slipT > 0 ? 0.6 : 1);
-  const accel = p.accel * (boosting ? 4.5 : magnet ? 5 : mini ? 2.6 : 1);
+  // 자석: 300~400km/h 로 대상에게 달라붙는다 (방향은 Items.step 이 대상 쪽으로 돌린다)
+  const maxCur = p.maxSpeed * (boosting ? p.boostMul : mini ? MINI_MUL : 1) * (st.slipT > 0 ? 0.6 : 1) * (magnet ? 2.6 : 1);
+  const accel = p.accel * (boosting ? 4.5 : magnet ? 12 : mini ? 2.6 : 1);
 
   // ---- 종방향
   if (inp.throttle > 0) {

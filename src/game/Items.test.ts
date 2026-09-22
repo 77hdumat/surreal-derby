@@ -13,8 +13,8 @@ function kartAt(s: number, lat: number): KartState {
 }
 
 describe('Items', () => {
-  it('상자는 3구간 × 4개, 먹으면 사라지고 10초 뒤 리젠', () => {
-    expect(generateBoxes(track)).toHaveLength(12);
+  it('상자는 5구간 × 5개, 먹으면 사라지고 8초 뒤 리젠', () => {
+    expect(generateBoxes(track)).toHaveLength(25);
     const sys = new ItemSystem(track, 0);
     sys.setup(1, 0);
     const b = sys.boxes[0];
@@ -23,6 +23,8 @@ describe('Items', () => {
     expect(karts[0].item).not.toBe('');
     expect(b.takenT).toBe(1);
     expect(sys.events.map((e) => e.k)).toEqual(['box', 'got']);
+    karts[0].item = 'banana';
+    karts[0].item2 = 'banana'; // 두 칸 다 차면 못 먹는다 → 리젠 확인용
     sys.step(1 / 60, 1 + BOX_RESPAWN + 0.1, karts, [true], [0]);
     expect(b.takenT).toBe(-1);
   });

@@ -77,13 +77,14 @@ export function encodeKart(k: KartState): number[] {
     r2(k.magnetT),
     ITEM_CODES.indexOf(k.item),
     r2(k.confuseT),
+    ITEM_CODES.indexOf(k.item2),
   ];
 }
 
 /** 아이템 종류 코드 (스냅샷 압축용) */
 export const ITEM_CODES = ['', 'missile', 'waterfly', 'banana', 'boost', 'shield', 'magnet', 'ufo', 'gas'];
 
-export const KART_FIELDS = 25;
+export const KART_FIELDS = 26;
 
 /** 스냅샷 값 → 상태. 위치(x,z,yaw)는 보간 대상이라 applyPos=false 로 건너뛸 수 있다 */
 export function decodeKart(a: number[], into: KartState, applyPos = true): KartState {
@@ -114,6 +115,7 @@ export function decodeKart(a: number[], into: KartState, applyPos = true): KartS
   into.magnetT = a[22] ?? 0;
   into.item = ITEM_CODES[a[23] ?? 0] ?? '';
   into.confuseT = a[24] ?? 0;
+  into.item2 = ITEM_CODES[a[25] ?? 0] ?? '';
   return into;
 }
 
