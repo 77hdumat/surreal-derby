@@ -12,7 +12,7 @@ export const GradeShader = {
     uOverlayAmount: { value: 0.12 },
     uVibrance: { value: 0.22 },
     uContrast: { value: 0.2 },
-    uVignette: { value: 0.28 },
+    uVignette: { value: 0.0 },
     uExposure: { value: 1.0 },
   },
   vertexShader: `
