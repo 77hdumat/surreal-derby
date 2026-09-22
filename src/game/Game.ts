@@ -683,7 +683,7 @@ export class Game {
     switch (e.k) {
       case 'boost':
         this.racers.boostFx(slot);
-        this.audio.play('whooshEpic', { pos, minGain: me ? 0.8 : 0.3, gain: 0.9 });
+        this.playBoostSound(slot, pos, me);
         if (me) {
           this.camera.shake(0.25);
           this.effects.flashScreen(0.25);
@@ -736,6 +736,64 @@ export class Game {
         if (me) this.ui.showToast(`${this.race.rankOf(slot)}위 골인!`, 2500);
         break;
       }
+    }
+  }
+
+  /** 부스트 효과음: 관람 모드의 말별 특수 이벤트 소리를 그대로 (병사 등장, 물대포, 소 울음…) */
+  private playBoostSound(slot: number, pos: THREE.Vector3, me: boolean): void {
+    const a = this.audio;
+    const near = me ? 0.8 : 0.3;
+    const g = me ? 1 : 0.8;
+    switch (this.racers.defs[slot]?.specialAbility) {
+      case 'TROJAN': // 문 열리고 병사들이 함성과 함께 뛰쳐나옴
+        a.play('cardboardOpen', { pos, minGain: near, gain: g });
+        a.play('scream', { pos, minGain: near * 0.7, gain: 0.7 * g, rate: 0.85 });
+        a.play('whooshEpic', { pos, minGain: near * 0.5, gain: 0.5 * g });
+        a.crowdRoar(0.7);
+        break;
+      case 'ELEPHANT': // 물대포
+        a.play('elephant', { pos, minGain: near * 0.5, gain: 0.5 * g });
+        a.play('whoosh', { pos, minGain: near * 0.5, gain: 0.7 * g, rate: 0.7 });
+        a.crowdRoar(0.4);
+        break;
+      case 'COW': // 분노
+        a.play(Math.random() < 0.5 ? 'cow' : 'cow2', { pos, minGain: near, gain: 1.1 * g });
+        a.crowdRoar(0.5);
+        break;
+      case 'COSTUME': // 탈 벗어 들고 질주
+        a.play('scream', { pos, minGain: near, gain: 0.8 * g, rate: 1.15 });
+        a.play('whooshEpic', { pos, minGain: near * 0.6, gain: 0.7 * g });
+        a.crowdRoar(0.9);
+        break;
+      case 'HUMAN': // 이족보행
+        a.play('whoosh', { pos, minGain: near * 0.6, gain: 0.8 * g });
+        a.play('scream', { pos, minGain: near * 0.4, gain: 0.5 * g, rate: 1.2 });
+        a.crowdRoar(0.5);
+        break;
+      case 'CIRCUS': // 서커스
+        a.play('tada', { pos, minGain: near, gain: 0.9 * g });
+        a.play('whooshEpic', { pos, minGain: near * 0.5, gain: 0.6 * g });
+        a.crowdRoar(0.8);
+        break;
+      case 'MOTORCYCLE': // 엔진 폭발
+        a.play('engineRev2', { pos, minGain: near, gain: 1.1 * g });
+        a.play('motoPass', { pos, minGain: near * 0.6, gain: 0.8 * g });
+        a.play('whoosh', { pos, minGain: near * 0.4, gain: 0.6 * g });
+        a.crowdRoar(0.8);
+        break;
+      case 'LONGBODY': // 몸 늘어남
+        a.play('whooshEpic', { pos, minGain: near * 0.7, gain: 1.0 * g });
+        a.play('scream', { pos, minGain: near * 0.4, gain: 0.6 * g, rate: 0.9 });
+        a.crowdRoar(0.6);
+        break;
+      case 'GIRAFFE': // 목 뻗기
+        a.play('whooshEpic', { pos, minGain: near * 0.7, gain: 1.0 * g, rate: 0.8 });
+        a.play('neigh', { pos, minGain: near * 0.4, gain: 0.5 * g, rate: 0.8 });
+        a.crowdRoar(0.9);
+        break;
+      default: // 얼룩말: 슈퍼 스프린트
+        a.play('whooshEpic', { pos, minGain: near, gain: 0.9 * g });
+        a.crowdRoar(0.5);
     }
   }
 
