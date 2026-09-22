@@ -6,11 +6,11 @@ export type ItemKind = 'missile' | 'waterfly' | 'banana' | 'boost' | 'shield' | 
 
 export const ITEM_INFO: Record<ItemKind, { name: string; emoji: string; desc: string }> = {
   missile: { name: '미사일', emoji: '🚀', desc: '앞 말을 추적해 스핀' },
-  waterfly: { name: '물파리', emoji: '🪰', desc: '바로 앞 등수를 쫓아가 2초간 공중에 가둠' },
+  waterfly: { name: '물파리', emoji: '🪰', desc: '바로 앞 등수를 쫓아가 공중에 가둠 (좌우 연타로 탈출)' },
   banana: { name: '바나나', emoji: '🍌', desc: '뒤에 3개 떨어뜨림 — 밟으면 1초 미끄러짐' },
   boost: { name: '부스터', emoji: '🔥', desc: '즉시 부스트 3초' },
   shield: { name: '실드', emoji: '🛡️', desc: '공격 1회 막음 (8초)' },
-  magnet: { name: '자석', emoji: '🧲', desc: '바로 앞 등수에게 350km/h 로 달라붙음' },
+  magnet: { name: '자석', emoji: '🧲', desc: '바로 앞 등수 쪽으로 350km/h 로 끌려감 (조향 가능)' },
   ufo: { name: 'UFO', emoji: '🛸', desc: '1등을 붙잡아 멈춤' },
   gas: { name: '환각 가스', emoji: '🍄', desc: '맞으면 3초간 조작이 반대로' },
 };
@@ -159,10 +159,11 @@ export class ItemSystem {
         k.speed = Math.min(k.speed, t.speed + 8);
         continue;
       }
+      // 대상 쪽으로 당기되 조향은 살려 둔다 (플레이어가 궤도를 틀 수 있다)
       const want = Math.atan2(-dz, dx);
       const err = Math.atan2(Math.sin(want - k.yaw), Math.cos(want - k.yaw));
-      k.yaw += Math.max(-6 * dt, Math.min(6 * dt, err));
-      k.slip = 0;
+      k.yaw += Math.max(-2.2 * dt, Math.min(2.2 * dt, err));
+      k.slip *= Math.max(0, 1 - 4 * dt);
     }
     // 투사체
     for (const pr of this.projectiles) {

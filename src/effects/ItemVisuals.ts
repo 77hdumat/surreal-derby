@@ -171,7 +171,9 @@ export class ItemVisuals {
         // 물방울에 갇혀 공중으로 떠올랐다가 끝날 때 떨어진다 (root 높이는 RacerManager 가 같은 곡선으로 올린다)
         const lift = bubbleLift(k.bubbleT);
         bub.position.set(this.tmp.x, h * 0.9 + lift + Math.sin(time * 4) * 0.15, this.tmp.z);
-        bub.scale.setScalar(0.9 + Math.sin(time * 6) * 0.05);
+        // 탈출 진행도만큼 부풀고 흔들린다 (곧 터질 것처럼)
+        bub.scale.setScalar(0.9 + Math.sin(time * 6) * 0.05 + k.escape * 0.35);
+        (bub.material as THREE.MeshPhysicalMaterial).opacity = 0.55 - k.escape * 0.25;
       }
       sh.visible = k.shieldT > 0;
       if (sh.visible) {

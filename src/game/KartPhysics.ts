@@ -78,6 +78,12 @@ export interface KartState {
   item2: string;
   /** 자석 대상 슬롯 (-1 = 없음). magnetT 동안 그쪽으로 끌려간다 */
   magnetTarget: number;
+  /** 물방울 탈출 진행도 0..1 — 좌우 연타로 채운다 */
+  escape: number;
+  /** 직전 스텔의 조향 부호 (연타 판정) */
+  escapeDir: number;
+  /** 물방울 착지 직후 부스터 입력 창 (초) */
+  landWindow: number;
   /** 트랙 좌표 (project 결과) */
   s: number;
   lat: number;
@@ -109,6 +115,9 @@ export const MINI_MIN_DRIFT = 0.12;
 export const START_BOOST_WINDOW = 0.9;
 export const START_BOOST_LATE = 0.35;
 export const START_BOOST_DURATION = 1.1;
+/** 물방울 착지 부스터: 풀린 뒤 이 시간(초) 안에 ↑ */
+export const LAND_BOOST_WINDOW = 0.5;
+export const LAND_BOOST_DURATION = 1.4;
 
 /** 출발 부스터 부여 */
 export function applyStartBoost(st: KartState): void {
@@ -147,6 +156,9 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     item: '',
     item2: '',
     magnetTarget: -1,
+    escape: 0,
+    escapeDir: 0,
+    landWindow: 0,
     s: 0,
     lat: 0,
     progress: 0,
@@ -235,6 +247,23 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   st.shieldT = Math.max(0, st.shieldT - dt);
   st.magnetT = Math.max(0, st.magnetT - dt);
   st.confuseT = Math.max(0, st.confuseT - dt);
+  // ---- 물방울 탈출: 좌우를 번갈아 누르면 빨리 터진다
+  if (st.bubbleT > 0 && !st.finished) {
+    const dir = Math.sign(input.steer);
+    if (dir !== 0 && dir !== st.escapeDir) {
+      st.escapeDir = dir;
+      st.escape += 0.16;
+    }
+    if (st.escape >= 1) {
+      st.bubbleT = Math.min(st.bubbleT, 0.35); // 터짐 → 바로 낙하 단계로
+      st.escape = 0;
+    }
+  } else {
+    st.escape = 0;
+    st.escapeDir = 0;
+  }
+  // 물방울이 풀린 순간부터 착지 부스터 창
+  if (st.bubbleT <= 0 && st.landWindow > 0) st.landWindow = Math.max(0, st.landWindow - dt);
   const disabled = st.stunT > 0 || st.bubbleT > 0;
   let inp = st.finished ? cruiseInput(st, p, track, scratchInput) : disabled ? IDLE_INPUT : input;
   if (st.confuseT > 0 && !st.finished && !disabled) {
@@ -248,6 +277,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   }
   const prevSpeed = st.speed;
   const prevYaw = st.yaw;
+  if (st.bubbleT > 0) st.landWindow = LAND_BOOST_WINDOW; // 갇혀 있는 동안 창을 채워 두고, 풀리면 줄어든다
   if (disabled) {
     // 맞으면 급정지 (물방울은 완전 정지)
     st.speed *= Math.max(0, 1 - (st.bubbleT > 0 ? 12 : 6) * dt);
@@ -255,6 +285,13 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     st.slip *= Math.max(0, 1 - 6 * dt);
   }
 
+  // ---- 착지 부스터: 물방울에서 떨어지는 타이밍에 ↑ 를 누르면 짧은 부스트 (아이템 소모 없음)
+  if (st.landWindow > 0 && st.bubbleT <= 0 && inp.throttle > 0 && !st.finished) {
+    st.landWindow = 0;
+    st.boostT = Math.max(st.boostT, LAND_BOOST_DURATION);
+    st.speed = Math.max(st.speed, p.maxSpeed * 0.8);
+    events.push({ k: 'boost' });
+  }
   // ---- 부스트: 부스트 중엔 무시(소모 안 함). 끝나기 0.25초 전부터는 누르고 있으면 끊김 없이 바로 이어진다
   st.boostKeyWas = inp.boost;
   if (!st.finished && inp.boost && st.boosts > 0 && st.boostT <= 0.25) {

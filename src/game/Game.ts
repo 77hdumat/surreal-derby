@@ -929,7 +929,8 @@ export class Game {
           this.racers.bump(e.slot, e.kind !== 'banana');
           if (me) {
             this.camera.shake(0.5);
-            this.ui.showToast(e.kind === 'gas' ? '🍄 어지럽다… 조작 반대!' : `${ITEM_INFO[e.kind].emoji} 맞았다!`, 1200);
+            const msg = e.kind === 'gas' ? '🍄 어지럽다… 조작 반대!' : e.kind === 'waterfly' ? '🪰 ← → 연타로 탈출!' : `${ITEM_INFO[e.kind].emoji} 맞았다!`;
+            this.ui.showToast(msg, e.kind === 'waterfly' ? 2000 : 1200);
           }
         }
         break;
