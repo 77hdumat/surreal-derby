@@ -281,13 +281,13 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     st.z = pnt.z;
     // 벽을 따라 미끄러지면서 계속 감속. 첫 충돌은 크게
     if (st.bumpT <= 0) {
-      st.speed *= 0.6;
+      st.speed *= 0.85; // 속도감을 잃지 않게 감속은 작게
       st.bumpT = 0.4;
       st.bumpDir = -Math.sign(st.lat);
       hitDuringDrift(st);
       events.push({ k: 'wall' });
     } else {
-      st.speed *= Math.max(0, 1 - 1.5 * dt);
+      st.speed *= Math.max(0, 1 - 0.6 * dt);
     }
     // 코를 트랙 방향으로 살짝 되돌려 벽에 박혀 있지 않게
     const trackYaw = track.yawAt(st.s);
@@ -341,7 +341,7 @@ export function resolveKartCollision(a: KartState, pa: KartParams, b: KartState,
     const k = moveB ? ka : 1;
     a.x -= nx * overlap * k;
     a.z -= nz * overlap * k;
-    a.speed *= 1 - 0.12 * ka;
+    a.speed *= 1 - 0.05 * ka;
     if (a.bumpT <= 0) {
       a.bumpT = 0.3;
       a.bumpDir = ra > 0 ? -1 : 1;
@@ -352,7 +352,7 @@ export function resolveKartCollision(a: KartState, pa: KartParams, b: KartState,
     const k = moveA ? kb : 1;
     b.x += nx * overlap * k;
     b.z += nz * overlap * k;
-    b.speed *= 1 - 0.12 * kb;
+    b.speed *= 1 - 0.05 * kb;
     if (b.bumpT <= 0) {
       b.bumpT = 0.3;
       b.bumpDir = ra > 0 ? 1 : -1;

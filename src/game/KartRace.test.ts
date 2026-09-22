@@ -26,7 +26,7 @@ describe('KartRace', () => {
   it('그리드는 서로 겹치지 않고 게이트 뒤에서 출발', () => {
     const r = new KartRace(new TrackGeometry(), RACER_DEFINITIONS);
     r.setup(slots);
-    for (const k of r.karts) expect(k.progress).toBeLessThan(0);
+    for (const k of r.karts) expect(k.progress).toBeCloseTo(-4, 3); // 전원 같은 선상
     for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) expect(Math.hypot(r.karts[a].x - r.karts[b].x, r.karts[a].z - r.karts[b].z)).toBeGreaterThan(2.6);
   });
 
