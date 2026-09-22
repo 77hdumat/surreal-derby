@@ -251,7 +251,9 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     st.slip += (target - st.slip) * Math.min(1, 4 * dt);
     st.speed *= Math.max(0, 1 - 0.35 * dt);
     if (st.boosts < MAX_BOOSTS) {
-      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * dt;
+      // 부스터 중 드리프트는 1.6배 (카트라이더의 부스터 드리프트 충전 보너스)
+      const bonus = boosting ? 1.6 : mini ? 1.25 : 1;
+      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * bonus * dt;
       if (st.gauge >= 1) {
         st.boosts++;
         st.gauge = st.boosts < MAX_BOOSTS ? st.gauge - 1 : 0;

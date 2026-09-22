@@ -68,6 +68,11 @@ export class Game {
   private sunOffset = new THREE.Vector3(70, 95, 50);
   private tmp = new THREE.Vector3();
   private warm = false;
+  /** 뒤 근접 선수 PiP (오른쪽 상단) */
+  private rearCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.3, 600);
+  private rearEl = document.getElementById('rear-pip') as HTMLElement;
+  private rearActive = false;
+  private rearLook = new THREE.Vector3();
 
   /** 원격 말 상태 버퍼 (슬롯별) */
   private remotes: RemoteKart[] = [];
@@ -739,6 +744,66 @@ export class Game {
     this.audio.update(dt, this.camera.velocity);
     this.effects.update(dt, this.camera.velocity);
     this.effects.render();
+    this.renderRearPip();
+  }
+
+  /**
+   * 뒤에서 바짝 따라오는 선수가 있으면 오른쪽 상단에 후방 카메라를 띄운다 (22m 안 → 표시, 28m 밖 → 숨김).
+   * 후처리 결과 위에 씬을 한 번 더 그린다 (그림자맵은 재사용).
+   */
+  private renderRearPip(): void {
+    const my = this.race.karts[this.mySlot];
+    if (this.screen !== 'RACE' || !my) {
+      if (this.rearActive) {
+        this.rearActive = false;
+        this.rearEl.classList.add('hidden');
+      }
+      return;
+    }
+    let gap = Infinity;
+    for (let i = 0; i < this.race.karts.length; i++) {
+      if (i === this.mySlot) continue;
+      const g = my.progress - this.race.karts[i].progress;
+      if (g > 0.5 && g < gap) gap = g;
+    }
+    const want = this.rearActive ? gap < 28 : gap < 22;
+    if (want !== this.rearActive) {
+      this.rearActive = want;
+      this.rearEl.classList.toggle('hidden', !want);
+    }
+    if (!want) return;
+    (document.getElementById('pip-gap') as HTMLElement).textContent = `${gap.toFixed(0)}m`;
+    const fx = Math.cos(my.yaw);
+    const fz = -Math.sin(my.yaw);
+    this.rearCam.position.set(my.x - fx * 1.0, 3.0, my.z - fz * 1.0);
+    this.rearLook.set(my.x - fx * 16, 0.8, my.z - fz * 16);
+    this.rearCam.lookAt(this.rearLook);
+    const rect = this.rearEl.getBoundingClientRect();
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    if (w < 8 || h < 8) return;
+    this.rearCam.aspect = w / h;
+    this.rearCam.updateProjectionMatrix();
+    const r = this.renderer;
+    const shadowAuto = r.shadowMap.autoUpdate;
+    r.shadowMap.autoUpdate = false;
+    r.setRenderTarget(null);
+    r.autoClear = false;
+    r.setScissorTest(true);
+    r.setViewport(Math.round(rect.left), Math.round(H - rect.bottom), w, h);
+    r.setScissor(Math.round(rect.left), Math.round(H - rect.bottom), w, h);
+    r.clearDepth();
+    // 내 말은 가려서 뒤쫓는 상대만 보이게
+    const myVisual = this.racers.visuals[this.mySlot];
+    if (myVisual) myVisual.root.visible = false;
+    r.render(this.scene, this.rearCam);
+    if (myVisual) myVisual.root.visible = true;
+    r.setScissorTest(false);
+    r.setViewport(0, 0, W, H);
+    r.autoClear = true;
+    r.shadowMap.autoUpdate = shadowAuto;
   }
 
   /**

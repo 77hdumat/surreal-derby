@@ -94,13 +94,14 @@ export class GameCamera {
         const rz = fx;
         const speedK = THREE.MathUtils.clamp(Math.abs(kart.speed) / 30, 0, 1.3);
         // 빨라질수록 카메라가 낮고 가깝게 붙어 속도감 ↑
-        const back = 6.0 + speedK * 1.2 + boost * 0.6;
-        const up = 3.0 - speedK * 0.7;
+        // 말에 가깝게, 살짝 위에서 내려다보는 시점
+        const back = 5.2 + speedK * 0.9 + boost * 0.5;
+        const up = 3.7 - speedK * 0.35;
         // 드리프트 중엔 미끄러지는 반대쪽으로 살짝 빠져 옆모습이 보이게
         const wantSide = -kart.slip * 5;
         this.sideOffset += (wantSide - this.sideOffset) * Math.min(1, 4 * dt);
         this.desiredPos.set(kart.x - fx * back + rx * this.sideOffset, up, kart.z - fz * back + rz * this.sideOffset);
-        this.desiredLook.set(kart.x + fx * 6, 1.3, kart.z + fz * 6);
+        this.desiredLook.set(kart.x + fx * 7, 1.1, kart.z + fz * 7);
         k = 9;
         break;
       }
