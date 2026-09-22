@@ -340,6 +340,13 @@ export class Game {
       this.renderLobby();
       this.broadcastLobby();
       if (name) this.hostChat(`${name} 퇴장`, -1, true);
+      // 레이스 중 이탈: 그 말은 CPU 가 이어받아 달린다 (트랙에 멈춰 있지 않게)
+      if ((this.screen === 'RACE' || this.screen === 'RESULT') && this.race.slots[slot] && !this.race.owned[slot]) {
+        this.race.slots[slot].cpu = true;
+        this.race.owned[slot] = true;
+        this.latestRemote[slot] = null;
+        if (name) this.hostChat(`${name} 의 말은 CPU 가 이어서 달립니다`, -1, true);
+      }
     };
     this.ui.setChatEnabled(true);
     this.ui.clearChat();
