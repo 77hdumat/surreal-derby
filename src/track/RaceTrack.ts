@@ -5,30 +5,13 @@ import { loadTreePrototypes, cloneTree, loadMountains, loadGrandstand, makeLake 
 import { Dancers } from './Dancers';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
-const UP = new THREE.Vector3(0, 1, 0);
-
-export interface TrackFrame {
-  pos: THREE.Vector3;
-  tan: THREE.Vector3;
-  right: THREE.Vector3;
-  curvature: number;
-}
+import { TrackGeometry, type TrackFrame } from './TrackGeometry';
+export type { TrackFrame } from './TrackGeometry';
 
 /**
- * 타원형(스타디움형) 잔디 경마장.
- * s = 트랙 중심선을 따라 진행한 거리. s=0 은 정면 직선주로 시작(출발 게이트).
- * lat = 중심선 기준 횡방향 위치, 음수 = 안쪽(왼쪽, 좌회전 트랙).
+ * 타원형(스타디움형) 잔디 경마장 — 씬 객체. 기하는 TrackGeometry.
  */
-export class RaceTrack {
-  readonly straight = 200;
-  readonly radius = 60;
-  readonly width = 30;
-  readonly laneCount = 10;
-  readonly length: number;
-  /** 결승선 s 위치 (정면 직선주로 중간) */
-  readonly finishS = 165;
-  /** 전체 레이스 거리 (1바퀴 + 결승선까지) */
-  readonly raceDistance: number;
+export class RaceTrack extends TrackGeometry {
   readonly group = new THREE.Group();
 
   gate = new THREE.Group();
@@ -56,82 +39,9 @@ export class RaceTrack {
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
   static readonly SUN_DIR = new THREE.Vector3(0.35, 1.05, 0.3).normalize();
 
-  private tmpFrame: TrackFrame = {
-    pos: new THREE.Vector3(),
-    tan: new THREE.Vector3(),
-    right: new THREE.Vector3(),
-    curvature: 0,
-  };
-
   constructor() {
-    this.length = 2 * this.straight + 2 * Math.PI * this.radius;
-    this.raceDistance = this.length + this.finishS;
+    super();
     this.build();
-  }
-
-  laneToLat(lane: number): number {
-    return -this.width / 2 + (lane + 0.5) * (this.width / this.laneCount);
-  }
-
-  wrap(s: number): number {
-    const L = this.length;
-    return ((s % L) + L) % L;
-  }
-
-  isCorner(s: number): boolean {
-    return this.getFrame(s).curvature > 0;
-  }
-
-  /** 0..1 코너 진입/이탈 부드러운 가중치 */
-  cornerWeight(s: number): number {
-    const w = this.wrap(s);
-    const L1 = this.straight;
-    const arc = Math.PI * this.radius;
-    const blend = 12;
-    const seg = (start: number, end: number) => {
-      const a = THREE.MathUtils.clamp((w - start) / blend, 0, 1);
-      const b = THREE.MathUtils.clamp((end - w) / blend, 0, 1);
-      return Math.min(a, b);
-    };
-    return Math.max(seg(L1, L1 + arc), seg(2 * L1 + arc, 2 * L1 + 2 * arc));
-  }
-
-  getFrame(sIn: number, out: TrackFrame = this.tmpFrame): TrackFrame {
-    const s = this.wrap(sIn);
-    const L1 = this.straight;
-    const R = this.radius;
-    const arc = Math.PI * R;
-    if (s < L1) {
-      out.pos.set(-L1 / 2 + s, 0, R);
-      out.tan.set(1, 0, 0);
-      out.curvature = 0;
-    } else if (s < L1 + arc) {
-      const th = (s - L1) / R;
-      out.pos.set(L1 / 2 + R * Math.sin(th), 0, R * Math.cos(th));
-      out.tan.set(Math.cos(th), 0, -Math.sin(th));
-      out.curvature = 1 / R;
-    } else if (s < 2 * L1 + arc) {
-      const u = s - L1 - arc;
-      out.pos.set(L1 / 2 - u, 0, -R);
-      out.tan.set(-1, 0, 0);
-      out.curvature = 0;
-    } else {
-      const th = (s - 2 * L1 - arc) / R;
-      out.pos.set(-L1 / 2 - R * Math.sin(th), 0, -R * Math.cos(th));
-      out.tan.set(-Math.cos(th), 0, Math.sin(th));
-      out.curvature = 1 / R;
-    }
-    out.right.crossVectors(out.tan, UP).normalize();
-    return out;
-  }
-
-  getPoint(s: number, lat: number, out = new THREE.Vector3()): THREE.Vector3 {
-    const f = this.getFrame(s);
-    return out.copy(f.pos).addScaledVector(f.right, lat);
-  }
-
-  getTangent(s: number, out = new THREE.Vector3()): THREE.Vector3 {
-    return out.copy(this.getFrame(s).tan);
   }
 
   // ---------------------------------------------------------------- build
