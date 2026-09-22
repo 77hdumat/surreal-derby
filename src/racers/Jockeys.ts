@@ -27,13 +27,14 @@ const base: JockeyMul = { maxSpeed: 1, accel: 1, handling: 1, mass: 1, gaugeRate
 
 /** 기수 6명. 말 스탯에 곱해져 조합 성능을 만든다 (카트라이더의 캐릭터×카트). */
 export const JOCKEYS: Jockey[] = [
-  { id: 'speed', name: '스피드 마스터', desc: '최고속 +8% · 조향 -5%', emoji: '⚡', silks: 0xe63946, cloth: 0x1d1d1d, mul: { ...base, maxSpeed: 1.08, handling: 0.95 } },
-  { id: 'accel', name: '스타트 대시', desc: '가속 +20% · 최고속 -3%', emoji: '🚀', silks: 0xffb703, cloth: 0x023047, mul: { ...base, accel: 1.2, maxSpeed: 0.97 } },
-  { id: 'drift', name: '드리프트 킹', desc: '조향 +15% · 게이지 충전 +25%', emoji: '🌀', silks: 0x2a9d8f, cloth: 0xf1faee, mul: { ...base, handling: 1.15, gaugeRate: 1.25 } },
-  { id: 'boost', name: '부스트 매니아', desc: '부스트 출력 +10% · 충전 -10%', emoji: '🔥', silks: 0x8338ec, cloth: 0xffbe0b, mul: { ...base, boostMul: 1.72, gaugeRate: 0.9 } },
-  { id: 'balance', name: '올라운더', desc: '모든 능력 기본', emoji: '🎯', silks: 0xffffff, cloth: 0x2b2d42, mul: { ...base } },
-  { id: 'heavy', name: '헤비 가드', desc: '질량 +40% (안 밀림) · 가속 -10%', emoji: '🛡️', silks: 0x3a5a40, cloth: 0xdad7cd, mul: { ...base, mass: 1.4, accel: 0.9 } },
+  { id: 'speed', name: '스피드 마스터', desc: '최고속 +8%', emoji: '⚡', silks: 0xe63946, cloth: 0x1d1d1d, mul: { ...base, maxSpeed: 1.08 } },
+  { id: 'accel', name: '스타트 대시', desc: '가속 +25%', emoji: '🚀', silks: 0xffb703, cloth: 0x023047, mul: { ...base, accel: 1.25 } },
+  { id: 'drift', name: '드리프트 킹', desc: '조향 +15% · 게이지 충전 +20%', emoji: '🌀', silks: 0x2a9d8f, cloth: 0xf1faee, mul: { ...base, handling: 1.15, gaugeRate: 1.2 } },
+  { id: 'boost', name: '부스트 매니아', desc: '부스트 출력 +12%', emoji: '🔥', silks: 0x8338ec, cloth: 0xffbe0b, mul: { ...base, boostMul: base.boostMul * 1.12 } },
+  { id: 'balance', name: '올라운더', desc: '전 능력 +4%', emoji: '🎯', silks: 0xffffff, cloth: 0x2b2d42, mul: { ...base, maxSpeed: 1.04, accel: 1.04, handling: 1.04, gaugeRate: 1.04 } },
+  { id: 'heavy', name: '헤비 가드', desc: '질량 +50% (안 밀림) · 조향 +5%', emoji: '🛡️', silks: 0x3a5a40, cloth: 0xdad7cd, mul: { ...base, mass: 1.5, handling: 1.05 } },
 ];
+
 
 export function jockeyById(id: string): Jockey {
   return JOCKEYS.find((j) => j.id === id) ?? JOCKEYS[4];
