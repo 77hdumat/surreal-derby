@@ -79,7 +79,7 @@ export interface KartState {
 
 export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'lap'; lap: number } | { k: 'finish' } | { k: 'bale' } | { k: 'pad' };
 
-export const LAPS = 3; // 서킷 2.4km × 3
+export const LAPS = 2; // 서킷 3.3km × 2
 export const MAX_BOOSTS = 2;
 export const BOOST_DURATION = 3.0;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
