@@ -1,0 +1,106 @@
+import { describe, expect, it } from 'vitest';
+import { TrackGeometry } from '../track/TrackGeometry';
+import { BOOST_DURATION, LAPS, createKartState, finishDistance, resolveKartCollision, stepKart, syncKartToTrack, type KartInput, type KartParams } from './KartPhysics';
+
+const track = new TrackGeometry();
+const P: KartParams = { maxSpeed: 20, accel: 8, handling: 1, mass: 100, gaugeRate: 0.55, boostMul: 1.35, radius: 1.3 };
+const inp = (o: Partial<KartInput>): KartInput => ({ steer: 0, throttle: 0, brake: 0, drift: false, boost: false, ...o });
+const DT = 1 / 60;
+
+function spawn(s = 10, lat = 0) {
+  const p = track.getPoint(s, lat);
+  const st = createKartState(p.x, p.z, track.yawAt(s));
+  syncKartToTrack(st, track);
+  return st;
+}
+
+describe('stepKart', () => {
+  it('직진 가속은 maxSpeed 를 넘지 않고 앞으로 간다', () => {
+    const st = spawn();
+    for (let i = 0; i < 600; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    expect(st.speed).toBeCloseTo(P.maxSpeed, 5);
+    expect(st.progress).toBeGreaterThan(100);
+    expect(Math.abs(st.lat)).toBeLessThan(0.5);
+  });
+
+  it('드리프트하면 슬립이 생기고 게이지가 찬다', () => {
+    const st = spawn();
+    for (let i = 0; i < 180; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    expect(st.drifting).toBe(true);
+    expect(st.slip).toBeGreaterThan(0.2);
+    expect(st.gauge).toBeGreaterThan(0.1);
+    // 놓으면 슬립 복원
+    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    expect(st.drifting).toBe(false);
+    expect(Math.abs(st.slip)).toBeLessThan(0.05);
+  });
+
+  it('게이지가 가득 차야 부스트가 나가고, 부스트 중 최고속이 올라간다', () => {
+    const st = spawn();
+    st.gauge = 0.5;
+    expect(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT)).toEqual([]);
+    st.gauge = 1;
+    const ev = stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT);
+    expect(ev).toEqual([{ k: 'boost' }]);
+    expect(st.gauge).toBe(0);
+    expect(st.boostT).toBeCloseTo(BOOST_DURATION - DT, 6);
+    for (let i = 0; i < 100; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.2);
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    expect(st.speed).toBeCloseTo(P.maxSpeed, 2);
+  });
+
+  it('벽에 닿으면 lat 이 클램프되고 wall 이벤트 + 감속', () => {
+    const st = spawn(10, 0);
+    st.speed = 18;
+    st.yaw = track.yawAt(10) - 0.6; // 오른쪽(바깥)으로 비스듬히
+    const evs: string[] = [];
+    for (let i = 0; i < 120; i++) for (const e of stepKart(st, inp({ throttle: 1 }), P, track, DT)) evs.push(e.k);
+    expect(evs).toContain('wall');
+    expect(Math.abs(st.lat)).toBeLessThanOrEqual(track.width / 2 - 1 + 1e-6);
+  });
+
+  it('결승선을 세 번 지나면 완주 + 랩 이벤트', () => {
+    const st = spawn(track.length - 4, 0);
+    expect(st.progress).toBeCloseTo(-4, 6);
+    const laps: number[] = [];
+    let finished = false;
+    let t = 0;
+    for (let i = 0; i < 60 * 200 && !finished; i++) {
+      t += DT;
+      // 중심선 추종 조향
+      const ahead = track.getPoint(st.s + 10, 0);
+      const want = Math.atan2(-(ahead.z - st.z), ahead.x - st.x);
+      const err = Math.atan2(Math.sin(want - st.yaw), Math.cos(want - st.yaw));
+      for (const e of stepKart(st, inp({ throttle: 1, steer: Math.max(-1, Math.min(1, -err * 2)) }), P, track, DT, t)) {
+        if (e.k === 'lap') laps.push(e.lap);
+        if (e.k === 'finish') finished = true;
+      }
+    }
+    expect(laps).toEqual([1, 2]);
+    expect(finished).toBe(true);
+    expect(st.lapsDone).toBe(LAPS);
+    expect(st.finishTime).toBeGreaterThan(0);
+    expect(st.progress).toBeGreaterThanOrEqual(finishDistance(track));
+  });
+});
+
+describe('resolveKartCollision', () => {
+  it('겹친 두 말을 질량 비례로 밀어낸다', () => {
+    const a = createKartState(0, 0, 0);
+    const b = createKartState(1.0, 0, 0);
+    const heavy = { ...P, mass: 300 };
+    a.speed = b.speed = 10;
+    expect(resolveKartCollision(a, P, b, heavy)).toBe(true);
+    expect(b.x - a.x).toBeCloseTo(2.6, 6);
+    expect(Math.abs(a.x)).toBeGreaterThan(Math.abs(b.x - 1.0)); // 가벼운 a 가 더 밀림
+    expect(a.speed).toBeLessThan(10);
+    expect(a.bumpT).toBeGreaterThan(0);
+  });
+  it('안 겹치면 false', () => {
+    const a = createKartState(0, 0, 0);
+    const b = createKartState(5, 0, 0);
+    expect(resolveKartCollision(a, P, b, P)).toBe(false);
+  });
+});
