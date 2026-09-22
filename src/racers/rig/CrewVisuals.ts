@@ -414,7 +414,7 @@ export class CostumeRig extends CrewVisualBase {
 
   onEvent(type: RaceEventType, ctx: VisualContext): void {
     super.onEvent(type, ctx);
-    if (type === 'COSTUME_COLLAPSE') this.carryFinishPose = false;
+    if (type === 'COSTUME_COLLAPSE' || type === 'COSTUME_RECOVER') this.carryFinishPose = false;
     if (type === 'COSTUME_CARRY') {
       this.liftT = 0;
       this.carryFinishPose = true;

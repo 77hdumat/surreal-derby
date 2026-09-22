@@ -8,6 +8,8 @@ import type { ParticleManager } from '../effects/ParticleManager';
 import { whenAssetsIdle } from './rig/Assets';
 import type { Footprints } from '../effects/Footprints';
 import type { KartParams, KartState } from '../game/KartPhysics';
+import type { RacerStatus } from '../game/RaceState';
+import type { SpecialAbility } from './Racer';
 import type { SlotConfig } from '../game/KartRace';
 import { jockeyById } from './Jockeys';
 
@@ -25,6 +27,7 @@ export class RacerManager {
   private particles: ParticleManager;
   private ctx: VisualContext[] = [];
   private dustPhase: number[] = [];
+  private wasBoosting: boolean[] = [];
   private exhaustTimer = 0;
   private tmpTan = new THREE.Vector3();
   private tmpBack = new THREE.Vector3();
@@ -98,6 +101,7 @@ export class RacerManager {
       this.defs.push(def);
       this.ctx.push(this.makeCtx());
       this.dustPhase.push(Math.random());
+      this.wasBoosting.push(false);
     });
     await this.whenReady();
   }
@@ -111,6 +115,27 @@ export class RacerManager {
     this.defs = [];
     this.ctx = [];
     this.dustPhase = [];
+    this.wasBoosting = [];
+  }
+
+  /** 부스트 중 말별 특수 연출 상태 (관람 모드의 이벤트 연출 재사용) */
+  static boostState(ability: SpecialAbility): RacerStatus {
+    switch (ability) {
+      case 'COSTUME':
+        return 'CARRYING'; // 말탈을 벗어 들고 사람 다리로 전력 질주
+      case 'TROJAN':
+        return 'AMBUSH'; // 병사들이 나와 뒤에서 밀어준다
+      case 'ELEPHANT':
+        return 'SPRAYING'; // 물을 뿜으며 돌진
+      case 'HUMAN':
+        return 'BIPEDAL'; // 갑자기 두 발로 달린다
+      case 'COW':
+        return 'RAGING'; // 분노 + 투우사 기수
+      case 'CIRCUS':
+        return 'PERFORMING'; // 뒷발로 깡충깡충
+      default:
+        return 'BOOSTING';
+    }
   }
 
   reset(): void {
@@ -132,8 +157,18 @@ export class RacerManager {
   boostFx(slot: number): void {
     const v = this.visuals[slot];
     if (!v) return;
-    v.onEvent('SUPER_SPRINT', this.ctx[slot]);
+    const ab = this.defs[slot].specialAbility;
+    const ev = ab === 'COSTUME' ? 'COSTUME_CARRY' : ab === 'TROJAN' ? 'TROJAN_AMBUSH' : ab === 'ELEPHANT' ? 'ELEPHANT_SPRAY' : ab === 'HUMAN' ? 'HUMAN_BIPEDAL' : ab === 'COW' ? 'COW_RAGE' : ab === 'CIRCUS' ? 'CIRCUS_ACT' : ab === 'MOTORCYCLE' ? 'MOTORCYCLE_BOOST' : ab === 'LONGBODY' ? 'LONGBODY_STRETCH' : ab === 'GIRAFFE' ? 'GIRAFFE_MEGA_NECK' : 'SUPER_SPRINT';
+    v.onEvent(ev, this.ctx[slot]);
     this.particles.sparkle(v.root.position.clone().setY(1.5));
+  }
+
+  private boostEndFx(slot: number): void {
+    const v = this.visuals[slot];
+    if (!v) return;
+    const ab = this.defs[slot].specialAbility;
+    if (ab === 'COSTUME') v.onEvent('COSTUME_RECOVER', this.ctx[slot]); // 말탈 다시 뒤집어쓰기
+    if (ab === 'LONGBODY') v.onEvent('LONGBODY_RETRACT', this.ctx[slot]);
   }
 
   miniFx(slot: number): void {
@@ -169,7 +204,16 @@ export class RacerManager {
       ctx.speed = Math.abs(k.speed);
       ctx.speedNorm = THREE.MathUtils.clamp(Math.abs(k.speed) / p.maxSpeed, 0, 1.3);
       ctx.accel = k.lastAccel;
-      ctx.state = k.finished ? 'FINISHED' : k.boostT > 0 ? 'BOOSTING' : Math.abs(k.speed) > 0.3 ? 'RUNNING' : 'IDLE';
+      const boosting = k.boostT > 0 && !k.finished;
+      if (boosting !== this.wasBoosting[i]) {
+        this.wasBoosting[i] = boosting;
+        if (!boosting) this.boostEndFx(i);
+      }
+      ctx.state = k.finished ? 'FINISHED' : boosting ? RacerManager.boostState(def.specialAbility) : Math.abs(k.speed) > 0.3 ? 'RUNNING' : 'IDLE';
+      // 롱바디·기린은 몸/목 늘어남으로 표현
+      const stretchy = def.specialAbility === 'LONGBODY' || def.specialAbility === 'GIRAFFE';
+      ctx.extension = stretchy ? THREE.MathUtils.lerp(ctx.extension, boosting ? 1 : 0, Math.min(1, dt * 4)) : 0;
+      ctx.extensionMax = stretchy ? (def.specialAbility === 'GIRAFFE' ? 5 : 4) : 0;
       ctx.stateTimer = k.boostT;
       ctx.cornerWeight = Math.max(this.track.cornerWeight(k.s), Math.abs(k.slip) / 0.45);
       ctx.boost = THREE.MathUtils.lerp(ctx.boost, k.boostT > 0 ? 1 : k.miniT > 0 ? 0.5 : 0, Math.min(1, dt * 6));
@@ -196,6 +240,18 @@ export class RacerManager {
           }
         }
         continue;
+      }
+      // 부스트 특수 파티클: 코끼리 물대포 / 소 콧김
+      if (doExhaust && k.boostT > 0 && !k.finished) {
+        if (def.specialAbility === 'ELEPHANT') {
+          const tip = RacerFactory.trunkTip(v);
+          if (tip) this.particles.water(tip, this.tmpTan);
+        } else if (def.specialAbility === 'COW') {
+          for (const np of RacerFactory.nostrilPoints(v)) {
+            this.tmpHoof.copy(np).applyMatrix4(v.root.matrixWorld);
+            this.particles.steam(this.tmpHoof, this.tmpTan);
+          }
+        }
       }
       // 발자국
       if (this.footprints && distToCam < 120) {
