@@ -89,9 +89,9 @@ export class UIManager {
   constructor(defs: RacerDefinition[]) {
     this.defs = defs;
     this.mountId = this.load('surreal-derby-mount', defs[defs.length - 1].id);
-    this.jockeyId = this.load('surreal-derby-jockey', 'balance');
+    this.jockeyId = this.load('surreal-derby-jockey', 'skull');
     if (!defs.some((d) => d.id === this.mountId)) this.mountId = defs[0].id;
-    if (!JOCKEYS.some((j) => j.id === this.jockeyId)) this.jockeyId = 'balance';
+    if (!JOCKEYS.some((j) => j.id === this.jockeyId)) this.jockeyId = JOCKEYS[0].id;
     this.nick = this.load('surreal-derby-nick', '');
     const nick = $('nick') as HTMLInputElement;
     const lobbyNick = $('lobby-nick') as HTMLInputElement;
@@ -355,7 +355,7 @@ export class UIManager {
       this.previewScene.remove(this.previewVisual.root);
       this.previewVisual.dispose();
     }
-    this.previewVisual = RacerFactory.createVisual({ ...d, modelUrl: undefined, silksColor: j.silks, clothColor: j.cloth });
+    this.previewVisual = RacerFactory.createVisual({ ...d, modelUrl: undefined, silksColor: j.silks, clothColor: j.cloth, jockeyHead: j.head });
     this.previewScene.add(this.previewVisual.root);
     const h = this.previewVisual.height;
     // 큰 말(코끼리·트로이)도 프레임에 들어오게 키에 비례해 물러난다

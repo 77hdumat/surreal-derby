@@ -1,5 +1,6 @@
 import type { RacerDefinition } from './Racer';
 import type { KartParams } from '../game/KartPhysics';
+import type { JockeyHead } from './rig/JockeyHeads';
 
 export interface JockeyMul {
   maxSpeed: number;
@@ -20,24 +21,28 @@ export interface Jockey {
   silks: number;
   /** 소매·헬멧·안장천 색 */
   cloth: number;
+  /** 캐릭터 머리 */
+  head: JockeyHead;
   mul: JockeyMul;
 }
 
 const base: JockeyMul = { maxSpeed: 1, accel: 1, handling: 1, mass: 1, gaugeRate: 1, boostMul: 1.57 };
 
 /** 기수 6명. 말 스탯에 곱해져 조합 성능을 만든다 (카트라이더의 캐릭터×카트). */
+/** 기수 6명 — 보너스만 있음(페널티 없음). 말 스탯에 곱해진다 (카트라이더의 캐릭터×카트). */
 export const JOCKEYS: Jockey[] = [
-  { id: 'speed', name: '스피드 마스터', desc: '최고속 +8%', emoji: '⚡', silks: 0xe63946, cloth: 0x1d1d1d, mul: { ...base, maxSpeed: 1.08 } },
-  { id: 'accel', name: '스타트 대시', desc: '가속 +25%', emoji: '🚀', silks: 0xffb703, cloth: 0x023047, mul: { ...base, accel: 1.25 } },
-  { id: 'drift', name: '드리프트 킹', desc: '조향 +15% · 게이지 충전 +20%', emoji: '🌀', silks: 0x2a9d8f, cloth: 0xf1faee, mul: { ...base, handling: 1.15, gaugeRate: 1.2 } },
-  { id: 'boost', name: '부스트 매니아', desc: '부스트 출력 +12%', emoji: '🔥', silks: 0x8338ec, cloth: 0xffbe0b, mul: { ...base, boostMul: base.boostMul * 1.12 } },
-  { id: 'balance', name: '올라운더', desc: '전 능력 +4%', emoji: '🎯', silks: 0xffffff, cloth: 0x2b2d42, mul: { ...base, maxSpeed: 1.04, accel: 1.04, handling: 1.04, gaugeRate: 1.04 } },
-  { id: 'heavy', name: '헤비 가드', desc: '질량 +50% (안 밀림) · 조향 +5%', emoji: '🛡️', silks: 0x3a5a40, cloth: 0xdad7cd, mul: { ...base, mass: 1.5, handling: 1.05 } },
+  { id: 'skull', name: '해골 기사', desc: '최고속 +8%', emoji: '💀', head: 'skull', silks: 0x1d1d1d, cloth: 0x6b0f1a, mul: { ...base, maxSpeed: 1.08 } },
+  { id: 'robot', name: '로보 제트', desc: '가속 +25%', emoji: '🤖', head: 'robot', silks: 0x2a9dff, cloth: 0x0d1b2a, mul: { ...base, accel: 1.25 } },
+  { id: 'cat', name: '냥냥이', desc: '조향 +15% · 게이지 충전 +20%', emoji: '🐱', head: 'cat', silks: 0xffb703, cloth: 0x7a4a12, mul: { ...base, handling: 1.15, gaugeRate: 1.2 } },
+  { id: 'alien', name: '외계인 X', desc: '부스트 출력 +12%', emoji: '👽', head: 'alien', silks: 0x8338ec, cloth: 0xc0f56b, mul: { ...base, boostMul: base.boostMul * 1.12 } },
+  { id: 'pumpkin', name: '호박 대장', desc: '전 능력 +4%', emoji: '🎃', head: 'pumpkin', silks: 0xf28c28, cloth: 0x2b2d42, mul: { ...base, maxSpeed: 1.04, accel: 1.04, handling: 1.04, gaugeRate: 1.04 } },
+  { id: 'pig', name: '꿀꿀이', desc: '질량 +50% (안 밀림) · 조향 +5%', emoji: '🐷', head: 'pig', silks: 0xf4a3b5, cloth: 0x3a5a40, mul: { ...base, mass: 1.5, handling: 1.05 } },
 ];
 
 
+
 export function jockeyById(id: string): Jockey {
-  return JOCKEYS.find((j) => j.id === id) ?? JOCKEYS[4];
+  return JOCKEYS.find((j) => j.id === id) ?? JOCKEYS[0];
 }
 
 interface MountKart {

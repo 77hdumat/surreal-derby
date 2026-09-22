@@ -286,7 +286,7 @@ export class Game {
   // ---------------------------------------------------------------- lobby
 
   private emptySlot(): LobbySlot {
-    return { name: '', mountId: RACER_DEFINITIONS[0].id, jockeyId: 'balance', ready: false, cpu: false, human: false, wins: 0 };
+    return { name: '', mountId: RACER_DEFINITIONS[0].id, jockeyId: JOCKEYS[0].id, ready: false, cpu: false, human: false, wins: 0 };
   }
 
   private mySlotData(): LobbySlot {

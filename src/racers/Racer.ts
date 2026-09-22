@@ -1,4 +1,5 @@
 import type { RacerState } from '../game/RaceState';
+import type { JockeyHead } from './rig/JockeyHeads';
 
 export type SpecialAbility =
   | 'COSTUME'
@@ -39,6 +40,8 @@ export interface RacerDefinition {
   bodyColor: number;
   clothColor: number;
   silksColor: number;
+  /** 대결 모드: 기수 캐릭터 머리 (없으면 헬멧) */
+  jockeyHead?: JockeyHead;
   /** 코끝이 몸통 원점보다 얼마나 앞에 있나(m) — 결승선 판정은 코끝 기준 */
   noseOffset: number;
   /** 보폭 (m) — 말발굽 소리/파티클 주기 */

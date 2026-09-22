@@ -5,10 +5,10 @@ import { KartRace, type SlotConfig } from './KartRace';
 
 const DT = 1 / 60;
 const slots: SlotConfig[] = [
-  { slot: 0, name: 'A', mountId: 'classic', jockeyId: 'balance', cpu: true },
-  { slot: 1, name: 'B', mountId: 'human', jockeyId: 'speed', cpu: true },
-  { slot: 2, name: 'C', mountId: 'elephant', jockeyId: 'heavy', cpu: true },
-  { slot: 3, name: 'D', mountId: 'motorcycle', jockeyId: 'drift', cpu: true },
+  { slot: 0, name: 'A', mountId: 'classic', jockeyId: 'pumpkin', cpu: true },
+  { slot: 1, name: 'B', mountId: 'human', jockeyId: 'skull', cpu: true },
+  { slot: 2, name: 'C', mountId: 'elephant', jockeyId: 'pig', cpu: true },
+  { slot: 3, name: 'D', mountId: 'motorcycle', jockeyId: 'cat', cpu: true },
 ];
 
 describe('KartRace', () => {

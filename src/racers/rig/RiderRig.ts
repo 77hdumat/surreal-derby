@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { makeJockeyHead, type JockeyHead } from './JockeyHeads';
 import { instantiate, findBone } from './Assets';
 import { rotateBoneModelSpace, aimBoneModelSpace, BoneSocket, AXIS_Y, AXIS_Z } from './BoneTools';
 
@@ -52,6 +53,8 @@ export interface RiderColors {
   boots?: number;
   /** 헬멧 없이 맨머리 */
   bareHead?: boolean;
+  /** 캐릭터 머리 (해골·돼지…) — 있으면 헬멧 대신 붙인다 */
+  head?: JockeyHead;
 }
 
 /** 자세 파라미터 — 모든 각도는 라디안, 모델 공간(+x 전방, +y 위, +z 오른쪽) 기준 */
@@ -130,6 +133,7 @@ export class RiderRig {
   };
   private helmetMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.32 });
   private bareHead = false;
+  private headKind: JockeyHead | undefined;
   private pose: RiderPose = JOCKEY_POSE;
   /** 손 위치 (그룹 로컬) — 고삐 끝점 */
   readonly handL = new THREE.Vector3(0.55, 0.35, -0.2);
@@ -158,6 +162,7 @@ export class RiderRig {
     if (colors.breeches !== undefined) this.uniforms.breeches.value.set(colors.breeches);
     if (colors.boots !== undefined) this.uniforms.boots.value.set(colors.boots);
     this.bareHead = !!colors.bareHead;
+    this.headKind = colors.head;
     this.helmetMat.color.set(colors.helmet);
   }
 
@@ -318,6 +323,14 @@ uniform float sideCenter;`,
 
   private buildHelmet(): void {
     if (!this.bones || this.bareHead) return;
+    if (this.headKind) {
+      // 캐릭터 머리: 사람 머리를 통째로 덮는다 (헬멧 오프셋보다 조금 아래 = 머리 중심)
+      const h = makeJockeyHead(this.headKind);
+      this.group.add(h);
+      const off = this.cfg.helmetOffset ?? [0, 0.1, 0];
+      this.sockets.push(new BoneSocket(this.bones.head, this.group, h, new THREE.Vector3(off[0] - 0.01, off[1] - 0.07, off[2])));
+      return;
+    }
     const g = new THREE.Group();
     const cap = new THREE.Mesh(new THREE.SphereGeometry(0.118, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), this.helmetMat);
     cap.scale.set(1.08, 0.92, 1);

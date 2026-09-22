@@ -96,7 +96,7 @@ export class RacerManager {
     slots.forEach((cfg, i) => {
       const base = RACER_DEFINITIONS.find((d) => d.id === cfg.mountId) ?? RACER_DEFINITIONS[0];
       const j = jockeyById(cfg.jockeyId);
-      const def: RacerDefinition = { ...base, number: i + 1, name: cfg.name, silksColor: j.silks, clothColor: j.cloth };
+      const def: RacerDefinition = { ...base, number: i + 1, name: cfg.name, silksColor: j.silks, clothColor: j.cloth, jockeyHead: j.head };
       const v = RacerFactory.createVisual(def);
       this.scene.add(v.root);
       this.visuals.push(v);

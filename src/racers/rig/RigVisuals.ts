@@ -364,7 +364,7 @@ export class LongbodyRig extends HorseRig {
 
   protected buildDecor(): void {
     // 뒷기수: 골반 소켓
-    this.rider2 = new RiderRig(RIDER_ASSET_CFG, { silks: this.def.clothColor, sleeves: this.def.silksColor, helmet: this.def.silksColor });
+    this.rider2 = new RiderRig(RIDER_ASSET_CFG, { silks: this.def.clothColor, sleeves: this.def.silksColor, helmet: this.def.silksColor, head: this.def.jockeyHead });
     this.socket('hips', this.rider2.group, [-0.05, 0.38, 0]);
   }
 

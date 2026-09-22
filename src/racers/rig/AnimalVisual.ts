@@ -340,7 +340,7 @@ export abstract class AnimalVisual implements RacerVisual {
 
   protected buildRider(): void {
     if (!RIDER_ASSET.cfg) return;
-    this.rider = new RiderRig(RIDER_ASSET.cfg, this.riderColors ?? { silks: this.def.silksColor, sleeves: this.def.clothColor, helmet: this.def.clothColor });
+    this.rider = new RiderRig(RIDER_ASSET.cfg, { ...(this.riderColors ?? { silks: this.def.silksColor, sleeves: this.def.clothColor, helmet: this.def.clothColor }), head: this.def.jockeyHead });
     this.rider.setPose(this.riderPose);
     const s = this.socket(this.cfg.seat.bone, this.rider.group, this.cfg.seat.offset);
     if (s) this.riderSocket = s;

@@ -15,7 +15,7 @@ describe('kartParamsFor', () => {
     expect(s.accel).toBeCloseTo(b.accel, 6);
   });
   it('말별 최고속은 131~147km/h 범위, 휴먼 러너가 최고속 1위가 아니다', () => {
-    const tops = RACER_DEFINITIONS.map((d) => [d.id, kartParamsFor(d, jockeyById('balance')).maxSpeed * 3.6] as const);
+    const tops = RACER_DEFINITIONS.map((d) => [d.id, kartParamsFor(d, jockeyById('pig')).maxSpeed * 3.6] as const);
     for (const [, t] of tops) {
       expect(t).toBeGreaterThanOrEqual(130);
       expect(t).toBeLessThanOrEqual(148);

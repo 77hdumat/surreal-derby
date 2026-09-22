@@ -514,7 +514,7 @@ export class HumanRig extends CrewVisualBase {
     // 러너: 티셔츠(clothColor)·반바지·운동화, 맨머리
     this.runner = this.addCrew({ silks: def.clothColor, sleeves: def.clothColor, helmet: 0, breeches: 0x2b2b33, boots: 0xf0f0f0, bareHead: true }, new THREE.Vector3(0, 0.55, 0), 'hips');
     // 등에 탄 기수: 고삐 대신 달리는 사람의 어깨를 붙잡는다
-    this.jockey = this.addCrew({ silks: def.silksColor, sleeves: def.clothColor, helmet: def.clothColor }, new THREE.Vector3(-0.2, 0.75, 0), 'hips');
+    this.jockey = this.addCrew({ head: def.jockeyHead, silks: def.silksColor, sleeves: def.clothColor, helmet: def.clothColor }, new THREE.Vector3(-0.2, 0.75, 0), 'hips');
     this.jockey.setPose(PIGGYBACK_POSE);
   }
 
