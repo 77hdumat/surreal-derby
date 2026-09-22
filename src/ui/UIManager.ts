@@ -255,7 +255,9 @@ export class UIManager {
     this.previewVisual = RacerFactory.createVisual({ ...d, modelUrl: undefined, silksColor: j.silks, clothColor: j.cloth });
     this.previewScene.add(this.previewVisual.root);
     const h = this.previewVisual.height;
-    this.previewCamera.position.set(6.5, h * 0.9 + 1, 6.5);
+    // 큰 말(코끼리·트로이)도 프레임에 들어오게 키에 비례해 물러난다
+    const dist = THREE.MathUtils.clamp(h * 3.1, 5.5, 12);
+    this.previewCamera.position.set(dist, h * 0.9 + 1, dist);
     this.previewCamera.lookAt(0, h * 0.5, 0);
   }
 

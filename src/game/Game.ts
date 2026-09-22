@@ -195,6 +195,10 @@ export class Game {
     this.ui.showMenu();
     this.screen = 'MENU';
     this.renderer.setAnimationLoop(() => this.loop());
+    // 탭이 뒤로 가면 rAF 가 멈춘다 → 호스트 시뮬·중계가 끊기지 않게 30Hz 로 계속 돌린다
+    setInterval(() => {
+      if (document.hidden && (this.screen === 'RACE' || this.screen === 'RESULT')) this.loop();
+    }, 1000 / 30);
     void this.warmUp().then(() => {
       // ?r=CODE 로 열면 바로 참가
       const m = /[?&]r=([A-Z0-9]{5})/i.exec(location.search);
