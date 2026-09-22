@@ -15,26 +15,23 @@ import { installHsvFog } from '../effects/HsvFog';
 import { KartRace, MAX_SLOTS, type SlotConfig } from './KartRace';
 import { InputManager } from './Input';
 import { Net } from '../net/Net';
-import { decodeInput, decodeKart, encodeInput, encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
-import { angleDelta, currentLap, stepKart, type KartInput } from './KartPhysics';
+import { encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
+import { RemoteKart } from '../net/RemoteKart';
+import { currentLap } from './KartPhysics';
 import { JOCKEYS } from '../racers/Jockeys';
 
 type Mode = 'none' | 'solo' | 'host' | 'client';
 type Screen = 'MENU' | 'LOBBY' | 'RACE' | 'RESULT';
 
 const STEP = 1 / 60;
-const SNAP_HZ = 30;
-
-interface Snap {
-  recv: number;
-  ts: number;
-  k: number[][];
-}
+const SEND_HZ = 30;
 
 /**
  * 게임 루프 + 화면 전환 + 네트워크 배선.
- * solo/host: KartRace 를 고정 60Hz 로 시뮬. host 는 30Hz 스냅샷 + 이벤트 브로드캐스트.
- * client: 입력 전송, 타인 보간, 자기 말 로컬 예측 + 호스트 값으로 보정.
+ *
+ * 네트워크 모델: 클라이언트 권위(카트라이더식). 자기 말은 자기 기기에서만 물리를 돌리고(절대 되감기·밀림 없음),
+ * 상태를 30Hz 로 보낸다. 남의 말은 받은 상태를 보간해서 그린다. 충돌은 각자 자기 말에만 적용.
+ * 호스트는 CPU 를 돌리고, 모든 상태를 모아 다시 뿌리며(스타형 중계), 결과만 판정한다.
  */
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -72,19 +69,13 @@ export class Game {
   private tmp = new THREE.Vector3();
   private warm = false;
 
-  // host
-  private outSeq = 0;
-  private snapAccum = 0;
-  // client
-  private snaps: Snap[] = [];
-  private snapSeq = 0;
-  private playT: number | null = null;
-  private jitter = 0;
-  private sendGap = 0;
-  private lastRecv = 0;
-  private lastRecvTs = 0;
-  private inSeq = 0;
-  private clientRacing = false;
+  /** 원격 말 상태 버퍼 (슬롯별) */
+  private remotes: RemoteKart[] = [];
+  /** 호스트: 슬롯별 마지막으로 받은 원격 상태 (중계용) */
+  private latestRemote: ({ ts: number; k: number[] } | null)[] = [];
+  private sendSeq = 0;
+  private sendAccum = 0;
+  private recvSeq = 0;
   private pingT = 0;
   private netInfoT = 0;
 
@@ -356,8 +347,11 @@ export class Game {
         this.renderLobby();
         this.broadcastLobby();
         break;
-      case 'in':
-        if (this.screen === 'RACE') this.race.setInput(slot, decodeInput(m.d));
+      case 'st':
+        if (this.screen === 'RACE' || this.screen === 'RESULT') {
+          this.remotes[slot]?.push(m.ts, m.k);
+          this.latestRemote[slot] = { ts: m.ts, k: m.k };
+        }
         break;
       case 'ping':
         this.net?.broadcast({ t: 'pong', t0: m.t0 });
@@ -444,13 +438,17 @@ export class Game {
         break;
       case 'count':
         this.showCount(m.n);
-        if (m.n === 0) this.clientRacing = true;
+        if (m.n === 0 && this.race.phase !== 'RACING') this.race.startRacing();
         break;
       case 'snap':
-        if (this.screen === 'RACE') this.onSnapshot(m);
-        break;
-      case 'ev':
-        if (this.screen === 'RACE') for (const e of m.ev) this.onRaceEvent(e);
+        if (this.screen !== 'RACE' && this.screen !== 'RESULT') break;
+        if (m.q <= this.recvSeq && this.recvSeq - m.q < 100000) break; // 비순서 채널: 옛 것 버림
+        this.recvSeq = m.q;
+        for (let i = 0; i < m.k.length; i++) {
+          const k = m.k[i];
+          if (i === this.mySlot || !k) continue;
+          this.remotes[i]?.push(m.ts[i], k);
+        }
         break;
       case 'over':
         this.race.results = m.results;
@@ -571,7 +569,15 @@ export class Game {
     this.ui.setLobbyMsg('레이스 준비 중…');
     this.ui.setStartEnabled(false, '준비 중…');
     await this.racers.setLineup(slots);
-    this.race.setup(slots);
+    const me = this.mySlot;
+    const mode = this.mode;
+    this.race.authority = mode !== 'client';
+    this.race.setup(slots, (s) => (mode === 'solo' ? true : mode === 'host' ? s.cpu || s.slot === me : s.slot === me));
+    this.remotes = slots.map(() => new RemoteKart());
+    this.latestRemote = slots.map(() => null);
+    this.recvSeq = 0;
+    this.sendSeq = 0;
+    this.sendAccum = 0;
     this.particles.clear();
     this.footprints.clear();
     this.track.resetGate();
@@ -580,15 +586,6 @@ export class Game {
     this.finishTimer = 0;
     this.excitement = 0.3;
     this.accum = 0;
-    this.snapAccum = 0;
-    this.outSeq = 0;
-    this.snaps = [];
-    this.snapSeq = 0;
-    this.playT = null;
-    this.jitter = 0;
-    this.sendGap = 0;
-    this.lastRecv = 0;
-    this.clientRacing = false;
     this.input.attach();
     this.input.clear();
     this.screen = 'RACE';
@@ -624,6 +621,7 @@ export class Game {
   // ---------------------------------------------------------------- race events
 
   private onRaceEvent(e: { k: string; slot: number; lap?: number; other?: number }): void {
+    if (!this.racers.visuals[e.slot]) return;
     const slot = e.slot;
     const pos = this.racers.worldPosition(slot, this.tmp).clone();
     const me = slot === this.mySlot;
@@ -635,6 +633,11 @@ export class Game {
           this.camera.shake(0.25);
           this.effects.flashScreen(0.25);
         }
+        break;
+      case 'mini':
+        this.racers.miniFx(slot);
+        this.audio.play('whoosh', { pos, minGain: me ? 0.7 : 0.25, gain: 0.7, rate: 1.2 });
+        if (me) this.camera.shake(0.12);
         break;
       case 'wall':
         this.racers.bump(slot, true);
@@ -726,13 +729,11 @@ export class Game {
     this.effects.render();
   }
 
-  /** 호스트/솔로: 고정 스텝 시뮬 (RESULT 화면에서도 남은 말들이 움직이게) */
+  /**
+   * 시뮬 + 네트워크 한 틱 (RACE/RESULT 공통). 내 말·CPU 는 고정 스텝 물리, 원격 말은 보간, 30Hz 로 상태 송신.
+   * @returns 이번 틱에 발생한 내(소유) 말 이벤트
+   */
   private stepSim(dt: number): void {
-    if (this.mode === 'client') {
-      // 결과 화면의 클라이언트: 마지막 스냅샷 기준으로 로컬 물리로 굴린다
-      for (let i = 0; i < this.race.karts.length; i++) stepKart(this.race.karts[i], this.race.inputOf(i), this.race.params[i], this.track, dt, this.race.time);
-      return;
-    }
     this.accum += dt;
     let steps = 0;
     while (this.accum >= STEP && steps < 6) {
@@ -740,43 +741,53 @@ export class Game {
       this.accum -= STEP;
       steps++;
     }
+    for (const e of this.race.events) this.onRaceEvent(e);
     this.race.events = [];
+    // 원격 말 보간 + 상태 전이 연출
+    for (let i = 0; i < this.race.karts.length; i++) {
+      if (this.race.owned[i]) continue;
+      const tr = this.remotes[i].sample(dt, this.race.karts[i]);
+      if (tr.boostStart) this.onRaceEvent({ k: 'boost', slot: i });
+      if (tr.bumpStart) this.onRaceEvent({ k: 'wall', slot: i });
+      if (tr.finished) this.onRaceEvent({ k: 'finish', slot: i });
+    }
+    if (!this.race.owned.every(Boolean)) this.race.refreshRanking();
+    // 송신
+    if (this.net && this.mode !== 'solo') {
+      this.sendAccum += dt;
+      if (this.sendAccum >= 1 / SEND_HZ - 0.002) {
+        this.sendAccum = Math.min(this.sendAccum - 1 / SEND_HZ, 1 / SEND_HZ);
+        const now = Math.round(performance.now());
+        if (this.mode === 'host') {
+          const k = this.race.karts.map((kart, i) => (this.race.owned[i] ? encodeKart(kart) : this.latestRemote[i]?.k ?? null));
+          const ts = this.race.karts.map((_, i) => (this.race.owned[i] ? now : this.latestRemote[i]?.ts ?? 0));
+          this.net.broadcastDroppable({ t: 'snap', q: ++this.sendSeq, k, ts });
+        } else if (this.race.phase === 'RACING' || this.race.phase === 'OVER') {
+          this.net.sendFast({ t: 'st', q: ++this.sendSeq, ts: now, k: encodeKart(this.race.karts[this.mySlot]) });
+        }
+      }
+    }
   }
 
   private updateRace(dt: number): void {
     const myKart = this.race.karts[this.mySlot];
     if (!myKart) return;
     const input = this.input.update(dt);
-
-    if (this.mode === 'client') {
-      this.clientTick(dt, input);
-    } else {
-      this.race.setInput(this.mySlot, input);
-      this.accum += dt;
-      let steps = 0;
-      while (this.accum >= STEP && steps < 6) {
-        this.race.step(STEP);
-        this.accum -= STEP;
-        steps++;
-      }
+    this.race.setInput(this.mySlot, input);
+    this.stepSim(dt);
+    if (this.mode !== 'client') {
       if (this.race.phase === 'COUNTDOWN') this.hostCount(Math.ceil(this.race.countdown));
       else if (this.race.phase === 'RACING' && this.lastCount !== 0) this.hostCount(0);
-      if (this.race.events.length) {
-        this.net?.broadcast({ t: 'ev', ev: this.race.events });
-        for (const e of this.race.events) this.onRaceEvent(e);
-        this.race.events = [];
-      }
-      if (this.mode === 'host') {
-        this.snapAccum += dt;
-        if (this.snapAccum >= 1 / SNAP_HZ - 0.002) {
-          this.snapAccum = Math.min(this.snapAccum - 1 / SNAP_HZ, 1 / SNAP_HZ);
-          this.net?.broadcastDroppable({ t: 'snap', q: ++this.outSeq, ts: Math.round(performance.now()), k: this.race.karts.map(encodeKart) });
-        }
-      }
       if (this.race.phase === 'OVER') {
         this.net?.broadcast({ t: 'over', results: this.race.results });
         this.showResult();
         return;
+      }
+    } else {
+      this.pingT += dt;
+      if (this.pingT > 1) {
+        this.pingT = 0;
+        this.net?.send({ t: 'ping', t0: performance.now() });
       }
     }
 
@@ -787,7 +798,7 @@ export class Game {
       if (this.gateTimer > 2.5) this.track.setGateDrive(THREE.MathUtils.clamp((this.gateTimer - 2.5) / 5, 0, 1));
     }
 
-    const boost = myKart.boostT > 0 ? 1 : 0;
+    const boost = myKart.boostT > 0 ? 1 : myKart.miniT > 0 ? 0.45 : 0;
     this.racers.update(this.race.karts, this.race.params, dt, this.race.time, this.camera.camera.position);
     this.particles.update(dt);
     this.camera.update(dt, myKart, boost);
@@ -854,142 +865,5 @@ export class Game {
     if (n === this.lastCount) return;
     this.showCount(n);
     this.net?.broadcast({ t: 'count', n });
-  }
-
-  // ---------------------------------------------------------------- client
-
-  private clientTick(dt: number, input: KartInput): void {
-    const net = this.net!;
-    net.sendFast({ t: 'in', q: ++this.inSeq, d: encodeInput(input) });
-    this.pingT += dt;
-    if (this.pingT > 1) {
-      this.pingT = 0;
-      net.send({ t: 'ping', t0: performance.now() });
-    }
-    // 자기 말: 로컬 예측 (호스트와 같은 물리)
-    if (this.clientRacing) {
-      const my = this.race.karts[this.mySlot];
-      this.accum += dt;
-      let steps = 0;
-      while (this.accum >= STEP && steps < 6) {
-        const wasBoost = my.boostT > 0;
-        stepKart(my, input, this.race.params[this.mySlot], this.track, STEP, this.race.time);
-        if (!wasBoost && my.boostT > 0) this.onRaceEvent({ k: 'boost', slot: this.mySlot });
-        this.accum -= STEP;
-        steps++;
-      }
-      this.race.time += dt;
-    }
-    this.clientInterpolate(dt);
-    this.race.refreshRanking();
-  }
-
-  private onSnapshot(m: { q: number; ts: number; k: number[][] }): void {
-    // 비순서 채널: 늦게 온 옛 스냅샷은 버린다
-    if (m.q <= this.snapSeq && this.snapSeq - m.q < 100000) return;
-    this.snapSeq = m.q;
-    const now = performance.now();
-    const ts = m.ts;
-    if (this.lastRecv) {
-      const dev = Math.abs(now - this.lastRecv - (ts - this.lastRecvTs));
-      this.jitter = this.jitter ? this.jitter * 0.88 + dev * 0.12 : dev;
-      const gap = Math.min(200, ts - this.lastRecvTs);
-      this.sendGap = this.sendGap ? this.sendGap * 0.9 + gap * 0.1 : gap;
-    }
-    this.lastRecv = now;
-    this.lastRecvTs = ts;
-    this.snaps.push({ recv: now, ts, k: m.k });
-    if (this.snaps.length > 10) this.snaps.shift();
-  }
-
-  /**
-   * 타인: 호스트 타임스탬프 기준으로 "조금 늦게" 재생 (재생 시계 playT, 버퍼 두께에 따라 ±12% 속도 조정).
-   * 자기 말: 위치·방향만 호스트 값으로 부드럽게 당기고(오차 > 3m 면 스냅), 속도·게이지는 로컬 예측 유지.
-   */
-  private clientInterpolate(dt: number): void {
-    const n = this.snaps.length;
-    if (n === 0) return;
-    const latest = this.snaps[n - 1];
-    const karts = this.race.karts;
-    const applyOthers = (A: Snap, B: Snap, t: number) => {
-      for (let i = 0; i < karts.length; i++) {
-        if (i === this.mySlot) continue;
-        const a = A.k[i];
-        const b = B.k[i];
-        if (!a || !b) continue;
-        decodeKart(b, karts[i], false);
-        karts[i].x = THREE.MathUtils.lerp(a[0], b[0], t);
-        karts[i].z = THREE.MathUtils.lerp(a[1], b[1], t);
-        karts[i].yaw = a[2] + angleDelta(b[2] - a[2]) * t;
-        karts[i].lastAccel = 0;
-      }
-    };
-    if (n === 1) {
-      applyOthers(latest, latest, 1);
-    } else {
-      const interval = Math.max(1000 / SNAP_HZ, this.sendGap || 0);
-      const delay = Math.min(140, Math.max(10, interval * 0.7 + 2 + (this.jitter || 3) * 1.8));
-      if (this.playT === null) this.playT = latest.ts - delay;
-      const target = latest.ts - delay;
-      const drift = target - this.playT;
-      let rate = 1;
-      if (Math.abs(drift) > 400) this.playT = target;
-      else rate = 1 + Math.max(-0.12, Math.min(0.12, drift / 600));
-      this.playT += dt * 1000 * rate;
-      let A = this.snaps[0];
-      let B = this.snaps[1];
-      for (let i = 0; i < n - 1; i++) {
-        if (this.snaps[i].ts <= this.playT && this.snaps[i + 1].ts >= this.playT) {
-          A = this.snaps[i];
-          B = this.snaps[i + 1];
-          break;
-        }
-        if (this.snaps[i + 1].ts < this.playT) {
-          A = this.snaps[i];
-          B = this.snaps[i + 1];
-        }
-      }
-      const span = Math.max(1, B.ts - A.ts);
-      const t = Math.max(0, Math.min(1.35, (this.playT - A.ts) / span));
-      applyOthers(A, B, t);
-    }
-    // 자기 말 보정
-    const my = karts[this.mySlot];
-    const sv = latest.k[this.mySlot];
-    if (my && sv) {
-      const keep = { speed: my.speed, slip: my.slip, gauge: my.gauge, boostT: my.boostT, drifting: my.drifting, bumpT: my.bumpT, bumpDir: my.bumpDir };
-      decodeKart(sv, my, false);
-      if (!this.clientRacing) {
-        my.x = sv[0];
-        my.z = sv[1];
-        my.yaw = sv[2];
-      } else {
-        my.speed = keep.speed;
-        my.slip = keep.slip;
-        my.gauge = Math.max(keep.gauge, my.gauge);
-        my.boostT = Math.max(keep.boostT, my.boostT);
-        my.drifting = keep.drifting;
-        my.bumpT = Math.max(keep.bumpT, my.bumpT);
-        my.bumpDir = keep.bumpT > 0 ? keep.bumpDir : my.bumpDir;
-        // 호스트 위치는 편도 지연만큼 과거 → 속도로 조금 앞당겨 비교
-        const lead = Math.min(0.15, ((this.net?.rtt ?? 40) * 0.5) / 1000);
-        const h = sv[2] + sv[4];
-        const tx = sv[0] + Math.cos(h) * sv[3] * lead;
-        const tz = sv[1] - Math.sin(h) * sv[3] * lead;
-        const ex = tx - my.x;
-        const ez = tz - my.z;
-        const err = Math.hypot(ex, ez);
-        if (err > 3) {
-          my.x = tx;
-          my.z = tz;
-          my.yaw = sv[2];
-        } else {
-          const k = Math.min(1, 5 * dt);
-          my.x += ex * k;
-          my.z += ez * k;
-          my.yaw += angleDelta(sv[2] - my.yaw) * k * 0.5;
-        }
-      }
-    }
   }
 }

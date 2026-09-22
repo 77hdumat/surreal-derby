@@ -86,6 +86,35 @@ describe('stepKart', () => {
   });
 });
 
+describe('순간부스터', () => {
+  it('드리프트 종료 직후 ↑ 면 mini 이벤트 + 최고속 초과, 반복 가능', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    let minis = 0;
+    for (let rep = 0; rep < 3; rep++) {
+      const steer = rep % 2 ? -1 : 1; // 좌우 번갈아 (벽에 안 가게)
+      for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer, drift: true }), P, track, DT); // 0.2s 드리프트
+      for (let i = 0; i < 6; i++) for (const e of stepKart(st, inp({ throttle: 1, steer: -steer * 0.5 }), P, track, DT)) if (e.k === 'mini') minis++;
+      expect(st.miniT).toBeGreaterThan(0);
+      for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer: -steer * 0.5 }), P, track, DT);
+      expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.05);
+      expect(Math.abs(st.lat)).toBeLessThan(13);
+    }
+    expect(minis).toBe(3);
+  });
+  it('창이 지나면 ↑ 를 눌러도 안 나간다 / 너무 짧은 드리프트는 무시', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 20; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    for (let i = 0; i < 30; i++) stepKart(st, inp({}), P, track, DT); // 0.5s 아무것도 안 누름
+    expect(st.miniWindow).toBe(0);
+    expect(stepKart(st, inp({ throttle: 1 }), P, track, DT)).toEqual([]);
+    for (let i = 0; i < 4; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT); // 0.07s
+    expect(stepKart(st, inp({ throttle: 1 }), P, track, DT)).toEqual([]);
+    expect(st.miniT).toBe(0);
+  });
+});
+
 describe('resolveKartCollision', () => {
   it('겹친 두 말을 질량 비례로 밀어낸다', () => {
     const a = createKartState(0, 0, 0);

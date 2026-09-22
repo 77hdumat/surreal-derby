@@ -50,6 +50,10 @@ export class KartRace {
   private inputs: KartInput[] = [];
   private profiles: CpuProfile[] = [];
   private cpuScratch: KartInput[] = [];
+  /** 이 피어가 물리를 돌리는 슬롯 (자기 말 + 호스트라면 CPU). 나머지는 원격 상태를 받아 쓴다 */
+  owned: boolean[] = [];
+  /** 결과 판정 권한 (호스트/솔로) */
+  authority = true;
   phase: RacePhaseK = 'IDLE';
   time = 0;
   countdown = 0;
@@ -71,8 +75,9 @@ export class KartRace {
   }
 
   /** 2×2 그리드 배치. 게이트 뒤(s<0)에서 출발 */
-  setup(slots: SlotConfig[]): void {
+  setup(slots: SlotConfig[], owned?: (slot: SlotConfig) => boolean): void {
     this.slots = slots.slice(0, MAX_SLOTS).map((s, i) => ({ ...s, slot: i }));
+    this.owned = this.slots.map((s) => (owned ? owned(s) : true));
     this.karts = [];
     this.params = [];
     this.inputs = [];
@@ -107,6 +112,13 @@ export class KartRace {
     this.time = 0;
   }
 
+  /** 클라이언트: 호스트의 GO 신호로 바로 주행 시작 */
+  startRacing(): void {
+    this.phase = 'RACING';
+    this.countdown = 0;
+    this.time = 0;
+  }
+
   setInput(slot: number, input: KartInput): void {
     const t = this.inputs[slot];
     if (!t) return;
@@ -130,24 +142,27 @@ export class KartRace {
       }
       return;
     }
-    if (this.phase !== 'RACING') return;
+    // OVER 뒤에도 골인한 말들이 유유히 돌게 물리는 계속
+    if (this.phase !== 'RACING' && this.phase !== 'OVER') return;
     this.time += dt;
     for (let i = 0; i < this.karts.length; i++) {
+      if (!this.owned[i]) continue;
       const st = this.karts[i];
       const inp = this.slots[i].cpu ? cpuInput(st, this.params[i], this.track, this.karts, this.profiles[i], this.cpuScratch[i]) : this.inputs[i];
       for (const e of stepKart(st, inp, this.params[i], this.track, dt, this.time)) this.events.push({ ...e, slot: i });
     }
+    // 충돌: 내가 돌리는 말만 밀린다 (상대는 자기 쪽에서 자기 말을 민다)
     for (let a = 0; a < this.karts.length; a++) {
       for (let b = a + 1; b < this.karts.length; b++) {
+        if (!this.owned[a] && !this.owned[b]) continue;
         const hitBefore = this.karts[a].bumpT > 0 || this.karts[b].bumpT > 0;
-        if (resolveKartCollision(this.karts[a], this.params[a], this.karts[b], this.params[b]) && !hitBefore) {
+        if (resolveKartCollision(this.karts[a], this.params[a], this.karts[b], this.params[b], this.owned[a], this.owned[b]) && !hitBefore) {
           this.events.push({ k: 'bump', slot: a, other: b });
         }
       }
     }
-    for (const e of this.events) if (e.k === 'finish' && this.firstFinishTime === null) this.firstFinishTime = this.time;
     this.computeRanking();
-    this.checkOver();
+    if (this.authority && this.phase === 'RACING') this.checkOver();
   }
 
   /** 클라이언트가 스냅샷 적용 후 순위를 다시 계산할 때 */
@@ -172,6 +187,10 @@ export class KartRace {
   }
 
   private checkOver(): void {
+    if (this.firstFinishTime === null) {
+      const first = this.karts.filter((k) => k.finished).map((k) => k.finishTime ?? 0);
+      if (first.length) this.firstFinishTime = Math.min(...first);
+    }
     const allDone = this.karts.every((k) => k.finished);
     const timeout = this.firstFinishTime !== null && this.time - this.firstFinishTime > FINISH_GRACE;
     if (!allDone && !timeout) return;

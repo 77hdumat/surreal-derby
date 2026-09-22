@@ -23,7 +23,10 @@ export type NetMsg =
   | { t: 'full'; why: 'slots' | 'playing' }
   | { t: 'start'; slots: SlotConfig[] }
   | { t: 'count'; n: number }
-  | { t: 'snap'; q: number; ts: number; k: number[][] }
+  /** 호스트 → 전원: 슬롯별 최신 상태 + 각 상태의 원 발신 타임스탬프 */
+  | { t: 'snap'; q: number; k: (number[] | null)[]; ts: number[] }
+  /** 클라 → 호스트: 자기 말 상태 (클라이언트 권위) */
+  | { t: 'st'; q: number; ts: number; k: number[] }
   | { t: 'in'; q: number; d: InputTuple }
   | { t: 'ev'; ev: RaceEventK[] }
   | { t: 'over'; results: RaceResult[] }
@@ -55,10 +58,11 @@ export function encodeKart(k: KartState): number[] {
     k.drifting ? 1 : 0,
     r2(k.s),
     r2(k.lat),
+    r2(k.miniT),
   ];
 }
 
-export const KART_FIELDS = 16;
+export const KART_FIELDS = 17;
 
 /** 스냅샷 값 → 상태. 위치(x,z,yaw)는 보간 대상이라 applyPos=false 로 건너뛸 수 있다 */
 export function decodeKart(a: number[], into: KartState, applyPos = true): KartState {
@@ -80,6 +84,7 @@ export function decodeKart(a: number[], into: KartState, applyPos = true): KartS
   into.drifting = a[13] === 1;
   into.s = a[14];
   into.lat = a[15];
+  into.miniT = a[16] ?? 0;
   return into;
 }
 

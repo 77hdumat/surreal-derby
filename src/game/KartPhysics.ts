@@ -41,6 +41,12 @@ export interface KartState {
   gauge: number;
   /** 남은 부스트 시간 (초) */
   boostT: number;
+  /** 남은 순간부스터 시간 (초) — 드리프트 직후 ↑ */
+  miniT: number;
+  /** 드리프트 종료 후 순간부스터 입력 창 (초) */
+  miniWindow: number;
+  /** 현재 드리프트 지속 시간 */
+  driftTime: number;
   /** 트랙 좌표 (project 결과) */
   s: number;
   lat: number;
@@ -58,10 +64,15 @@ export interface KartState {
   yawRate: number;
 }
 
-export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'lap'; lap: number } | { k: 'finish' };
+export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'lap'; lap: number } | { k: 'finish' };
 
 export const LAPS = 3;
 export const BOOST_DURATION = 2.0;
+/** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
+export const MINI_DURATION = 0.55;
+export const MINI_MUL = 1.18;
+export const MINI_WINDOW = 0.35;
+export const MINI_MIN_DRIFT = 0.12;
 export const MAX_SLIP = 0.45;
 /** 벽 판정 여유 — 트랙 폭 절반에서 뺀다 */
 export const WALL_MARGIN = 1.0;
@@ -78,6 +89,9 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     drifting: false,
     gauge: 0,
     boostT: 0,
+    miniT: 0,
+    miniWindow: 0,
+    driftTime: 0,
     s: 0,
     lat: 0,
     progress: 0,
@@ -158,8 +172,20 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   }
   const boosting = st.boostT > 0;
   if (boosting) st.boostT = Math.max(0, st.boostT - dt);
-  const maxCur = p.maxSpeed * (boosting ? p.boostMul : 1);
-  const accel = p.accel * (boosting ? 2 : 1);
+  // ---- 순간부스터: 드리프트를 끝낸 직후(창 안에) ↑ 를 누르면 짧은 가속. 짧게 드리프트→↑ 를 반복하면 연속으로 (톡톡이)
+  if (st.miniWindow > 0) {
+    st.miniWindow = Math.max(0, st.miniWindow - dt);
+    if (!st.finished && inp.throttle > 0) {
+      st.miniWindow = 0;
+      st.miniT = MINI_DURATION;
+      st.speed = Math.max(st.speed, Math.min(p.maxSpeed * MINI_MUL, st.speed + 1.5));
+      events.push({ k: 'mini' });
+    }
+  }
+  const mini = st.miniT > 0;
+  if (mini) st.miniT = Math.max(0, st.miniT - dt);
+  const maxCur = p.maxSpeed * (boosting ? p.boostMul : mini ? MINI_MUL : 1);
+  const accel = p.accel * (boosting ? 2 : mini ? 2.2 : 1);
 
   // ---- 종방향
   if (inp.throttle > 0) {
@@ -167,7 +193,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   } else if (inp.brake > 0) {
     st.speed = Math.max(-p.maxSpeed * 0.3, st.speed - accel * 1.5 * inp.brake * dt);
   } else if (st.speed > 0) {
-    st.speed = Math.max(0, st.speed - (boosting ? 0 : 3) * dt);
+    st.speed = Math.max(0, st.speed - (boosting || mini ? 0 : 3) * dt);
   } else if (st.speed < 0) {
     st.speed = Math.min(0, st.speed + 3 * dt);
   }
@@ -177,7 +203,13 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   // ---- 드리프트 판정
   const fast = st.speed > p.maxSpeed * 0.4;
   const wantDrift = !st.finished && inp.drift && fast && (Math.abs(inp.steer) > 0.2 || st.drifting);
+  if (st.drifting && !wantDrift) {
+    // 드리프트 종료 → 순간부스터 입력 창 (너무 짧은 드리프트는 제외)
+    if (st.driftTime >= MINI_MIN_DRIFT) st.miniWindow = MINI_WINDOW;
+    st.driftTime = 0;
+  }
   st.drifting = wantDrift;
+  if (st.drifting) st.driftTime += dt;
 
   // ---- 조향
   const speedFrac = Math.min(1, Math.abs(st.speed) / p.maxSpeed);
@@ -253,9 +285,10 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
 }
 
 /**
- * 원-원 충돌. 겹치면 질량 비례로 밀어내고 양쪽 감속. 접촉했으면 true.
+ * 원-원 충돌. 겹치면 질량 비례로 밀어내고 감속. 접촉했으면 true.
+ * moveA/moveB=false 인 쪽은 원격(상대 클라이언트가 권위)이라 건드리지 않는다.
  */
-export function resolveKartCollision(a: KartState, pa: KartParams, b: KartState, pb: KartParams): boolean {
+export function resolveKartCollision(a: KartState, pa: KartParams, b: KartState, pb: KartParams, moveA = true, moveB = true): boolean {
   const dx = b.x - a.x;
   const dz = b.z - a.z;
   const d = Math.hypot(dx, dz);
@@ -267,21 +300,28 @@ export function resolveKartCollision(a: KartState, pa: KartParams, b: KartState,
   const total = pa.mass + pb.mass;
   const ka = pb.mass / total;
   const kb = pa.mass / total;
-  a.x -= nx * overlap * ka;
-  a.z -= nz * overlap * ka;
-  b.x += nx * overlap * kb;
-  b.z += nz * overlap * kb;
-  a.speed *= 1 - 0.12 * ka;
-  b.speed *= 1 - 0.12 * kb;
   // 흔들림 방향: 상대가 내 오른쪽(+right)에 있으면 왼쪽으로 밀림
   const ra = Math.sin(a.yaw) * nx + Math.cos(a.yaw) * nz; // right = (sin yaw, 0, cos yaw)
-  if (a.bumpT <= 0) {
-    a.bumpT = 0.3;
-    a.bumpDir = ra > 0 ? -1 : 1;
+  if (moveA) {
+    // 한쪽만 움직일 때는 겹침 전부를 그쪽이 해소
+    const k = moveB ? ka : 1;
+    a.x -= nx * overlap * k;
+    a.z -= nz * overlap * k;
+    a.speed *= 1 - 0.12 * ka;
+    if (a.bumpT <= 0) {
+      a.bumpT = 0.3;
+      a.bumpDir = ra > 0 ? -1 : 1;
+    }
   }
-  if (b.bumpT <= 0) {
-    b.bumpT = 0.3;
-    b.bumpDir = ra > 0 ? 1 : -1;
+  if (moveB) {
+    const k = moveA ? kb : 1;
+    b.x += nx * overlap * k;
+    b.z += nz * overlap * k;
+    b.speed *= 1 - 0.12 * kb;
+    if (b.bumpT <= 0) {
+      b.bumpT = 0.3;
+      b.bumpDir = ra > 0 ? 1 : -1;
+    }
   }
   return true;
 }

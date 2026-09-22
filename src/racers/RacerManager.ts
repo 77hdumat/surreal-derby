@@ -136,6 +136,12 @@ export class RacerManager {
     this.particles.sparkle(v.root.position.clone().setY(1.5));
   }
 
+  miniFx(slot: number): void {
+    const v = this.visuals[slot];
+    if (!v) return;
+    this.particles.sparkle(v.root.position.clone().setY(0.8));
+  }
+
   place(slot: number, k: KartState): void {
     const v = this.visuals[slot];
     if (!v) return;
@@ -166,7 +172,7 @@ export class RacerManager {
       ctx.state = k.finished ? 'FINISHED' : k.boostT > 0 ? 'BOOSTING' : Math.abs(k.speed) > 0.3 ? 'RUNNING' : 'IDLE';
       ctx.stateTimer = k.boostT;
       ctx.cornerWeight = Math.max(this.track.cornerWeight(k.s), Math.abs(k.slip) / 0.45);
-      ctx.boost = THREE.MathUtils.lerp(ctx.boost, k.boostT > 0 ? 1 : 0, Math.min(1, dt * 6));
+      ctx.boost = THREE.MathUtils.lerp(ctx.boost, k.boostT > 0 ? 1 : k.miniT > 0 ? 0.5 : 0, Math.min(1, dt * 6));
       ctx.bump = k.bumpT;
       ctx.bumpDir = k.bumpDir;
       ctx.distanceToFinish = k.finished ? -50 : 9999;
