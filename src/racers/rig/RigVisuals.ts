@@ -603,11 +603,11 @@ export class GiraffeRig extends AnimalVisual {
     this.attack = Math.max(0, this.attack - dt * 0.8);
     const st = this.stretch;
     const neck: ['neck0', 'neck1', 'neck2'] = ['neck0', 'neck1', 'neck2'];
-    // 목 뻗기: 수평까지 숙이고 마디를 앞으로 밀어 길이를 늘린다 (extensionMax m)
+    // 목 뻗기(부스트): 목을 세운 채 마디를 목 방향(앞·위 대각선)으로 밀어 길이만 늘린다 — 앞을 보고 달린다
     const total = (ctx.extensionMax > 0 ? ctx.extensionMax : 6.5) * st;
     neck.forEach((b, i) => {
-      this.rot(b, AXIS_Z, -st * 0.42 + Math.sin(time * 4.2 + this.seed + i) * 0.05 * speedNorm * (1 - st));
-      if (total > 0.01) this.move(b, new THREE.Vector3(total / 3, 0, 0));
+      this.rot(b, AXIS_Z, -st * 0.06 + Math.sin(time * 4.2 + this.seed + i) * 0.05 * speedNorm * (1 - st));
+      if (total > 0.01) this.move(b, new THREE.Vector3((total / 3) * 0.66, (total / 3) * 0.75, 0));
     });
     // 목 공격: 채찍처럼 — 밑동부터 머리까지 파동이 지연되며 전달되고, 머리 쪽 마디가 가장 크게 휘어진다
     if (this.attack > 0) {
@@ -628,7 +628,7 @@ export class GiraffeRig extends AnimalVisual {
       this.body.rotation.x += -this.attackSide * whipProfile(u) * 0.12;
       this.body.position.y -= Math.max(0, whipProfile(u)) * 0.12;
     }
-    this.rot('head', AXIS_Z, st * 1.2 + Math.sin(time * 6) * 0.06 * speedNorm);
+    this.rot('head', AXIS_Z, st * 0.15 + Math.sin(time * 6) * 0.06 * speedNorm);
     // 목 댄스: 멈춰 서서 ~~~ 파형
     this.dance = damp(this.dance, ctx.state === 'DANCING' ? 1 : 0, 5, dt);
     const dn = this.dance;

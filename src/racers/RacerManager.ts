@@ -224,7 +224,7 @@ export class RacerManager {
       // 롱바디·기린은 몸/목 늘어남으로 표현
       const stretchy = def.specialAbility === 'LONGBODY' || def.specialAbility === 'GIRAFFE';
       ctx.extension = stretchy ? THREE.MathUtils.lerp(ctx.extension, boosting ? 1 : 0, Math.min(1, dt * 4)) : 0;
-      ctx.extensionMax = stretchy ? (def.specialAbility === 'GIRAFFE' ? 5 : 4) : 0;
+      ctx.extensionMax = stretchy ? (def.specialAbility === 'GIRAFFE' ? 6 : 9) : 0; // 롱바디는 몸이 확 길어진다
       ctx.stateTimer = k.boostT;
       ctx.cornerWeight = Math.max(this.track.cornerWeight(k.s), Math.abs(k.slip) / 0.45);
       ctx.boost = THREE.MathUtils.lerp(ctx.boost, k.boostT > 0 ? 1 : k.miniT > 0 ? 0.5 : 0, Math.min(1, dt * 6));

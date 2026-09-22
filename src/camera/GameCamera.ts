@@ -94,17 +94,17 @@ export class GameCamera {
         const fz = -Math.sin(h);
         const rx = -fz; // 오른쪽 = (sin h, 0, cos h)
         const rz = fx;
-        const speedK = THREE.MathUtils.clamp(Math.abs(kart.speed) / 45, 0, 1.3);
         // 빨라질수록 카메라가 낮고 가깝게 붙어 속도감 ↑
         // 말에 가깝게, 살짝 위에서 내려다보는 시점
         const ds = this.distanceScale;
-        const back = (5.2 + speedK * 0.9 + boost * 0.5) * ds;
-        const up = (3.7 - speedK * 0.35) * ds;
-        // 드리프트 중엔 미끄러지는 반대쪽으로 살짝 빠져 옆모습이 보이게
-        const wantSide = -kart.slip * 5;
+        // 거리는 속도·부스트와 무관하게 고정 (부스트 때 멀어지지 않게). 살짝 대각선 위에서 내려다본다
+        const back = 5.0 * ds;
+        const up = 4.3 * ds;
+        // 기본 오른쪽으로 살짝 비켜 대각선 구도 + 드리프트 중엔 미끄러지는 반대쪽으로
+        const wantSide = 0.9 * ds - kart.slip * 5;
         this.sideOffset += (wantSide - this.sideOffset) * Math.min(1, 4 * dt);
         this.desiredPos.set(kart.x - fx * back + rx * this.sideOffset, up, kart.z - fz * back + rz * this.sideOffset);
-        this.desiredLook.set(kart.x + fx * 7 * ds, 1.1 * ds, kart.z + fz * 7 * ds);
+        this.desiredLook.set(kart.x + fx * 5.5 * ds, 0.9 * ds, kart.z + fz * 5.5 * ds);
         // 고속·부스트에서 카메라가 뒤로 처지지 않게 빠르게 따라붙는다
         k = 18;
         break;
