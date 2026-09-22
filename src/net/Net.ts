@@ -394,6 +394,18 @@ export class Net {
     }
   }
 
+  /** host → 특정 슬롯 제외 전원 (신뢰) */
+  broadcastExcept(slot: number, msg: NetMsg): void {
+    this.guests.forEach((g, i) => {
+      if (!g || !g.c.open || i + 1 === slot) return;
+      try {
+        g.c.send(msg);
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
   /**
    * host → 모든 클라, 버릴 수 있는 메시지(스냅샷). 회선이 느린 게스트에겐 큐에 쌓지 않고 건너뛴다.
    * 게스트별 적응 주기: 최근 1초 드롭이 10% 넘으면 주기를 절반으로(최대 1/4), 3초간 드롭 0 이면 복구.

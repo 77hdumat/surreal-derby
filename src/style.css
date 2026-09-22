@@ -234,6 +234,11 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 .gauge-wrap { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(420px, 60vw); }
 .speed { font-family: 'Courier New', monospace; font-weight: 900; font-size: 34px; color: #fff; -webkit-text-stroke: 1.5px #000; text-shadow: 3px 3px 0 #000; }
 .speed .unit { font-size: 14px; margin-left: 6px; color: #cde; }
+.item-box { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.55); border: 2px solid #fff; border-radius: 10px; padding: 4px 12px; box-shadow: 0 0 0 2px #000; margin-bottom: 4px; }
+.item-label { font-size: 10px; letter-spacing: 3px; font-weight: 900; color: #cde; }
+.item-slot { font-size: 18px; font-weight: 900; color: #999; min-width: 90px; text-align: center; }
+.item-slot.has { color: #fff; animation: subMajor 0.35s ease-out; }
+#touch button.itemkey { font-size: 13px; letter-spacing: 1px; background: rgba(160,80,255,0.5); }
 .boost-slots { display: flex; gap: 8px; }
 .boost-slots .pip { width: 34px; height: 18px; border: 2px solid #fff; border-radius: 6px; background: rgba(0,0,0,0.5); box-shadow: 0 0 0 2px #000; transition: background 0.15s, transform 0.15s; }
 .boost-slots .pip.on { background: linear-gradient(90deg, #ffb300, #ffe600); box-shadow: 0 0 0 2px #000, 0 0 14px rgba(255,230,0,0.8); transform: scale(1.1); }

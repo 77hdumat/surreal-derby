@@ -100,11 +100,15 @@ describe('부스터 연타', () => {
     for (let i = 0; i < 60; i++) count(stepKart(st, inp({ throttle: 1, boost: i % 2 === 0 }), P, track, DT)); // 연타
     expect(boosts).toBe(1);
     expect(st.boosts).toBe(1);
-    for (let i = 0; i < 60 * 3; i++) count(stepKart(st, inp({ throttle: 1 }), P, track, DT)); // 3초 경과
-    expect(st.boostT).toBe(0);
-    count(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT));
+    // 끝나기 직전(0.25s 전)부터 누르고 있으면 텀 없이 이어진다
+    for (let i = 0; i < 60 * 1.5; i++) count(stepKart(st, inp({ throttle: 1 }), P, track, DT)); // 총 2.5s 경과
+    expect(st.boostT).toBeGreaterThan(0.26);
+    count(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT)); // 아직 0.25 초과 → 무시
+    expect(boosts).toBe(1);
+    for (let i = 0; i < 60 * 0.6; i++) count(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT));
     expect(boosts).toBe(2);
     expect(st.boosts).toBe(0);
+    expect(st.boostT).toBeGreaterThan(2.6); // 3s + 남은 시간 - 지난 프레임
   });
 });
 

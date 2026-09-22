@@ -3,6 +3,7 @@ import type { RacerDefinition } from '../racers/Racer';
 import { jockeyById, kartParamsFor } from '../racers/Jockeys';
 import { cpuInput, cpuProfile, type CpuProfile } from './CpuDriver';
 import { generateObstacles, type Obstacle } from './Obstacles';
+import { ItemSystem, type ItemEvent } from './Items';
 import {
   IDLE_INPUT,
   applyStartBoost,
@@ -36,8 +37,8 @@ export interface RaceResult {
 }
 
 export const COUNTDOWN_SECONDS = 3;
-/** 1등 골인 후 이 시간이 지나면 나머지는 현재 순위로 마감 */
-export const FINISH_GRACE = 25;
+/** 1등 골인 후 이 시간 안에 못 들어오면 리타이어 */
+export const FINISH_GRACE = 10;
 export const MAX_SLOTS = 4;
 
 /**
@@ -58,6 +59,12 @@ export class KartRace {
   authority = true;
   obstacles: Obstacle[] = [];
   seed = 0;
+  /** 아이템전 (상자·투사체). mySlot 은 setup 에서 */
+  items: ItemSystem;
+  /** 이번 step 의 아이템 이벤트 (호출자가 비우고 남에게 보낸다) */
+  itemEvents: ItemEvent[] = [];
+  /** 1등 골인 시각 (전 피어 공통: 골인 플래그를 본 순간) */
+  firstFinishSeen: number | null = null;
   phase: RacePhaseK = 'IDLE';
   time = 0;
   countdown = 0;
@@ -71,6 +78,7 @@ export class KartRace {
   constructor(track: TrackGeometry, defs: RacerDefinition[]) {
     this.track = track;
     this.defs = defs;
+    this.items = new ItemSystem(track, 0);
   }
 
   defOf(slot: number): RacerDefinition {
@@ -83,6 +91,10 @@ export class KartRace {
     this.slots = slots.slice(0, MAX_SLOTS).map((s, i) => ({ ...s, slot: i }));
     this.seed = seed;
     this.obstacles = generateObstacles(seed, this.track);
+    const mySlot = this.slots.findIndex((s) => (owned ? owned(s) : true) && !s.cpu);
+    this.items.setup(seed, Math.max(0, mySlot));
+    this.itemEvents = [];
+    this.firstFinishSeen = null;
     this.owned = this.slots.map((s) => (owned ? owned(s) : true));
     this.karts = [];
     this.params = [];
@@ -175,6 +187,13 @@ export class KartRace {
       }
     }
     this.computeRanking();
+    // 아이템: 상자·투사체·피격 (소유 말만 판정)
+    this.items.step(dt, this.time, this.karts, this.owned, this.ranking);
+    if (this.items.events.length) {
+      this.itemEvents.push(...this.items.events);
+      this.items.events = [];
+    }
+    if (this.firstFinishSeen === null && this.karts.some((k) => k.finished)) this.firstFinishSeen = this.time;
     if (this.authority && this.phase === 'RACING') this.checkOver();
   }
 
@@ -197,6 +216,18 @@ export class KartRace {
 
   rankOf(slot: number): number {
     return this.ranking.indexOf(slot) + 1;
+  }
+
+  /** 내 말이 아이템 사용 (이벤트를 돌려주면 남에게 보낸다) */
+  useItem(slot: number): ItemEvent | null {
+    if (this.phase !== 'RACING') return null;
+    return this.items.use(slot, this.karts, this.ranking);
+  }
+
+  /** 1등 골인 뒤 남은 시간 (초). 아직 아무도 안 들어왔으면 null */
+  finishCountdown(): number | null {
+    if (this.firstFinishSeen === null) return null;
+    return Math.max(0, FINISH_GRACE - (this.time - this.firstFinishSeen));
   }
 
   private checkOver(): void {

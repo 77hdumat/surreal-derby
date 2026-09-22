@@ -28,6 +28,7 @@
         <div id="net-info"></div>
         <div id="rear-pip" class="hidden"><span class="pip-label">REAR</span><span class="pip-gap" id="pip-gap"></span></div>
         <div class="gauge-wrap">
+          <div class="item-box"><span class="item-label">ITEM · X</span><span id="item-slot" class="item-slot">—</span></div>
           <div class="speed"><span id="hud-speed">0</span><span class="unit">km/h</span></div>
           <div class="boost-slots"><span class="pip" id="pip-0"></span><span class="pip" id="pip-1"></span></div>
           <div class="gauge"><div id="gauge-fill"></div><div class="gauge-label" id="gauge-label">DRIFT → 게이지</div></div>
@@ -36,13 +37,14 @@
           <button id="btn-quality" class="quality" title="렌더링 품질">HD</button>
           <button id="btn-mute" title="소리">🔊</button>
         </div>
-        <div class="keys-hint">↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트 · 드리프트 직후 ↑ 순간부스터 · GO 직전 ↑ 출발부스터</div>
+        <div class="keys-hint">↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트 · X/Ctrl 아이템 · 드리프트 직후 ↑ 순간부스터 · GO 직전 ↑ 출발부스터</div>
         <div id="touch" class="hidden">
           <div class="touch-left">
             <button data-key="left">◀</button>
             <button data-key="right">▶</button>
           </div>
           <div class="touch-right">
+            <button data-key="item" class="itemkey">ITEM</button>
             <button data-key="boost" class="boost">BOOST</button>
             <button data-key="drift" class="drift">DRIFT</button>
             <button data-key="brake" class="brake">▼</button>
@@ -79,6 +81,8 @@
                 <li>드리프트 직후 <b>↑</b> = 순간부스터 (연속 가능)</li>
                 <li>GO 직전에 <b>↑</b> = 출발 부스터</li>
                 <li>부딪히면 모으던 게이지를 잃음 · 진흙 주의</li>
+                <li><b>X</b> 또는 <b>Ctrl</b> 아이템 사용 — 선물 상자(한 바퀴 3구간)를 지나면 랜덤 획득, 상자는 10초 뒤 리젠</li>
+                <li>1등이 들어오면 10초 카운트다운 — 못 들어오면 리타이어</li>
                 <li>2바퀴 먼저 도는 사람이 승리 (3.3km 서킷)</li>
               </ul>
             </div>

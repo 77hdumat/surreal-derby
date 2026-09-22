@@ -16,9 +16,11 @@ import { KartRace, MAX_SLOTS, type SlotConfig } from './KartRace';
 import { InputManager } from './Input';
 import { Net } from '../net/Net';
 import { ObstacleMeshes } from '../track/ObstacleMeshes';
+import { ItemVisuals } from '../effects/ItemVisuals';
+import { ITEM_INFO, type ItemEvent, type ItemKind } from './Items';
 import { encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
 import { RemoteKart } from '../net/RemoteKart';
-import { LAPS, START_BOOST_WINDOW, applyStartBoost, currentLap } from './KartPhysics';
+import { LAPS, START_BOOST_LATE, START_BOOST_WINDOW, applyStartBoost, currentLap } from './KartPhysics';
 import { JOCKEYS } from '../racers/Jockeys';
 
 type Mode = 'none' | 'solo' | 'host' | 'client';
@@ -74,6 +76,8 @@ export class Game {
   private rearActive = false;
   private rearLook = new THREE.Vector3();
   private obstacleMeshes = new ObstacleMeshes();
+  private itemVisuals = new ItemVisuals();
+  private lastFinishCount = -1;
 
   /** 원격 말 상태 버퍼 (슬롯별) */
   private remotes: RemoteKart[] = [];
@@ -84,6 +88,8 @@ export class Game {
   /** 출발 부스터 판정: ↑ 를 누르기 시작한 시각 (performance.now, ms) */
   private throttleSince = -1;
   private startBoostDone = false;
+  /** GO 시각 (ms). 이 뒤 START_BOOST_LATE 안에 눌러도 인정 */
+  private goAt = -1;
   /** 호스트: 카운트다운 전 게스트 준비 대기 */
   private waitingLoaded = false;
   private loadedSlots = new Set<number>();
@@ -149,6 +155,7 @@ export class Game {
     this.racers.footprints = this.footprints;
     this.race = new KartRace(this.track, RACER_DEFINITIONS);
     this.scene.add(this.obstacleMeshes.group);
+    this.scene.add(this.itemVisuals.group);
     this.camera = new GameCamera(this.track, window.innerWidth / window.innerHeight);
     this.effects = new EffectsManager(this.renderer, this.scene, this.camera.camera, fxCanvas);
     this.ui = new UIManager(RACER_DEFINITIONS);
@@ -392,6 +399,13 @@ export class Game {
         }
         break;
       }
+      case 'iev':
+        if (this.screen === 'RACE' || this.screen === 'RESULT') {
+          for (const e of m.ev) this.applyRemoteItemEvent(e, slot);
+          // 발신자 제외 전원에게 중계
+          this.net?.broadcastExcept(slot, { t: 'iev', ev: m.ev });
+        }
+        break;
       case 'loaded':
         // 이번 레이스(seed) 의 신호만. 방장 세팅이 끝나기 전에 와도 저장해 둔다
         if (m.seed === this.pendingSeed) {
@@ -546,6 +560,9 @@ export class Game {
       case 'chat':
         this.ui.addChat(m.name ?? '', String(m.text).slice(0, 120), m.from === this.mySlot && !m.sys, !!m.sys);
         break;
+      case 'iev':
+        if (this.screen === 'RACE' || this.screen === 'RESULT') for (const e of m.ev) this.applyRemoteItemEvent(e, -1);
+        break;
       case 'kicked':
         this.leaveRoom('방장이 강퇴했습니다');
         break;
@@ -594,6 +611,7 @@ export class Game {
     this.audio.stopRacerLoops();
     this.racers.clear();
     this.obstacleMeshes.clear();
+    this.itemVisuals.clear();
     this.camera.setMode('INTRO');
     this.screen = 'MENU';
     this.ui.setChatEnabled(false);
@@ -615,6 +633,7 @@ export class Game {
     this.audio.stopRacerLoops();
     this.racers.clear();
     this.obstacleMeshes.clear();
+    this.itemVisuals.clear();
     this.camera.setMode('INTRO');
     this.screen = 'LOBBY';
     if (this.mode === 'client') {
@@ -682,6 +701,9 @@ export class Game {
     this.race.authority = mode !== 'client';
     this.race.setup(slots, (s) => (mode === 'solo' ? true : mode === 'host' ? s.cpu || s.slot === me : s.slot === me), seed);
     this.obstacleMeshes.build(this.race.obstacles);
+    this.itemVisuals.build(this.race.items.boxes);
+    this.itemVisuals.setSlots(slots.length, this.racers.visuals.map((v) => v.height));
+    this.lastFinishCount = -1;
     this.remotes = slots.map(() => new RemoteKart());
     this.latestRemote = slots.map(() => null);
     this.sendAccum = 0;
@@ -693,6 +715,7 @@ export class Game {
     this.accum = 0;
     this.throttleSince = -1;
     this.startBoostDone = false;
+    this.goAt = -1;
     this.pendingGo = false;
     this.input.attach();
     this.input.clear();
@@ -839,6 +862,67 @@ export class Game {
         if (me) this.ui.showToast(`${this.race.rankOf(slot)}위 골인!`, 2500);
         break;
       }
+    }
+  }
+
+  /** 원격 아이템 이벤트 적용 (from = 보낸 슬롯, -1 = 호스트) */
+  private applyRemoteItemEvent(e: ItemEvent, _from: number): void {
+    const items = this.race.items;
+    switch (e.k) {
+      case 'use':
+        if (e.slot === this.mySlot) return; // 내 것은 이미 적용
+        items.apply(e, this.race.karts, this.race.owned);
+        break;
+      case 'hit':
+        if (this.race.owned[e.slot]) return; // 내가 판정한 피격
+        items.applyHit_remote(e.pid, e.kind);
+        break;
+      case 'box':
+        if (this.race.owned[e.slot]) return;
+        items.takeBox(e.id, this.race.time);
+        break;
+      case 'got':
+        if (this.race.owned[e.slot]) return;
+        break;
+    }
+    this.onItemEvent(e, false);
+  }
+
+  /** 아이템 이벤트 연출 (로컬·원격 공통) */
+  private onItemEvent(e: ItemEvent, local: boolean): void {
+    void local;
+    const me = 'slot' in e && e.slot === this.mySlot;
+    const pos = 'slot' in e ? this.racers.worldPosition(e.slot, this.tmp).clone() : undefined;
+    switch (e.k) {
+      case 'got':
+        this.audio.play('tada', { pos, minGain: me ? 0.6 : 0.15, gain: 0.5, rate: 1.3, cooldown: 0.1 });
+        if (me) this.ui.showToast(`${ITEM_INFO[e.kind].emoji} ${ITEM_INFO[e.kind].name}`, 900);
+        break;
+      case 'use':
+        if (e.kind === 'missile') this.audio.play('whooshEpic', { pos, minGain: me ? 0.7 : 0.3, gain: 0.8, rate: 1.4 });
+        else if (e.kind === 'waterbomb' || e.kind === 'gas') this.audio.play('whoosh', { pos, minGain: me ? 0.6 : 0.2, gain: 0.7, rate: 0.9 });
+        else if (e.kind === 'boost') {
+          this.racers.boostFx(e.slot);
+          this.audio.jetBoost(me ? 1 : 0.35);
+        } else if (e.kind === 'shield') this.audio.play('bell', { pos, minGain: me ? 0.5 : 0.2, gain: 0.5, rate: 1.6 });
+        else if (e.kind === 'ufo') {
+          this.audio.play('engineRev2', { gain: 0.6, rate: 0.7 });
+          if (e.target === this.mySlot) this.ui.showToast('🛸 UFO 에 잡혔다!', 1500);
+        }
+        break;
+      case 'hit':
+        if (e.blocked) {
+          this.audio.play('bell', { pos, minGain: me ? 0.7 : 0.3, gain: 0.7, rate: 2 });
+          if (me) this.ui.showToast('🛡️ 막았다!', 900);
+        } else {
+          this.audio.play(e.kind === 'banana' ? 'impact' : 'impactHeavy', { pos, minGain: me ? 0.8 : 0.3, gain: 0.9 });
+          this.racers.bump(e.slot, e.kind !== 'banana');
+          if (me) {
+            this.camera.shake(0.5);
+            this.ui.showToast(e.kind === 'gas' ? '🍄 어지럽다… 조작 반대!' : `${ITEM_INFO[e.kind].emoji} 맞았다!`, 1200);
+          }
+        }
+        break;
     }
   }
 
@@ -1065,6 +1149,21 @@ export class Game {
     }
     for (const e of this.race.events) this.onRaceEvent(e);
     this.race.events = [];
+    // 아이템 사용 (내 말)
+    if (this.input.itemPressed) {
+      this.input.itemPressed = false;
+      const ev = this.race.useItem(this.mySlot);
+      if (ev) this.race.itemEvents.push(ev);
+    }
+    if (this.race.itemEvents.length) {
+      for (const e of this.race.itemEvents) this.onItemEvent(e, true);
+      if (this.net && this.mode !== 'solo') {
+        const msg = { t: 'iev' as const, ev: this.race.itemEvents };
+        if (this.mode === 'host') this.net.broadcast(msg);
+        else this.net.send(msg);
+      }
+      this.race.itemEvents = [];
+    }
     // 원격 말 보간 + 상태 전이 연출
     for (let i = 0; i < this.race.karts.length; i++) {
       if (this.race.owned[i]) continue;
@@ -1099,6 +1198,7 @@ export class Game {
       if (this.throttleSince < 0) this.throttleSince = performance.now();
     } else this.throttleSince = -1;
     this.race.setInput(this.mySlot, input);
+    this.checkStartBoost();
     this.stepSim(dt);
     if (this.mode !== 'client') {
       if (this.race.phase === 'COUNTDOWN') this.hostCount(Math.ceil(this.race.countdown));
@@ -1165,6 +1265,20 @@ export class Game {
       return { name: this.race.slots[slot].name, emoji: d?.emoji ?? '', me: slot === this.mySlot, finished: this.race.karts[slot].finished };
     });
     this.ui.setChatLocked(!myKart.finished);
+    this.itemVisuals.update(dt, this.race.time, this.race.items.boxes, this.race.items.projectiles, this.race.karts, this.racers.visuals.map((v) => v.root));
+    // 1등 골인 뒤 10초 카운트다운 (미골인자에게)
+    const fc = this.race.finishCountdown();
+    if (fc !== null && !myKart.finished) {
+      const n = Math.ceil(fc);
+      if (n !== this.lastFinishCount) {
+        this.lastFinishCount = n;
+        this.ui.setCountdown(n > 0 ? String(n) : '리타이어');
+        if (n > 0 && n <= 5) this.audio.play('bell', { gain: 0.4, rate: 1.6 });
+      }
+    } else if (this.lastFinishCount !== -1 && myKart.finished) {
+      this.lastFinishCount = -1;
+      this.ui.setCountdown('');
+    }
     this.ui.updateHud({
       lap: currentLap(myKart),
       rank: this.race.rankOf(this.mySlot),
@@ -1173,6 +1287,7 @@ export class Game {
       gauge: myKart.gauge,
       boosts: myKart.boosts,
       boosting: myKart.boostT > 0,
+      item: myKart.item ? `${ITEM_INFO[myKart.item as ItemKind].emoji} ${ITEM_INFO[myKart.item as ItemKind].name}` : '',
       time: this.race.time,
       order,
     });
@@ -1190,18 +1305,25 @@ export class Game {
     }
   }
 
-  /** GO 직전 START_BOOST_WINDOW 안에 ↑ 를 누르기 시작했으면 출발 부스터 */
+  /** GO 시각 기록. 판정은 매 프레임 checkStartBoost 에서 (GO 전 0.9s ~ GO 후 0.35s 창) */
   private tryStartBoost(): void {
-    if (this.startBoostDone) return;
-    this.startBoostDone = true;
+    if (this.goAt < 0) this.goAt = performance.now();
+    this.checkStartBoost();
+  }
+
+  private checkStartBoost(): void {
+    if (this.startBoostDone || this.goAt < 0) return;
+    const now = performance.now();
     const my = this.race.karts[this.mySlot];
-    if (!my || this.throttleSince < 0) return;
-    const held = (performance.now() - this.throttleSince) / 1000;
-    if (held <= START_BOOST_WINDOW) {
+    if (!my) return;
+    if (this.throttleSince >= 0 && this.throttleSince >= this.goAt - START_BOOST_WINDOW * 1000) {
+      this.startBoostDone = true;
       applyStartBoost(my);
       this.onRaceEvent({ k: 'boost', slot: this.mySlot });
       this.ui.showToast('출발 부스터!', 1200);
+      return;
     }
+    if (now - this.goAt > START_BOOST_LATE * 1000) this.startBoostDone = true; // 창 닫힘
   }
 
   private hostCount(n: number): void {

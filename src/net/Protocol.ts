@@ -1,5 +1,6 @@
 import type { KartState } from '../game/KartPhysics';
 import type { RaceEventK, RaceResult, SlotConfig } from '../game/KartRace';
+import type { ItemEvent } from '../game/Items';
 
 export interface LobbySlot {
   name: string;
@@ -34,6 +35,8 @@ export type NetMsg =
   | { t: 'st'; q: number; ts: number; k: number[] }
   | { t: 'in'; q: number; d: InputTuple }
   | { t: 'ev'; ev: RaceEventK[] }
+  /** 아이템 이벤트 (사용·피격·상자). 클라→호스트→전원 중계 */
+  | { t: 'iev'; ev: ItemEvent[] }
   | { t: 'over'; results: RaceResult[] }
   | { t: 'tolobby' }
   /** 채팅: 클라→호스트는 text 만, 호스트→전원은 from/name 포함. sys = 시스템 안내 */
@@ -67,10 +70,20 @@ export function encodeKart(k: KartState): number[] {
     r2(k.lat),
     r2(k.miniT),
     k.boosts,
+    r2(k.stunT),
+    r2(k.bubbleT),
+    r2(k.slipT),
+    r2(k.shieldT),
+    r2(k.magnetT),
+    ITEM_CODES.indexOf(k.item),
+    r2(k.confuseT),
   ];
 }
 
-export const KART_FIELDS = 18;
+/** 아이템 종류 코드 (스냅샷 압축용) */
+export const ITEM_CODES = ['', 'missile', 'waterbomb', 'banana', 'boost', 'shield', 'magnet', 'ufo', 'gas'];
+
+export const KART_FIELDS = 25;
 
 /** 스냅샷 값 → 상태. 위치(x,z,yaw)는 보간 대상이라 applyPos=false 로 건너뛸 수 있다 */
 export function decodeKart(a: number[], into: KartState, applyPos = true): KartState {
@@ -94,6 +107,13 @@ export function decodeKart(a: number[], into: KartState, applyPos = true): KartS
   into.lat = a[15];
   into.miniT = a[16] ?? 0;
   into.boosts = a[17] ?? 0;
+  into.stunT = a[18] ?? 0;
+  into.bubbleT = a[19] ?? 0;
+  into.slipT = a[20] ?? 0;
+  into.shieldT = a[21] ?? 0;
+  into.magnetT = a[22] ?? 0;
+  into.item = ITEM_CODES[a[23] ?? 0] ?? '';
+  into.confuseT = a[24] ?? 0;
   return into;
 }
 

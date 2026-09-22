@@ -2,11 +2,13 @@ import type { KartInput } from './KartPhysics';
 
 /**
  * 키보드 + 터치 버튼 → KartInput.
- * ↑/W 가속, ↓/S 브레이크·후진, ←→/A D 조향, Shift 드리프트, Space 부스트.
+ * ↑/W 가속, ↓/S 브레이크·후진, ←→/A D 조향, Shift 드리프트, Space 부스트, Ctrl/X 아이템.
  * 터치: #touch 안의 [data-key] 버튼 (left/right/gas/brake/drift/boost).
  */
 export class InputManager {
   readonly input: KartInput = { steer: 0, throttle: 0, brake: 0, drift: false, boost: false };
+  /** 아이템 키를 누른 순간 (edge) — Game 이 읽고 비운다 */
+  itemPressed = false;
   private keys = new Set<string>();
   private touch = new Set<string>();
   private attached = false;
@@ -17,6 +19,7 @@ export class InputManager {
     if (this.isTyping(e)) return;
     const k = this.mapKey(e.code);
     if (!k) return;
+    if (k === 'item' && !this.keys.has('item')) this.itemPressed = true;
     this.keys.add(k);
     e.preventDefault();
   };
@@ -53,6 +56,10 @@ export class InputManager {
         return 'drift';
       case 'Space':
         return 'boost';
+      case 'ControlLeft':
+      case 'ControlRight':
+      case 'KeyX':
+        return 'item';
       default:
         return null;
     }
@@ -70,6 +77,7 @@ export class InputManager {
         const key = el.dataset.key!;
         const down = (e: Event) => {
           e.preventDefault();
+          if (key === 'item') this.itemPressed = true;
           this.touch.add(key);
           el.classList.add('down');
         };

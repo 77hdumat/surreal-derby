@@ -60,6 +60,21 @@ export interface KartState {
   padT: number;
   /** 진흙 안에 있음 (연출용) */
   inMud: boolean;
+  // ---- 아이템 효과 (초) — 자기 말은 자기 기기가 판정해 적용
+  /** 미사일 피격: 스핀·정지 */
+  stunT: number;
+  /** 물폭탄/UFO: 물방울에 갇힘 */
+  bubbleT: number;
+  /** 바나나: 미끄러짐 */
+  slipT: number;
+  /** 실드: 다음 공격 1회 무효 */
+  shieldT: number;
+  /** 자석: 앞 말 쪽으로 당겨짐 (가속) */
+  magnetT: number;
+  /** 환각: 조작이 반대로 (좌우·가속/브레이크) */
+  confuseT: number;
+  /** 들고 있는 아이템 (없으면 '') */
+  item: string;
   /** 트랙 좌표 (project 결과) */
   s: number;
   lat: number;
@@ -87,8 +102,9 @@ export const MINI_DURATION = 0.55;
 export const MINI_MUL = 1.18;
 export const MINI_WINDOW = 0.35;
 export const MINI_MIN_DRIFT = 0.12;
-/** 출발 부스터: GO 직전 이 시간(초) 안에 ↑ 를 누르면 */
-export const START_BOOST_WINDOW = 0.45;
+/** 출발 부스터: GO 전 이 시간(초) 안에 ↑ 를 누르기 시작했거나, GO 뒤 START_BOOST_LATE 안에 누르면 */
+export const START_BOOST_WINDOW = 0.9;
+export const START_BOOST_LATE = 0.35;
 export const START_BOOST_DURATION = 1.1;
 
 /** 출발 부스터 부여 */
@@ -119,6 +135,13 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     driftTime: 0,
     padT: 0,
     inMud: false,
+    stunT: 0,
+    bubbleT: 0,
+    slipT: 0,
+    shieldT: 0,
+    magnetT: 0,
+    confuseT: 0,
+    item: '',
     s: 0,
     lat: 0,
     progress: 0,
@@ -183,6 +206,7 @@ export function cruiseInput(st: KartState, p: KartParams, track: TrackGeometry, 
 }
 
 const scratchInput: KartInput = { steer: 0, throttle: 0, brake: 0, drift: false, boost: false };
+const confusedInput: KartInput = { steer: 0, throttle: 0, brake: 0, drift: false, boost: false };
 
 /** 부딪힘: 드리프트 중이었다면 이번 드리프트로 모은 게이지를 잃고 드리프트가 끊긴다 (카트라이더 규칙) */
 export function hitDuringDrift(st: KartState): void {
@@ -199,16 +223,38 @@ export function hitDuringDrift(st: KartState): void {
 export function stepKart(st: KartState, input: KartInput, p: KartParams, track: TrackGeometry, dt: number, time = 0, obstacles: Obstacle[] = []): KartEvent[] {
   const events: KartEvent[] = [];
   if (dt <= 0) return events;
-  const inp = st.finished ? cruiseInput(st, p, track, scratchInput) : input;
+  // ---- 아이템 효과 타이머
+  st.stunT = Math.max(0, st.stunT - dt);
+  st.bubbleT = Math.max(0, st.bubbleT - dt);
+  st.slipT = Math.max(0, st.slipT - dt);
+  st.shieldT = Math.max(0, st.shieldT - dt);
+  st.magnetT = Math.max(0, st.magnetT - dt);
+  st.confuseT = Math.max(0, st.confuseT - dt);
+  const disabled = st.stunT > 0 || st.bubbleT > 0;
+  let inp = st.finished ? cruiseInput(st, p, track, scratchInput) : disabled ? IDLE_INPUT : input;
+  if (st.confuseT > 0 && !st.finished && !disabled) {
+    // 환각 가스: 좌우 반대, 가속↔브레이크 반대
+    confusedInput.steer = -inp.steer;
+    confusedInput.throttle = inp.brake;
+    confusedInput.brake = inp.throttle;
+    confusedInput.drift = inp.drift;
+    confusedInput.boost = inp.boost;
+    inp = confusedInput;
+  }
   const prevSpeed = st.speed;
   const prevYaw = st.yaw;
+  if (disabled) {
+    // 맞으면 급정지 (물방울은 완전 정지)
+    st.speed *= Math.max(0, 1 - (st.bubbleT > 0 ? 12 : 6) * dt);
+    st.drifting = false;
+    st.slip *= Math.max(0, 1 - 6 * dt);
+  }
 
-  // ---- 부스트: 누른 순간(edge) 에만. 이미 부스트 중이면 무시(소모 안 함) → 끝난 뒤 다시 누르면 다음 것
-  const boostPressed = inp.boost && !st.boostKeyWas;
+  // ---- 부스트: 부스트 중엔 무시(소모 안 함). 끝나기 0.25초 전부터는 누르고 있으면 끊김 없이 바로 이어진다
   st.boostKeyWas = inp.boost;
-  if (!st.finished && boostPressed && st.boosts > 0 && st.boostT <= 0) {
+  if (!st.finished && inp.boost && st.boosts > 0 && st.boostT <= 0.25) {
     st.boosts--;
-    st.boostT = BOOST_DURATION;
+    st.boostT = BOOST_DURATION + st.boostT; // 남은 시간은 이어 붙인다
     st.speed = Math.max(st.speed, p.maxSpeed * 1.15); // 점화 순간 확 튀어나간다
     events.push({ k: 'boost' });
   }
@@ -226,8 +272,9 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   }
   const mini = st.miniT > 0;
   if (mini) st.miniT = Math.max(0, st.miniT - dt);
-  const maxCur = p.maxSpeed * (boosting ? p.boostMul : mini ? MINI_MUL : 1);
-  const accel = p.accel * (boosting ? 4.5 : mini ? 2.6 : 1);
+  const magnet = st.magnetT > 0;
+  const maxCur = p.maxSpeed * (boosting ? p.boostMul : magnet ? 1.45 : mini ? MINI_MUL : 1) * (st.slipT > 0 ? 0.6 : 1);
+  const accel = p.accel * (boosting ? 4.5 : magnet ? 5 : mini ? 2.6 : 1);
 
   // ---- 종방향
   if (inp.throttle > 0) {
@@ -260,6 +307,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const speedFrac = Math.min(1, Math.abs(st.speed) / p.maxSpeed);
   const grip = Math.min(1, Math.abs(st.speed) / 10); // 저속에서는 잘 안 돌아감
   let yawRate = inp.steer * p.handling * 2.2 * grip * (1 - 0.35 * speedFrac);
+  if (st.slipT > 0) yawRate += Math.sin(time * 23 + st.slipT * 9) * 2.5; // 바나나: 비틀거림
   if (st.drifting) yawRate *= 1.8;
   if (st.speed < 0) yawRate = -yawRate;
   st.yaw -= yawRate * dt;

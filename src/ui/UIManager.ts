@@ -23,6 +23,8 @@ export interface HudState {
   gauge: number;
   boosts: number;
   boosting: boolean;
+  /** 들고 있는 아이템 표시 문자열 ('' = 없음) */
+  item: string;
   time: number;
   /** 순위 순 이름 (상위부터) */
   order: { name: string; emoji: string; me: boolean; finished: boolean }[];
@@ -471,6 +473,11 @@ export class UIManager {
     const g = fill.parentElement!;
     g.classList.toggle('full', h.boosts >= 2 && !h.boosting);
     g.classList.toggle('boosting', h.boosting);
+    const slot = $('item-slot');
+    if (slot.textContent !== (h.item || '—')) {
+      slot.textContent = h.item || '—';
+      slot.classList.toggle('has', !!h.item);
+    }
     $('pip-0').classList.toggle('on', h.boosts >= 1);
     $('pip-1').classList.toggle('on', h.boosts >= 2);
     $('gauge-label').textContent = h.boosting ? 'BOOST!!' : h.boosts >= 2 ? 'MAX · SPACE → BOOST' : h.boosts >= 1 ? 'SPACE → BOOST' : 'DRIFT → 게이지';
@@ -517,7 +524,7 @@ export class UIManager {
       const li = document.createElement('li');
       li.style.animationDelay = `${i * 0.08}s`;
       if (r.me) li.classList.add('me');
-      const t = r.time !== null ? r.time.toFixed(2) + 's' : 'DNF';
+      const t = r.time !== null ? r.time.toFixed(2) + 's' : '리타이어';
       li.innerHTML = `<span class="pos">${r.rank}위</span><span class="num">${r.slot + 1}</span><span class="name">${r.name}</span><span class="combo">${r.mountEmoji} ${r.mountName} · ${r.jockeyEmoji} ${r.jockeyName}</span><span class="time">${t}</span>`;
       list.appendChild(li);
     });
