@@ -1039,13 +1039,15 @@ export class Game {
       const pos = this.racers.worldPosition(i, this.tmp);
       const speedNorm = THREE.MathUtils.clamp(Math.abs(k.speed) / p.maxSpeed, 0, 1.2);
       const active = Math.abs(k.speed) > 1.5;
+      const own = i === this.mySlot;
       if (def.specialAbility === 'MOTORCYCLE') {
-        this.audio.updateRacerLoop(String(i), 'engine', pos, speedNorm, { rpm: k.boostT > 0 ? 1 : THREE.MathUtils.clamp(speedNorm, 0.15, 0.7), active: true });
-      } else if (def.specialAbility === 'HUMAN' || def.specialAbility === 'COSTUME' || def.specialAbility === 'TROJAN') {
-        this.audio.updateRacerLoop(String(i), 'grass', pos, speedNorm, { active });
+        this.audio.updateRacerLoop(String(i), 'engine', pos, speedNorm, { rpm: k.boostT > 0 ? 1 : THREE.MathUtils.clamp(speedNorm, 0.15, 0.7), active: true, own });
+      } else if (def.specialAbility === 'HUMAN' || def.specialAbility === 'COSTUME') {
+        this.audio.updateRacerLoop(String(i), 'grass', pos, speedNorm, { active, own });
       } else {
-        const heavy = def.specialAbility === 'ELEPHANT' ? 1.7 : def.specialAbility === 'GIRAFFE' ? 1.2 : 1;
-        this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy, active });
+        // 트로이 목마는 바퀴 굴러가는 소리 대신 무거운 말발굽(병사 발소리 느낌)
+        const heavy = def.specialAbility === 'ELEPHANT' ? 1.7 : def.specialAbility === 'GIRAFFE' ? 1.2 : def.specialAbility === 'TROJAN' ? 1.4 : 1;
+        this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy, active, own });
       }
     }
 

@@ -34,6 +34,7 @@ const SFX = {
   impactHeavy: 'impact-heavy.mp3',
   crash: 'crash.mp3',
   wind: 'wind-loop.mp3',
+  boostWind: 'boost-wind.mp3',
   airhorn: 'airhorn.mp3',
   fanfare: 'fanfare.mp3',
   tada: 'tada.mp3',
@@ -99,7 +100,6 @@ export class AudioManager {
     this.windGain = ctx.createGain();
     this.windGain.gain.value = 0;
     this.windGain.connect(this.master);
-    this.setupRush();
     void this.loadAll();
   }
 
@@ -114,22 +114,20 @@ export class AudioManager {
     return buf;
   }
 
-  /** 부스트 중 계속 나는 바람 가르는 소리: 밴드패스 노이즈 루프, 게인은 update 에서 따라감 */
+  /** 부스트 중 계속 나는 바람 가르는 소리: Pixabay 'Harsh Wind' 루프 + 하이패스, 게인은 update 에서 따라감 */
   private setupRush(): void {
     const ctx = this.ctx!;
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise();
-    src.loop = true;
+    const src = this.makeLoop('boostWind', 1.15);
+    if (!src) return;
     const f = ctx.createBiquadFilter();
-    f.type = 'bandpass';
-    f.frequency.value = 1400;
-    f.Q.value = 0.6;
+    f.type = 'highpass';
+    f.frequency.value = 300;
     const g = ctx.createGain();
     g.gain.value = 0;
     src.connect(f);
     f.connect(g);
     g.connect(this.master);
-    src.start();
+    src.start(0, 1.0);
     this.rushGain = g;
     this.rushFilter = f;
   }
@@ -240,6 +238,7 @@ export class AudioManager {
       wind.connect(this.windGain);
       wind.start();
     }
+    this.setupRush();
   }
 
   private makeLoop(name: SfxName, rate: number): AudioBufferSourceNode | null {
@@ -353,12 +352,13 @@ export class AudioManager {
   /**
    * 매 프레임 호출. speedNorm 0..1, heavy 는 코끼리 등 (저음/느림).
    */
-  updateRacerLoop(id: string, kind: LoopKind, pos: THREE.Vector3, speedNorm: number, opts: { heavy?: number; rpm?: number; failure?: boolean; active?: boolean } = {}): void {
+  updateRacerLoop(id: string, kind: LoopKind, pos: THREE.Vector3, speedNorm: number, opts: { heavy?: number; rpm?: number; failure?: boolean; active?: boolean; own?: boolean } = {}): void {
     if (!this.ctx) return;
     const node = this.ensureLoop(id, kind);
     if (!node) return;
     const t = this.ctx.currentTime;
-    const dist = this.distGain(pos);
+    // 내 말: 카메라 거리와 무관하게 항상 또렷하게
+    const dist = opts.own ? 1.3 : this.distGain(pos);
     const active = opts.active ?? true;
     let vol = 0;
     let rate = 1;
@@ -411,11 +411,12 @@ export class AudioManager {
     const t = this.ctx.currentTime;
     this.roar = Math.max(0, this.roar - dt * 0.8);
     this.crowdGain.gain.setTargetAtTime(this.crowdTarget + this.roar * 0.3, t, 0.2);
-    const wind = THREE.MathUtils.clamp((cameraVel - 8) / 40, 0, 0.5);
-    this.windGain.gain.setTargetAtTime(wind + this.rushTarget * 0.35, t, 0.25);
+    // 일반 바람은 낮게 (말발굽이 묻히지 않게), 부스트 바람은 샘플 루프로 크게
+    const wind = THREE.MathUtils.clamp((cameraVel - 10) / 60, 0, 0.22);
+    this.windGain.gain.setTargetAtTime(wind, t, 0.25);
     if (this.rushGain && this.rushFilter) {
-      this.rushGain.gain.setTargetAtTime(this.rushTarget * 0.32, t, this.rushTarget > 0 ? 0.08 : 0.3);
-      this.rushFilter.frequency.setTargetAtTime(900 + this.rushTarget * 1600, t, 0.2);
+      this.rushGain.gain.setTargetAtTime(this.rushTarget * 0.9, t, this.rushTarget > 0 ? 0.06 : 0.35);
+      this.rushFilter.frequency.setTargetAtTime(200 + this.rushTarget * 300, t, 0.2);
     }
   }
 }

@@ -5,6 +5,7 @@
 
 | 파일 | 용도 | 원본 |
 |---|---|---|
+| boost-wind.mp3 | 부스트 중 바람 가르는 루프 | https://pixabay.com/sound-effects/nature-harsh-wind-515272/ |
 | gallop-loop.mp3 | 말발굽 루프 (선수별 거리 감쇠) | https://pixabay.com/sound-effects/nature-horse-galloping-339737/ |
 | gallop-single.mp3 | 말발굽 (보조) | https://pixabay.com/sound-effects/city-single-horse-galopp-6152/ |
 | run-grass.mp3 | 휴먼 러너 잔디 달리기 루프 | https://pixabay.com/sound-effects/film-special-effects-running-in-grass-6237/ |

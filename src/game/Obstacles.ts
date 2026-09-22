@@ -31,7 +31,7 @@ export const OBSTACLE_RADIUS: Record<ObstacleKind, number> = { bale: 1.3, mud: 3
 
 /**
  * 트랙 위 장애물 배치. 출발 직후 70m 와 결승선 앞뒤 20m 는 비운다. 서로 22m 이상 떨어뜨린다.
- * 건초더미(부딪히면 크게 감속) / 진흙(지나는 동안 감속·게이지 안 참) / 부스트 패드(순간부스터)
+ * 건초더미(부딪히면 크게 감속) / 진흙(지나는 동안 감속·게이지 안 참)
  */
 export function generateObstacles(seed: number, track: TrackGeometry, count = 12): Obstacle[] {
   const rnd = mulberry32(seed);
@@ -46,7 +46,8 @@ export function generateObstacles(seed: number, track: TrackGeometry, count = 12
     const corner = track.cornerWeight(s) > 0.5;
     const lat = corner ? -halfW * 0.4 + rnd() * halfW * 1.1 : (rnd() * 2 - 1) * (halfW - 3);
     const r = rnd();
-    const kind: ObstacleKind = r < 0.5 ? 'bale' : r < 0.8 ? 'mud' : 'pad';
+    // 부스트 패드는 안 쓴다 (건초더미 60% / 진흙 40%)
+    const kind: ObstacleKind = r < 0.6 ? 'bale' : 'mud';
     let ok = true;
     for (const o of out) {
       const ds = Math.abs(track.wrap(o.s - s));
