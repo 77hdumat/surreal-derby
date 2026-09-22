@@ -52,6 +52,7 @@ export function kartParamsFor(def: RacerDefinition, j: Jockey): KartParams {
     gaugeRate: 0.5 * m.gaugeRate,
     boostMul: m.boostMul,
     radius: 1.3,
+    boostReach: def.specialAbility === 'GIRAFFE' ? 5.5 : def.specialAbility === 'LONGBODY' ? 8 : 0,
   };
 }
 

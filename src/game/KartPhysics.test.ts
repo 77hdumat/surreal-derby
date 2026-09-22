@@ -3,7 +3,7 @@ import { TrackGeometry } from '../track/TrackGeometry';
 import { BOOST_DURATION, LAPS, createKartState, finishDistance, resolveKartCollision, stepKart, syncKartToTrack, type KartInput, type KartParams } from './KartPhysics';
 
 const track = new TrackGeometry();
-const P: KartParams = { maxSpeed: 20, accel: 8, handling: 1, mass: 100, gaugeRate: 0.55, boostMul: 1.35, radius: 1.3 };
+const P: KartParams = { maxSpeed: 20, accel: 8, handling: 1, mass: 100, gaugeRate: 0.55, boostMul: 1.35, radius: 1.3, boostReach: 0 };
 const inp = (o: Partial<KartInput>): KartInput => ({ steer: 0, throttle: 0, brake: 0, drift: false, boost: false, ...o });
 const DT = 1 / 60;
 
@@ -162,6 +162,19 @@ describe('순간부스터', () => {
     for (let i = 0; i < 4; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT); // 0.07s
     expect(stepKart(st, inp({ throttle: 1 }), P, track, DT)).toEqual([]);
     expect(st.miniT).toBe(0);
+  });
+});
+
+describe('boostReach', () => {
+  it('부스트 중엔 코끝만큼 먼저 골인 판정', () => {
+    const st = spawn(track.finishS - 6, 0); // 마지막 결승선 6m 전
+    st.progress = track.finishS + (LAPS - 1) * track.length - 6;
+    st.lapsDone = LAPS - 1;
+    const G = { ...P, boostReach: 8 };
+    // 정지 상태로 한 스텝: 부스트 없으면 미완주
+    expect(stepKart(st, inp({}), G, track, DT).some((e) => e.k === 'finish')).toBe(false);
+    st.boostT = 1;
+    expect(stepKart(st, inp({}), G, track, DT).some((e) => e.k === 'finish')).toBe(true);
   });
 });
 

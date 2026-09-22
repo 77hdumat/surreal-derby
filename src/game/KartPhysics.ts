@@ -26,6 +26,8 @@ export interface KartParams {
   boostMul: number;
   /** 충돌 반지름 (m) */
   radius: number;
+  /** 부스트 중 결승선 판정에 더해지는 코 길이 (기린 목·롱바디 몸통) */
+  boostReach: number;
 }
 
 export interface KartState {
@@ -349,7 +351,9 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   // ---- 진행/랩
   st.progress += wrapDelta(st.s - prevS, track.length);
   if (!st.finished) {
-    const done = st.progress >= track.finishS ? Math.floor((st.progress - track.finishS) / track.length) + 1 : 0;
+    // 부스트 중 늘어난 목/몸통은 코끝 기준으로 먼저 결승선을 지난다
+    const reach = st.progress + (st.boostT > 0 ? p.boostReach : 0);
+    const done = reach >= track.finishS ? Math.floor((reach - track.finishS) / track.length) + 1 : 0;
     if (done > st.lapsDone) {
       st.lapsDone = done;
       if (done >= LAPS) {
