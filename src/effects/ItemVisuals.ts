@@ -92,7 +92,22 @@ export class ItemVisuals {
       g.add(body, nose, fins, fins2);
       return g;
     }
-    if (p.kind === 'waterbomb') return new THREE.Mesh(new THREE.SphereGeometry(0.7, 16, 12), this.bombMat);
+    if (p.kind === 'waterfly') {
+      // 물파리: 파란 몸통 + 날개 두 장
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.45, 14, 10), this.bombMat);
+      body.scale.set(1.3, 0.8, 0.9);
+      g.add(body);
+      const wingMat = new THREE.MeshBasicMaterial({ color: 0xdff6ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+      for (const side of [-1, 1]) {
+        const w = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.45), wingMat);
+        w.position.set(-0.1, 0.35, side * 0.5);
+        w.rotation.set(Math.PI / 2 - side * 0.5, 0, 0);
+        w.name = 'wing';
+        g.add(w);
+      }
+      return g;
+    }
     if (p.kind === 'gas') return new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 10), this.gasMat);
     // 바나나: 휘어진 토러스 조각
     const b = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.16, 8, 12, Math.PI * 0.9), this.bananaMat);
@@ -121,13 +136,11 @@ export class ItemVisuals {
         this.projMeshes.set(p.id, m);
       }
       m.position.set(p.x, p.y + (p.kind === 'banana' ? 0 : 0.4), p.z);
-      if (p.kind === 'missile') m.rotation.y = p.yaw;
-      if (p.kind === 'waterbomb' || p.kind === 'gas') {
-        // 착지 뒤엔 폭발/구름 반경으로 커진다
-        const exploded = p.age > 1.1;
-        const s = exploded ? (p.kind === 'gas' ? 6.5 : 6.5) : 1;
-        m.scale.setScalar(s);
-        (m as THREE.Mesh).material = exploded && p.kind === 'waterbomb' ? this.bubbleMat : (m as THREE.Mesh).material;
+      if (p.kind === 'missile' || p.kind === 'waterfly') m.rotation.y = p.yaw;
+      if (p.kind === 'waterfly') m.children.forEach((c) => { if (c.name === 'wing') c.rotation.x = Math.PI / 2 + Math.sin(time * 60 + c.position.z) * 0.6; });
+      if (p.kind === 'gas') {
+        // 착지 뒤엔 구름 반경으로 커진다
+        m.scale.setScalar(p.age > 1.1 ? 6.5 : 1);
       }
       if (p.kind === 'banana') m.rotation.y = time * 2;
     }

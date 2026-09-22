@@ -306,13 +306,13 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   // ---- 조향
   const speedFrac = Math.min(1, Math.abs(st.speed) / p.maxSpeed);
   const grip = Math.min(1, Math.abs(st.speed) / 10); // 저속에서는 잘 안 돌아감
-  let yawRate = inp.steer * p.handling * 2.2 * grip * (1 - 0.35 * speedFrac);
+  let yawRate = inp.steer * p.handling * 1.8 * grip * (1 - 0.35 * speedFrac);
   if (st.slipT > 0) yawRate += Math.sin(time * 23 + st.slipT * 9) * 2.5; // 바나나: 비틀거림
   // 드리프트 완급: 누른 시간이 길수록 깊어진다 (0 → 0.8s). 얕은 드리프트 = 살짝 미끄러지며 게이지 효율 ↑, 깊은 드리프트 = 유턴급 회전
   const deep = st.drifting ? Math.min(1, st.driftTime / 0.8) : 0;
   // 드리프트 중 ↑ 를 떼면 덜 미끄러지고 더 꺾인다 (카트라이더 완급 조절)
   const easing = st.drifting && inp.throttle <= 0 ? 1 : 0;
-  if (st.drifting) yawRate *= (1.4 + 1.6 * deep) * (1 + 0.15 * easing);
+  if (st.drifting) yawRate *= (1.35 + 1.15 * deep) * (1 + 0.15 * easing);
   if (st.speed < 0) yawRate = -yawRate;
   st.yaw -= yawRate * dt;
 

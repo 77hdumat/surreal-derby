@@ -2,11 +2,11 @@ import type { TrackGeometry } from '../track/TrackGeometry';
 import { BOOST_DURATION, type KartState } from './KartPhysics';
 import { mulberry32 } from './Obstacles';
 
-export type ItemKind = 'missile' | 'waterbomb' | 'banana' | 'boost' | 'shield' | 'magnet' | 'ufo' | 'gas';
+export type ItemKind = 'missile' | 'waterfly' | 'banana' | 'boost' | 'shield' | 'magnet' | 'ufo' | 'gas';
 
 export const ITEM_INFO: Record<ItemKind, { name: string; emoji: string; desc: string }> = {
   missile: { name: '미사일', emoji: '🚀', desc: '앞 말을 추적해 스핀' },
-  waterbomb: { name: '물폭탄', emoji: '💧', desc: '앞에 던져 물방울에 가둠' },
+  waterfly: { name: '물파리', emoji: '🪰', desc: '앞 말을 쫓아가 물방울에 가둠' },
   banana: { name: '바나나', emoji: '🍌', desc: '뒤에 떨어뜨려 미끄러뜨림' },
   boost: { name: '부스터', emoji: '🔥', desc: '즉시 부스트 3초' },
   shield: { name: '실드', emoji: '🛡️', desc: '공격 1회 막음 (8초)' },
@@ -27,7 +27,7 @@ export interface ItemBox {
 
 export interface Projectile {
   id: number;
-  kind: 'missile' | 'waterbomb' | 'banana' | 'gas';
+  kind: 'missile' | 'waterfly' | 'banana' | 'gas';
   owner: number;
   x: number;
   z: number;
@@ -79,7 +79,7 @@ export function rollItem(rank: number, total: number, rnd: () => number): ItemKi
   const table: [ItemKind, number][] = [
     ['banana', 3 - behind * 2],
     ['shield', 2.5 - behind * 1],
-    ['waterbomb', 2 + behind * 1.5],
+    ['waterfly', 2 + behind * 1.5],
     ['missile', 1.5 + behind * 2.5],
     ['boost', 1 + behind * 2],
     ['magnet', 0.8 + behind * 2],
@@ -144,20 +144,21 @@ export class ItemSystem {
     for (const pr of this.projectiles) {
       if (pr.done) continue;
       pr.age += dt;
-      if (pr.kind === 'missile') {
+      if (pr.kind === 'missile' || pr.kind === 'waterfly') {
+        const turn = pr.kind === 'waterfly' ? MISSILE_TURN * 1.6 : MISSILE_TURN;
         if (pr.target >= 0 && karts[pr.target] && !karts[pr.target].finished) {
           const t = karts[pr.target];
           const want = Math.atan2(-(t.z - pr.z), t.x - pr.x);
           const err = Math.atan2(Math.sin(want - pr.yaw), Math.cos(want - pr.yaw));
-          pr.yaw += Math.max(-MISSILE_TURN * dt, Math.min(MISSILE_TURN * dt, err));
+          pr.yaw += Math.max(-turn * dt, Math.min(turn * dt, err));
         }
         pr.x += Math.cos(pr.yaw) * pr.speed * dt;
         pr.z += -Math.sin(pr.yaw) * pr.speed * dt;
-        pr.y = 1.0;
-        if (pr.age > MISSILE_LIFE) pr.done = true;
+        pr.y = pr.kind === 'waterfly' ? 1.6 + Math.sin(pr.age * 14) * 0.3 : 1.0;
+        if (pr.age > (pr.kind === 'waterfly' ? MISSILE_LIFE * 1.6 : MISSILE_LIFE)) pr.done = true;
         // 트랙 밖으로 나가면 소멸
         if (Math.abs(this.track.project(pr.x, pr.z).lat) > this.track.width / 2 + 3) pr.done = true;
-      } else if (pr.kind === 'waterbomb' || pr.kind === 'gas') {
+      } else if (pr.kind === 'gas') {
         if (pr.age < BOMB_FLIGHT) {
           pr.x += Math.cos(pr.yaw) * pr.speed * dt;
           pr.z += -Math.sin(pr.yaw) * pr.speed * dt;
@@ -165,8 +166,8 @@ export class ItemSystem {
           pr.y = 1 + Math.sin(u * Math.PI) * 4;
         } else {
           pr.y = 0;
-          // 착지 후 폭발 반경 유지 (물폭탄 0.4s, 가스 구름 1.5s)
-          if (pr.age > BOMB_FLIGHT + (pr.kind === 'gas' ? 1.5 : 0.4)) pr.done = true;
+          // 착지 후 가스 구름 1.5s 유지
+          if (pr.age > BOMB_FLIGHT + 1.5) pr.done = true;
         }
       } else {
         pr.y = 0;
@@ -182,15 +183,15 @@ export class ItemSystem {
         const dz = k.z - pr.z;
         const d2 = dx * dx + dz * dz;
         let hit = false;
-        if (pr.kind === 'missile') hit = d2 < 2.4 * 2.4;
-        else if (pr.kind === 'waterbomb' || pr.kind === 'gas') hit = pr.age >= BOMB_FLIGHT && d2 < BOMB_RADIUS * BOMB_RADIUS;
+        if (pr.kind === 'missile' || pr.kind === 'waterfly') hit = d2 < 2.6 * 2.6;
+        else if (pr.kind === 'gas') hit = pr.age >= BOMB_FLIGHT && d2 < BOMB_RADIUS * BOMB_RADIUS;
         else hit = d2 < 1.8 * 1.8;
         if (!hit) continue;
         if (pr.kind === 'gas' && k.confuseT > 0) continue; // 이미 취함
         const blocked = k.shieldT > 0;
         if (blocked) k.shieldT = 0;
         else this.applyHit(k, pr.kind);
-        if (pr.kind !== 'waterbomb' && pr.kind !== 'gas') pr.done = true;
+        if (pr.kind !== 'gas') pr.done = true;
         this.events.push({ k: 'hit', slot: i, kind: pr.kind, pid: pr.id, blocked });
       }
     }
@@ -199,7 +200,7 @@ export class ItemSystem {
 
   private applyHit(k: KartState, kind: ItemKind): void {
     if (kind === 'missile') k.stunT = 1.6;
-    else if (kind === 'waterbomb') k.bubbleT = 2.4;
+    else if (kind === 'waterfly') k.bubbleT = 2.4;
     else if (kind === 'ufo') k.bubbleT = 2.7; // 2.45 초과 = UFO 연출 (ItemVisuals)
     else if (kind === 'banana') k.slipT = 1.3;
     else if (kind === 'gas') {
@@ -215,9 +216,9 @@ export class ItemSystem {
     const k = karts[slot];
     if (!k || !k.item || k.finished || k.bubbleT > 0 || k.stunT > 0) return null;
     const kind = k.item as ItemKind;
-    k.item = '';
+    if (kind === 'boost' && k.boostT > 0) return null; // 부스트 중엔 못 쓴다 (아이템 유지)
     let target = -1;
-    if (kind === 'missile') {
+    if (kind === 'missile' || kind === 'waterfly') {
       // 앞에서 가장 가까운 말 (progress 기준 0~120m 앞)
       let best = Infinity;
       karts.forEach((o, i) => {
@@ -232,6 +233,7 @@ export class ItemSystem {
       target = ranking.find((s) => s !== slot && !karts[s].finished) ?? -1;
       if (target < 0) return null;
     }
+    k.item = '';
     const ev: ItemEvent = { k: 'use', slot, kind, id: this.nextId++, x: k.x, z: k.z, yaw: k.yaw, target };
     this.apply(ev, karts, /* owned */ null);
     return ev;
@@ -248,9 +250,11 @@ export class ItemSystem {
       case 'missile':
         this.projectiles.push({ id: ev.id, kind: 'missile', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2.5, z: ev.z - Math.sin(ev.yaw) * 2.5, y: 1, yaw: ev.yaw, speed: MISSILE_SPEED, age: 0, target: ev.target, done: false });
         break;
-      case 'waterbomb':
+      case 'waterfly':
+        this.projectiles.push({ id: ev.id, kind: 'waterfly', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2.5, z: ev.z - Math.sin(ev.yaw) * 2.5, y: 1.6, yaw: ev.yaw, speed: 58, age: 0, target: ev.target, done: false });
+        break;
       case 'gas':
-        this.projectiles.push({ id: ev.id, kind: ev.kind, owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2, z: ev.z - Math.sin(ev.yaw) * 2, y: 1, yaw: ev.yaw, speed: 38, age: 0, target: -1, done: false });
+        this.projectiles.push({ id: ev.id, kind: 'gas', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2, z: ev.z - Math.sin(ev.yaw) * 2, y: 1, yaw: ev.yaw, speed: 38, age: 0, target: -1, done: false });
         break;
       case 'banana':
         this.projectiles.push({ id: ev.id, kind: 'banana', owner: ev.slot, x: ev.x - Math.cos(ev.yaw) * 3, z: ev.z + Math.sin(ev.yaw) * 3, y: 0, yaw: ev.yaw, speed: 0, age: 0, target: -1, done: false });
@@ -281,7 +285,7 @@ export class ItemSystem {
 
   /** 원격 hit: 투사체 제거 (효과는 피격자 쪽에서 이미 적용됨) */
   applyHit_remote(pid: number, kind: ItemKind): void {
-    if (kind === 'waterbomb' || kind === 'gas') return; // 폭발·구름은 시간이 지나면 저절로 사라진다
+    if (kind === 'gas') return; // 구름은 시간이 지나면 저절로 사라진다
     for (const p of this.projectiles) if (p.id === pid) p.done = true;
   }
 

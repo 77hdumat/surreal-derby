@@ -81,7 +81,7 @@ export function encodeKart(k: KartState): number[] {
 }
 
 /** 아이템 종류 코드 (스냅샷 압축용) */
-export const ITEM_CODES = ['', 'missile', 'waterbomb', 'banana', 'boost', 'shield', 'magnet', 'ufo', 'gas'];
+export const ITEM_CODES = ['', 'missile', 'waterfly', 'banana', 'boost', 'shield', 'magnet', 'ufo', 'gas'];
 
 export const KART_FIELDS = 25;
 

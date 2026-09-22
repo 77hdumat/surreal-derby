@@ -64,10 +64,10 @@ export class RaceTrack extends TrackGeometry {
   }
 
   private buildGround(): void {
-    const geo = new THREE.PlaneGeometry(1600, 1600);
+    const geo = new THREE.PlaneGeometry(2600, 2600);
     geo.setAttribute('uv2', geo.attributes.uv);
     // 실사 잔디 PBR: 1600m 를 약 3.2m 타일로
-    const mat = grassMaterial(500);
+    const mat = grassMaterial(800);
     applyCloudShadow(mat, 0.3);
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;

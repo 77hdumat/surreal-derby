@@ -85,7 +85,7 @@ export function kartParamsFor(def: RacerDefinition, j: Jockey): KartParams {
     accel: k.accel * m.accel,
     handling: k.handling * m.handling,
     mass: k.mass * m.mass,
-    gaugeRate: 0.5 * (k.gauge ?? 1) * m.gaugeRate,
+    gaugeRate: 0.8 * (k.gauge ?? 1) * m.gaugeRate,
     boostMul: m.boostMul * (k.boost ?? 1),
     radius: 1.3,
     boostReach: k.reach ?? 0,
@@ -100,7 +100,7 @@ export function statBars(def: RacerDefinition, j: Jockey): { label: string; valu
     { label: '최고속', value: n(p.maxSpeed, 34, 45) },
     { label: '가속', value: n(p.accel, 4, 16) },
     { label: '조향', value: n(p.handling, 0.85, 1.5) },
-    { label: '충전', value: n(p.gaugeRate, 0.4, 0.7) },
+    { label: '충전', value: n(p.gaugeRate, 0.65, 1.1) },
     { label: '부스트', value: n(p.boostMul, 1.4, 1.8) },
     { label: '질량', value: n(p.mass, 60, 260) },
   ];

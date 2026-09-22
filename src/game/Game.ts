@@ -903,7 +903,8 @@ export class Game {
         break;
       case 'use':
         if (e.kind === 'missile') this.audio.play('whooshEpic', { pos, minGain: me ? 0.7 : 0.3, gain: 0.8, rate: 1.4 });
-        else if (e.kind === 'waterbomb' || e.kind === 'gas') this.audio.play('whoosh', { pos, minGain: me ? 0.6 : 0.2, gain: 0.7, rate: 0.9 });
+        else if (e.kind === 'waterfly') this.audio.play('whoosh', { pos, minGain: me ? 0.6 : 0.2, gain: 0.6, rate: 1.8 });
+        else if (e.kind === 'gas') this.audio.play('whoosh', { pos, minGain: me ? 0.6 : 0.2, gain: 0.7, rate: 0.9 });
         else if (e.kind === 'boost') {
           this.racers.boostFx(e.slot);
           this.audio.jetBoost(me ? 1 : 0.35);

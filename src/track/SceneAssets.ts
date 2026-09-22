@@ -125,7 +125,7 @@ export async function loadMountains(): Promise<THREE.Group> {
   });
   const group = new THREE.Group();
   const scale = 0.55;
-  const ring = 1250;
+  const ring = 1550; // 서킷(±620m)과 안 겹치게 멀리
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     const tile = src.clone(true);
