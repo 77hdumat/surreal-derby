@@ -42,6 +42,8 @@ export interface KartState {
   gauge: number;
   /** 모아 둔 부스터 개수 (최대 MAX_BOOSTS) */
   boosts: number;
+  /** 직전 스텝의 부스트 키 상태 (누른 순간만 잡기 위해) */
+  boostKeyWas: boolean;
   /** 이번 드리프트 시작 시점 게이지 — 부딪히면 여기로 되돌린다 */
   gaugeAtDriftStart: number;
   /** 남은 부스트 시간 (초) */
@@ -77,7 +79,7 @@ export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'l
 
 export const LAPS = 3;
 export const MAX_BOOSTS = 2;
-export const BOOST_DURATION = 2.0;
+export const BOOST_DURATION = 3.0;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
 export const MINI_DURATION = 0.55;
 export const MINI_MUL = 1.18;
@@ -107,6 +109,7 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     drifting: false,
     gauge: 0,
     boosts: 0,
+    boostKeyWas: false,
     gaugeAtDriftStart: 0,
     boostT: 0,
     miniT: 0,
@@ -194,10 +197,12 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const prevSpeed = st.speed;
   const prevYaw = st.yaw;
 
-  // ---- 부스트
-  if (!st.finished && inp.boost && st.boosts > 0 && st.boostT <= 0) {
-    st.boostT = BOOST_DURATION;
+  // ---- 부스트: 누른 순간(edge) 에만. 이미 부스트 중이면 무시(소모 안 함) → 끝난 뒤 다시 누르면 다음 것
+  const boostPressed = inp.boost && !st.boostKeyWas;
+  st.boostKeyWas = inp.boost;
+  if (!st.finished && boostPressed && st.boosts > 0 && st.boostT <= 0) {
     st.boosts--;
+    st.boostT = BOOST_DURATION;
     st.speed = Math.max(st.speed, p.maxSpeed * 1.05);
     events.push({ k: 'boost' });
   }

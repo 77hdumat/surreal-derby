@@ -575,7 +575,7 @@ export class TrojanRig extends AnimalVisual {
         rigid: true,
         clips: {},
         hideMeshes: ['Cornea', 'Saddle', 'Horseshoe'],
-        seat: { bone: 'chest', offset: [-0.6, 1.05, 0] },
+        seat: { bone: 'chest', offset: [-1.7, 1.15, 0] }, // 지휘관은 목마 등 뒤쪽에 (목·몸통과 안 겹치게)
         bit: undefined,
         numberCloth: { bone: 'spine', offset: [-0.4, 0.1, 0], size: 1.2, halfWidth: 1.3 },
       },

@@ -41,13 +41,14 @@ describe('stepKart', () => {
     st.gauge = 0.5;
     expect(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT)).toEqual([]);
     st.boosts = 1;
+    st.boostKeyWas = false;
     const ev = stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT);
     expect(ev).toEqual([{ k: 'boost' }]);
     expect(st.boosts).toBe(0);
     expect(st.boostT).toBeCloseTo(BOOST_DURATION - DT, 6);
     for (let i = 0; i < 100; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.2);
-    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 400; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeCloseTo(P.maxSpeed, 2);
   });
 
@@ -83,6 +84,26 @@ describe('stepKart', () => {
     expect(st.lapsDone).toBe(LAPS);
     expect(st.finishTime).toBeGreaterThan(0);
     expect(st.progress).toBeGreaterThanOrEqual(finishDistance(track));
+  });
+});
+
+describe('부스터 연타', () => {
+  it('부스트 중에 누르면 무시(소모 안 함), 끝난 뒤 눌러야 다음 것', () => {
+    const st = spawn();
+    st.boosts = 2;
+    let boosts = 0;
+    const count = (evs: { k: string }[]) => evs.forEach((e) => e.k === 'boost' && boosts++);
+    count(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT));
+    expect(boosts).toBe(1);
+    expect(st.boosts).toBe(1);
+    for (let i = 0; i < 60; i++) count(stepKart(st, inp({ throttle: 1, boost: i % 2 === 0 }), P, track, DT)); // 연타
+    expect(boosts).toBe(1);
+    expect(st.boosts).toBe(1);
+    for (let i = 0; i < 60 * 3; i++) count(stepKart(st, inp({ throttle: 1 }), P, track, DT)); // 3초 경과
+    expect(st.boostT).toBe(0);
+    count(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT));
+    expect(boosts).toBe(2);
+    expect(st.boosts).toBe(0);
   });
 });
 

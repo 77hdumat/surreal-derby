@@ -6,6 +6,7 @@ import type { RaceEventType } from '../events/RaceEvent';
 import { furBumpTexture } from './Loft';
 import { solveLeg, strideTarget } from './Gait';
 import { makeRider } from './RiderModel';
+import { SHOW_NUMBER_CLOTH } from './rig/AnimalVisual';
 export { makeRider } from './RiderModel';
 
 /**
@@ -221,6 +222,7 @@ export function makeNumberTexture(n: number, cloth: number): THREE.CanvasTexture
 
 export function makeNumberCloths(n: number, cloth: number, size: number, halfWidth: number): THREE.Group {
   const g = new THREE.Group();
+  if (!SHOW_NUMBER_CLOTH) return g; // 대결 모드: 번호판 없음
   const tex = makeNumberTexture(n, cloth);
   for (const side of [-1, 1]) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size * 0.9), new THREE.MeshBasicMaterial({ map: tex }));

@@ -484,8 +484,8 @@ export class CowRig extends AnimalVisual {
       this.socket('head', eye, [0.28, 0.12, s * 0.16]);
     }
     // 투우사의 빨간 천 (물레타): 기수 오른손에서 늘어지는 천, 정점을 흔들어 펄럭임
-    this.capeGeo = new THREE.PlaneGeometry(0.75, 0.95, 10, 12);
-    this.capeGeo.translate(0.375, -0.475, 0); // 원점 = 왼쪽 위 모서리(손)
+    this.capeGeo = new THREE.PlaneGeometry(0.95, 1.15, 10, 12);
+    this.capeGeo.translate(0.475, -0.575, 0); // 원점 = 왼쪽 위 모서리(손)
     this.capeBase = Float32Array.from(this.capeGeo.attributes.position.array as Float32Array);
     this.cape = new THREE.Mesh(this.capeGeo, new THREE.MeshStandardMaterial({ color: 0xd8101c, roughness: 0.85, side: THREE.DoubleSide }));
     this.cape.castShadow = true;
@@ -506,7 +506,8 @@ export class CowRig extends AnimalVisual {
 
   protected updateSpecial(ctx: VisualContext, _ph: number): void {
     const { time, dt, speedNorm } = ctx;
-    this.rage = damp(this.rage, ctx.state === 'RAGING' ? 1 : 0, 5, dt);
+    // 부스트(RAGING) 동안 투우: 빠르게 일어서고, 끝나도 천천히 앉는다
+    this.rage = damp(this.rage, ctx.state === 'RAGING' ? 1 : 0, ctx.state === 'RAGING' ? 9 : 2.5, dt);
     const r = this.rage;
     // 들이받기: 머리를 숙였다가 위로 확 퍼올림 (0.5초)
     this.toss = Math.max(0, this.toss - dt * 2.0);
@@ -520,7 +521,7 @@ export class CowRig extends AnimalVisual {
     if (this.toss > 0.6) this.body.position.y += (this.toss - 0.6) * 0.3; // 앞다리 살짝 들림
     for (const e of this.eyes) (e.material as THREE.MeshBasicMaterial).opacity = r;
     // 투우사 기수: 분노 중엔 등 위에 일어서서 빨간 천을 흔든다
-    this.stand = damp(this.stand, r > 0.5 ? 1 : 0, 4, dt);
+    this.stand = damp(this.stand, r > 0.3 ? 1 : 0, 7, dt);
     const st = this.stand;
     if (this.rider && this.riderSocket) {
       this.riderSocket.offset.y = this.seatBaseY + 0.62 * st; // 골반이 서 있는 높이로
@@ -531,7 +532,7 @@ export class CowRig extends AnimalVisual {
         if (this.cape.parent !== this.rider.group) this.rider.group.add(this.cape);
         this.cape.position.copy(this.rider.handR);
         this.cape.rotation.set(0, 0.4, 0.15 * Math.sin(time * 5.2));
-        this.cape.scale.setScalar(THREE.MathUtils.clamp(st * 1.3, 0.001, 1));
+        this.cape.scale.setScalar(THREE.MathUtils.clamp(st * 1.8, 0.001, 1.45)); // 큰 천, 멀리서도 보이게
         this.flapCape(time, speedNorm);
       }
     }

@@ -36,6 +36,8 @@ export class GameCamera {
   private fovCur = BASE_FOV;
   /** 결과 화면에서 바라볼 지점 */
   private resultFocus = new THREE.Vector3();
+  /** 탈것 크기에 따른 거리 배수 (트로이 목마 등 큰 말은 멀리서) */
+  distanceScale = 1;
 
   constructor(track: TrackGeometry, aspect: number) {
     this.track = track;
@@ -95,14 +97,16 @@ export class GameCamera {
         const speedK = THREE.MathUtils.clamp(Math.abs(kart.speed) / 30, 0, 1.3);
         // 빨라질수록 카메라가 낮고 가깝게 붙어 속도감 ↑
         // 말에 가깝게, 살짝 위에서 내려다보는 시점
-        const back = 5.2 + speedK * 0.9 + boost * 0.5;
-        const up = 3.7 - speedK * 0.35;
+        const ds = this.distanceScale;
+        const back = (5.2 + speedK * 0.9 + boost * 0.5) * ds;
+        const up = (3.7 - speedK * 0.35) * ds;
         // 드리프트 중엔 미끄러지는 반대쪽으로 살짝 빠져 옆모습이 보이게
         const wantSide = -kart.slip * 5;
         this.sideOffset += (wantSide - this.sideOffset) * Math.min(1, 4 * dt);
         this.desiredPos.set(kart.x - fx * back + rx * this.sideOffset, up, kart.z - fz * back + rz * this.sideOffset);
-        this.desiredLook.set(kart.x + fx * 7, 1.1, kart.z + fz * 7);
-        k = 9;
+        this.desiredLook.set(kart.x + fx * 7 * ds, 1.1 * ds, kart.z + fz * 7 * ds);
+        // 고속·부스트에서 카메라가 뒤로 처지지 않게 빠르게 따라붙는다
+        k = 18;
         break;
       }
       case 'RESULT': {

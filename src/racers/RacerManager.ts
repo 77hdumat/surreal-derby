@@ -169,6 +169,7 @@ export class RacerManager {
     const ab = this.defs[slot].specialAbility;
     const ev = ab === 'COSTUME' ? 'COSTUME_CARRY' : ab === 'TROJAN' ? 'TROJAN_AMBUSH' : ab === 'ELEPHANT' ? 'ELEPHANT_SPRAY' : ab === 'HUMAN' ? 'HUMAN_BIPEDAL' : ab === 'COW' ? 'COW_RAGE' : ab === 'CIRCUS' ? 'CIRCUS_ACT' : ab === 'MOTORCYCLE' ? 'MOTORCYCLE_BOOST' : ab === 'LONGBODY' ? 'LONGBODY_STRETCH' : ab === 'GIRAFFE' ? 'GIRAFFE_MEGA_NECK' : 'SUPER_SPRINT';
     v.onEvent(ev, this.ctx[slot]);
+    if (ab === 'COW') v.onEvent('BULL_TOSS', this.ctx[slot]); // 뿔 치켜올리며 돌진 시작
   }
 
   private boostEndFx(slot: number): void {

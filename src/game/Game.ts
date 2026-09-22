@@ -646,6 +646,7 @@ export class Game {
     this.screen = 'RACE';
     this.ui.showHud();
     this.camera.setMode('CHASE', true);
+    this.camera.distanceScale = Game.cameraScaleFor(this.racers.defs[this.mySlot]?.specialAbility);
     this.camera.update(0, this.race.karts[this.mySlot] ?? null, 0);
     this.racers.update(this.race.karts, this.race.params, 0, 0, this.camera.camera.position);
     this.audio.setExcitement(0.3);
@@ -656,6 +657,22 @@ export class Game {
       this.net?.broadcast({ t: 'count', n: 3 });
     }
     this.raceStarting = false;
+  }
+
+  /** 큰 탈것은 화면에 엉덩이만 나오지 않게 카메라를 멀리 */
+  static cameraScaleFor(ability?: string): number {
+    switch (ability) {
+      case 'TROJAN':
+        return 2.9;
+      case 'ELEPHANT':
+        return 1.6;
+      case 'GIRAFFE':
+        return 1.35;
+      case 'LONGBODY':
+        return 1.2;
+      default:
+        return 1;
+    }
   }
 
   private showCount(n: number): void {

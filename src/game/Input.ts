@@ -2,7 +2,7 @@ import type { KartInput } from './KartPhysics';
 
 /**
  * 키보드 + 터치 버튼 → KartInput.
- * ↑/W 가속, ↓/S 브레이크·후진, ←→/A D 조향, Shift 드리프트, Ctrl/Space/Z 부스트.
+ * ↑/W 가속, ↓/S 브레이크·후진, ←→/A D 조향, Shift 드리프트, Space 부스트.
  * 터치: #touch 안의 [data-key] 버튼 (left/right/gas/brake/drift/boost).
  */
 export class InputManager {
@@ -51,10 +51,7 @@ export class InputManager {
       case 'ShiftLeft':
       case 'ShiftRight':
         return 'drift';
-      case 'ControlLeft':
-      case 'ControlRight':
       case 'Space':
-      case 'KeyZ':
         return 'boost';
       default:
         return null;

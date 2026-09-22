@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+
+/** 말 옆 번호판 표시 여부 */
+export const SHOW_NUMBER_CLOTH = false;
 import type { RacerDefinition } from '../Racer';
 import type { RaceEventType } from '../../events/RaceEvent';
 import type { RacerVisual, VisualContext } from '../RacerVisual';
@@ -384,7 +387,8 @@ export abstract class AnimalVisual implements RacerVisual {
 
   protected buildNumberCloth(): void {
     const nc = this.cfg.numberCloth;
-    if (!nc) return;
+    // 대결 모드: 번호판 없음 (선수 구분은 HUD 순위·기수 유니폼색으로)
+    if (!nc || !SHOW_NUMBER_CLOTH) return;
     const g = new THREE.Group();
     const c = document.createElement('canvas');
     c.width = 128;
