@@ -67,22 +67,18 @@ export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, oth
   const tooFast = ahead2 > 0.7 && st.speed > p.maxSpeed * 0.62 && st.boostT <= 0;
   out.throttle = tooFast ? 0 : prof.skill;
   out.brake = tooFast && st.speed > p.maxSpeed * 0.8 ? 0.6 : 0;
-  // 코너: 코너 동안 Shift + 방향키를 걸고, 충분히 돌았거나 코너가 풀리면 뗀다 (남은 슬립은 자연히 풀린다)
+  // 코너: 빠르면 드리프트로 게이지 충전. 한 번 시작하면 최소 0.7s 유지, 끝나면 1.2s 뒤에야 다시 (순간부스터 남발 방지)
+  prof.driftHold = Math.max(0, prof.driftHold - dt);
   prof.driftCooldown = Math.max(0, prof.driftCooldown - dt);
-  const wantDrift = corner > Math.max(0.55, prof.driftEager) && st.speed > p.maxSpeed * 0.55 && Math.abs(out.steer) > 0.3;
-  out.drift = false;
-  if (!st.drifting) {
-    out.drift = wantDrift && prof.driftCooldown <= 0;
+  const wantDrift = corner > prof.driftEager && st.speed > p.maxSpeed * 0.55 && Math.abs(out.steer) > 0.12;
+  if (st.drifting) {
+    out.drift = wantDrift || prof.driftHold > 0;
+    if (!out.drift) prof.driftCooldown = 1.2;
   } else {
-    const moveErr = angleDelta(want - (st.yaw + st.slip));
-    const turnedEnough = -Math.sign(moveErr) === -st.driftDir || Math.abs(moveErr) < 0.08;
-    const straightAhead = track.cornerWeight(st.s + 20) < 0.2;
-    const release = straightAhead || turnedEnough || Math.abs(st.slip) > 0.7;
-    out.drift = !release;
-    if (!release) out.steer = st.driftDir;
-    else prof.driftCooldown = 0.5;
+    out.drift = wantDrift && prof.driftCooldown <= 0;
+    if (out.drift) prof.driftHold = 0.7;
   }
-  if (out.drift && !st.drifting && Math.abs(out.steer) < 0.35) out.steer = Math.sign(out.steer || -1) * 0.35;
+  if (out.drift && Math.abs(out.steer) < 0.35) out.steer = Math.sign(out.steer || -1) * 0.35;
   // 직선에서 게이지가 차 있으면 부스트
   out.boost = st.boosts > 0 && track.cornerWeight(st.s + 30) < 0.2;
   return out;

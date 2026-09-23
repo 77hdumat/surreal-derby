@@ -156,22 +156,17 @@ describe('게이지 규칙', () => {
 });
 
 describe('순간부스터', () => {
-  /** Shift+→ 로 드리프트 시작 → 키를 놓고 frames 만큼 미끄러짐 → Shift 를 다시 눌러 끊는다 */
-  function driftAndCut(st: ReturnType<typeof spawn>, steer: number, frames: number) {
-    stepKart(st, inp({ throttle: 1, steer, drift: true }), P, track, DT);
-    for (let i = 0; i < frames; i++) stepKart(st, inp({ throttle: 1, steer: i < 6 ? steer : 0 }), P, track, DT);
-    stepKart(st, inp({ throttle: 1, drift: true }), P, track, DT); // Shift 재입력 → 끊김
-  }
-  it('Shift 로 끊은 직후 ↑ 면 mini 이벤트 + 최고속 초과, 반복 가능', () => {
+  it('드리프트 종료 직후 ↑ 면 mini 이벤트 + 최고속 초과, 반복 가능', () => {
     const st = spawn();
     for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     let minis = 0;
     for (let rep = 0; rep < 3; rep++) {
-      driftAndCut(st, rep % 2 ? -1 : 1, 14);
-      expect(st.drifting).toBe(false);
-      for (let i = 0; i < 6; i++) for (const e of stepKart(st, inp({ throttle: 1 }), P, track, DT)) if (e.k === 'mini') minis++;
+      const steer = rep % 2 ? -1 : 1; // 좌우 번갈아 (벽에 안 가게)
+      for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer, drift: true }), P, track, DT); // 0.2s 드리프트
+      for (let i = 0; i < 6; i++) for (const e of stepKart(st, inp({ throttle: 1, steer: -steer * 0.5 }), P, track, DT)) if (e.k === 'mini') minis++;
       expect(st.miniT).toBeGreaterThan(0);
-      for (let i = 0; i < 20; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+      for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer: -steer * 0.5 }), P, track, DT);
+      expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.05);
       expect(Math.abs(st.lat)).toBeLessThan(13);
     }
     expect(minis).toBe(3);
@@ -179,57 +174,31 @@ describe('순간부스터', () => {
   it('창이 지나면 ↑ 를 눌러도 안 나간다 / 너무 짧은 드리프트는 무시', () => {
     const st = spawn();
     for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
-    driftAndCut(st, 1, 14);
+    for (let i = 0; i < 20; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
     for (let i = 0; i < 30; i++) stepKart(st, inp({}), P, track, DT); // 0.5s 아무것도 안 누름
     expect(st.miniWindow).toBe(0);
     expect(stepKart(st, inp({ throttle: 1 }), P, track, DT)).toEqual([]);
+    for (let i = 0; i < 4; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT); // 0.07s
+    expect(stepKart(st, inp({ throttle: 1 }), P, track, DT)).toEqual([]);
+    expect(st.miniT).toBe(0);
   });
 });
 
-describe('톡톡이', () => {
-  it('Shift+방향키 톡 → ↑ 뗐다 다시 누르면 끊기며 순간부스터, 연속 반복 가능', () => {
-    const st = spawn();
-    for (let i = 0; i < 240; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
-    let minis = 0;
-    for (let rep = 0; rep < 4; rep++) {
-      const steer = rep % 2 ? -1 : 1;
-      for (let i = 0; i < 8; i++) stepKart(st, inp({ throttle: 1, drift: true, steer }), P, track, DT); // 톡
-      expect(st.drifting).toBe(true);
-      for (let i = 0; i < 4; i++) stepKart(st, inp({ steer }), P, track, DT); // ↑ 뗌
-      for (const e of stepKart(st, inp({ throttle: 1 }), P, track, DT)) if (e.k === 'mini') minis++; // ↑ 다시
-      expect(st.drifting).toBe(false);
-      for (let i = 0; i < 10; i++) stepKart(st, inp({ throttle: 1, steer: -steer * 0.3 }), P, track, DT);
-    }
-    expect(minis).toBe(4);
-  });
-});
 
-describe('드리프트 잠금 (카트라이더식)', () => {
-  it('Shift·방향키를 놓아도 계속 미끄러지고 게이지가 찬다, Shift 를 다시 누르면 끊긴다', () => {
-    const st = spawn();
-    for (let i = 0; i < 240; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
-    const g0 = st.gauge;
-    stepKart(st, inp({ throttle: 1, drift: true, steer: 1 }), P, track, DT);
-    expect(st.drifting).toBe(true);
-    for (let i = 0; i < 8; i++) stepKart(st, inp({ throttle: 1, steer: 1 }), P, track, DT);
-    for (let i = 0; i < 20; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT); // 키 전부 뗌
-    expect(st.drifting).toBe(true);
-    expect(Math.abs(st.slip)).toBeGreaterThan(0.15);
-    expect(st.gauge).toBeGreaterThan(g0);
-    stepKart(st, inp({ throttle: 1, drift: true }), P, track, DT);
-    expect(st.drifting).toBe(false);
-    const g1 = st.gauge;
-    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
-    expect(st.gauge).toBeCloseTo(g1, 6);
-  });
-  it('반대 방향키(역조향)로 드리프트가 끊긴다', () => {
-    const st = spawn();
-    for (let i = 0; i < 240; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
-    stepKart(st, inp({ throttle: 1, drift: true, steer: 1 }), P, track, DT);
-    for (let i = 0; i < 10; i++) stepKart(st, inp({ throttle: 1, steer: 1 }), P, track, DT);
-    expect(st.drifting).toBe(true);
-    for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer: -1 }), P, track, DT);
-    expect(st.drifting).toBe(false);
+describe('헤어핀 유턴', () => {
+  it('Shift 를 누르고 있으면 느려져도 드리프트가 풀리지 않고, ↓ 를 같이 누르면 더 조인다', () => {
+    const run = (brake: number) => {
+      const st = spawn();
+      for (let i = 0; i < 180; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+      const yaw0 = st.yaw;
+      for (let i = 0; i < 40; i++) stepKart(st, inp({ throttle: 0, brake, steer: 1, drift: true }), P, track, DT);
+      return { st, turned: Math.abs(st.yaw - yaw0) };
+    };
+    const plain = run(0);
+    const tight = run(1);
+    expect(tight.st.speed).toBeLessThan(P.maxSpeed * 0.4); // 진입 속도 아래로 떨어져도
+    expect(tight.st.drifting).toBe(true); // 드리프트 유지
+    expect(tight.turned).toBeGreaterThan(plain.turned * 0.9);
   });
 });
 

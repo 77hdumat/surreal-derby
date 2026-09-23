@@ -361,98 +361,46 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   // 최고속 초과분(부스트 종료 후)은 아주 완만히 감속 — 부스트 사이 관성이 유지돼 연속 부스트가 끊기지 않는다
   if (st.speed > maxCur) st.speed = Math.max(maxCur, st.speed - (st.speed - maxCur) * 0.6 * dt);
 
-  // ---- 드리프트 (카트라이더식): 차체 방향(yaw) 과 진행 방향(yaw + slip) 을 분리한다.
-  //  · Shift + 방향키를 누르는 동안: 그립이 확 낮아져 깊게 미끄러진다
-  //  · 떼면: 그립이 천천히 돌아오며 쭈욱 미끄러지다 슬립이 풀리면 자연 종료 (+ 순간부스터 창)
-  //  · 미끄러지는 중 Shift + 방향키 다시 → 이어서 드리프트 / Shift 만 톡 · 역방향키 → 즉시 끊기
-  //  · 톡톡이: 미끄러지는 중 ↑ 를 뗐다 다시 누르면 그 순간 끊기며 순간부스터
+  // ---- 드리프트 판정 (Shift 를 누르고 있는 동안만 드리프트)
   const gaugeBefore = st.gauge;
-  const driftPressed = inp.drift && !st.driftKeyWas;
-  st.driftKeyWas = inp.drift;
-  const throttlePressed = inp.throttle > 0 && !st.throttleWas;
-  st.throttleWas = inp.throttle > 0;
-  const steerSign = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) : 0;
-  const endDrift = (mini: boolean) => {
-    if (mini && st.driftTime >= MINI_MIN_DRIFT) st.miniWindow = MINI_WINDOW;
-    st.drifting = false;
+  // 진입은 중속 이상. 일단 들어가면 헤어핀에서 느려져도 Shift 를 놓기 전까진 풀리지 않는다 (유턴)
+  const canStart = st.speed > p.maxSpeed * 0.4;
+  const keep = st.drifting && st.speed > p.maxSpeed * 0.12;
+  const wantDrift = !st.finished && inp.drift && (keep || (canStart && Math.abs(inp.steer) > 0.2));
+  if (st.drifting && !wantDrift) {
+    // 드리프트 종료 → 순간부스터 입력 창 (너무 짧은 드리프트는 제외)
+    if (st.driftTime >= MINI_MIN_DRIFT) st.miniWindow = MINI_WINDOW;
     st.driftTime = 0;
-    st.counterT = 0;
-  };
-  /** 지금 Shift + 방향키로 드리프트를 "걸고" 있는가 */
-  let driftHeld = false;
-  if (!st.drifting) {
-    if (!st.finished && inp.drift && steerSign !== 0 && st.speed > p.maxSpeed * 0.32) {
-      st.drifting = true;
-      st.driftDir = steerSign;
-      st.driftTime = 0;
-      st.gaugeAtDriftStart = st.gauge;
-      // 킥: 진입 순간 차체를 안쪽으로 확 돌려 슬립을 만든다
-      st.yaw -= steerSign * 0.2;
-      st.slip += steerSign * 0.2;
-      driftHeld = true;
-    }
-  } else {
-    st.driftTime += dt;
-    driftHeld = inp.drift && steerSign === st.driftDir;
-    // 미끄러지는 중 반대쪽으로 Shift + 방향키 → 방향 전환해 이어서 드리프트
-    if (inp.drift && steerSign === -st.driftDir && driftPressed) {
-      st.driftDir = steerSign;
-      driftHeld = true;
-    }
-    st.counterT = !inp.drift && steerSign === -st.driftDir ? st.counterT + dt : 0;
-    if (st.finished || st.speed < p.maxSpeed * 0.12) endDrift(false);
-    else if (driftPressed && steerSign === 0 && st.driftTime > 0.12) endDrift(true); // Shift 만 톡 → 끊기
-    else if (st.counterT > 0.1) endDrift(true); // 역조향 → 끊기
-    else if (throttlePressed && st.driftTime > MINI_MIN_DRIFT) {
-      // 톡톡이: ↑ 를 다시 누른 순간 끊고 바로 순간부스터
-      endDrift(false);
-      st.miniWindow = 0;
-      st.miniT = MINI_DURATION;
-      st.speed = Math.max(st.speed, Math.min(p.maxSpeed * MINI_MUL, st.speed + 1.5));
-      events.push({ k: 'mini' });
-    } else if (!driftHeld && st.driftTime > 0.2 && Math.abs(st.slip) < 0.07) endDrift(true); // 자연 종료
+  } else if (!st.drifting && wantDrift) {
+    st.gaugeAtDriftStart = st.gauge;
   }
+  st.drifting = wantDrift;
+  if (st.drifting) st.driftTime += dt;
 
   // ---- 조향
-  const steerDir = Math.sign(inp.steer);
-  if (steerDir !== 0 && steerDir === Math.sign(st.steerHold || steerDir)) st.steerHold = steerDir * Math.min(0.9, Math.abs(st.steerHold) + dt);
-  else st.steerHold = steerDir === 0 ? 0 : steerDir * dt;
-  const hold = Math.min(1, Math.abs(st.steerHold) / 0.7); // 0 → 1 (0.7초)
   const speedFrac = Math.min(1, Math.abs(st.speed) / p.maxSpeed);
   const grip = Math.min(1, Math.abs(st.speed) / 10); // 저속에서는 잘 안 돌아감
-  let yawRate: number;
-  if (st.drifting) {
-    // 걸고 있는 동안: 안쪽으로 강하게(유턴까지), 뗀 뒤: 남은 슬립 방향으로 완만히 계속 돈다
-    const inner = steerSign === st.driftDir ? 1 : 0;
-    const base = driftHeld ? 0.8 + 1.5 * inner * (0.6 + 0.4 * hold) : 0.35 + 0.6 * inner;
-    yawRate = st.driftDir * p.handling * base * (1 + 0.35 * Math.min(1, inp.brake));
-  } else {
-    yawRate = inp.steer * p.handling * (1.05 + 0.95 * hold) * grip * (1 - 0.3 * speedFrac);
-  }
+  let yawRate = inp.steer * p.handling * 1.8 * grip * (1 - 0.35 * speedFrac);
   if (st.slipT > 0) yawRate += Math.sin(time * 23 + st.slipT * 9) * 2.5; // 바나나: 비틀거림
+  // 드리프트 완급: 누른 시간이 길수록 깊어진다 (0 → 0.8s). 얕은 드리프트 = 살짝 미끄러지며 게이지 효율 ↑, 깊은 드리프트 = 유턴급 회전
+  const deep = st.drifting ? Math.min(1, st.driftTime / 0.8) : 0;
+  // 드리프트 중 ↑ 를 떼면 덜 미끄러지고 더 꺾인다 (카트라이더 완급 조절)
+  const easing = st.drifting && inp.throttle <= 0 ? 1 : 0;
+  // 드리프트 중 브레이크(↓)를 같이 누르면 더 조인다 — 헤어핀 유턴용
+  if (st.drifting) yawRate *= (1.35 + 1.15 * deep) * (1 + 0.15 * easing) * (1 + 0.35 * Math.min(1, inp.brake));
   if (st.speed < 0) yawRate = -yawRate;
-  const dYaw = yawRate * dt;
-  st.yaw -= dYaw;
-  // 진행 방향은 관성으로 남는다: 차체가 돈 만큼 슬립이 생긴다 (드리프트 중에만)
-  if (st.drifting) st.slip += dYaw;
+  st.yaw -= yawRate * dt;
 
-  // ---- 슬립 복원 (그립): 드리프트 중엔 느리게(쭈욱), 평소엔 빠르게
+  // ---- 슬립 (드리프트 시 옆으로 미끄러짐)
   if (st.drifting) {
-    // 걸고 있으면 그립이 낮아 깊게, 떼면 서서히 복원(쭈욱), ↑ 를 떼면 조금 더 빨리 붙는다
-    const gripRate = (driftHeld ? 0.9 : 1.9) + (inp.throttle > 0 ? 0 : 0.8) + (st.counterT > 0 ? 6 : 0);
-    st.slip -= st.slip * Math.min(1, gripRate * dt);
-    st.slip = Math.max(-1.2, Math.min(1.2, st.slip));
-    // 옆으로 미끄러지는 동안 측면 마찰이 속도를 깎는다 (슬립각의 사인에 비례, 45° 넘으면 급감)
-    const side = Math.sin(Math.min(1.2, Math.abs(st.slip)));
-    st.speed *= Math.max(0, 1 - (0.1 + 0.55 * side + 1.2 * Math.max(0, Math.abs(st.slip) - 0.75)) * dt);
-    // 드리프트 중엔 ↑ 를 눌러도 원래 최고속까지 못 올라간다
-    const driftCap = maxCur * (1 - 0.22 * side);
-    if (st.speed > driftCap && st.boostT <= 0) st.speed = Math.max(driftCap, st.speed - (st.speed - driftCap) * 3 * dt);
+    const slideMul = (0.55 + 0.45 * deep) * (1 - 0.45 * easing); // ↑ 떼면 슬립 절반
+    const target = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) * MAX_SLIP * slideMul : st.slip * Math.max(0, 1 - dt);
+    st.slip += (target - st.slip) * Math.min(1, (5 + 4 * easing) * dt);
+    st.speed *= Math.max(0, 1 - (0.2 + 0.4 * deep + 0.25 * easing) * dt); // 깊을수록·↑ 뗄수록 속도 손실
     if (!(st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS)) {
-      // 부스터 중 드리프트는 1.6배. 실제로 미끄러질 때(슬립 ≥ 0.12rad)만, 슬립·속도·유지 시간에 비례
-      const bonus = boosting ? 1.6 : mini ? 1.25 : 1;
-      const slipAmt = Math.min(1, Math.max(0, Math.abs(st.slip) - 0.12) / 0.5);
-      st.gauge += slipAmt * speedFrac * p.gaugeRate * bonus * dt * 1.25;
+      // 부스터 중 드리프트는 1.6배 (카트라이더의 부스터 드리프트 충전 보너스). 얕은 드리프트가 충전 효율이 좋다
+      const bonus = (boosting ? 1.6 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep);
+      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * bonus * dt;
       if (st.gauge >= 1) {
         // 칸이 비어 있으면 일반 부스터, 다 찼으면 한 칸씩 파란 부스터로 승격
         if (st.boosts < MAX_BOOSTS) st.boosts++;
@@ -463,7 +411,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       }
     }
   } else {
-    st.slip -= st.slip * Math.min(1, 9 * dt);
+    st.slip += (0 - st.slip) * Math.min(1, 6 * dt);
     if (Math.abs(st.slip) < 1e-3) st.slip = 0;
   }
 
