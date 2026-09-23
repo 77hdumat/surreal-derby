@@ -38,6 +38,7 @@ const SFX = {
   snowStep: 'snow-step.mp3',
   humanAhh: 'human-ahh.mp3',
   africaLoop: 'africa-loop.mp3',
+  woodCreakRun: 'wood-creak-run.mp3',
 } as const;
 
 export type SfxName = keyof typeof SFX;
@@ -393,6 +394,33 @@ export class AudioManager {
     src.start();
   }
 
+  /**
+   * 긴 샘플의 한 구간만 짧게 (앞뒤 페이드). 60초짜리 삐걱임 녹음에서 매번 다른 대목을 골라 쓰면
+   * 같은 소리가 반복되는 티가 안 난다.
+   */
+  playSegment(name: SfxName, offset: number, duration: number, opts: { pos?: THREE.Vector3; gain?: number; rate?: number; minGain?: number } = {}): void {
+    if (!this.ctx) return;
+    const buf = this.buffers.get(name);
+    if (!buf) return;
+    let g = opts.pos ? this.distGain(opts.pos) : 1;
+    g = Math.max(g, opts.minGain ?? 0) * (opts.gain ?? 1);
+    if (g < 0.02) return;
+    const t = this.ctx.currentTime;
+    const off = Math.max(0, Math.min(buf.duration - duration - 0.05, offset));
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = opts.rate ?? 1;
+    const gain = this.ctx.createGain();
+    const fade = Math.min(0.12, duration * 0.25);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(g, t + fade);
+    gain.gain.setValueAtTime(g, t + duration - fade);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    src.connect(gain);
+    gain.connect(this.sfx);
+    src.start(t, off, duration + 0.05);
+  }
+
   /** 말탈 브라더스 전용: 사람 비명 대신 짧고 귀여운 8비트 데굴데굴 소리. */
   playPixelTumble(pos?: THREE.Vector3): void {
     if (!this.ctx) return;
@@ -466,7 +494,7 @@ export class AudioManager {
   private boostLoops = new Map<string, { src: AudioBufferSourceNode; gain: GainNode }>();
 
   /** 부스트를 쓰는 동안만 울리는 루프 (얼룩말 부족 북). 부스트가 시작되면 처음부터, 끝나면 짧게 페이드아웃 */
-  updateBoostLoop(id: string, name: SfxName, pos: THREE.Vector3, on: boolean, own: boolean): void {
+  updateBoostLoop(id: string, name: SfxName, pos: THREE.Vector3, on: boolean, own: boolean, volume = 1): void {
     if (!this.ctx) return;
     let n = this.boostLoops.get(id);
     if (on && !n) {
@@ -483,7 +511,7 @@ export class AudioManager {
     if (!n) return;
     const t = this.ctx.currentTime;
     if (on) {
-      n.gain.gain.setTargetAtTime((own ? 1 : this.distGain(pos)) * 0.8, t, 0.05);
+      n.gain.gain.setTargetAtTime((own ? 1 : this.distGain(pos)) * 0.8 * volume, t, 0.05);
     } else {
       this.stopBoostLoop(id);
     }

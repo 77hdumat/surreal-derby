@@ -74,6 +74,8 @@ export class Game {
   private prevBoostT = 0;
   /** 발자국 소리 박자 (선수별 0..1) */
   private stepPhase: number[] = [];
+  /** 트로이 목마 삐걱임 · 말탈 브라더스 박스 버석임까지 남은 시간 (선수별) */
+  private creakT: number[] = [];
   private boostTotal = 1;
   private highQuality = false;
   private sun: THREE.DirectionalLight;
@@ -1361,8 +1363,19 @@ export class Game {
       const own = i === this.mySlot;
       const ab = def.specialAbility;
       if (ab === 'TROJAN') {
-        // 평소엔 무거운 말발굽(병사 발소리 느낌), 나무 바퀴 삐걱임은 부스트 동안만 (아래)
-        this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy: 1.4, active, own });
+        // 나무 목마라 말발굽 소리는 없다 (루프는 무음으로). 나무 바퀴 굴러가는 소리는 부스트 동안만 (아래)
+        this.audio.updateRacerLoop(String(i), 'gallop', pos, 0, { active: false, own });
+        // 달리는 동안 거대한 나무 몸통이 중간중간 삐걱인다: 긴 녹음에서 매번 다른 대목을, 들쭉날쭉한 간격으로
+        this.creakT[i] = (this.creakT[i] ?? Math.random() * 2) - dt;
+        if (active && k.boostT <= 0 && this.creakT[i] <= 0) {
+          this.creakT[i] = 1.2 + Math.random() * 2.8;
+          this.audio.playSegment('woodCreakRun', Math.random() * 58, 0.8 + Math.random() * 1.0, {
+            pos,
+            minGain: own ? 0.55 : 0,
+            gain: 0.8,
+            rate: 0.85 + Math.random() * 0.25,
+          });
+        }
       } else if (ab === 'ELEPHANT' || ab === 'HUMAN' || ab === 'COSTUME') {
         // 발자국마다 한 번씩: 코끼리는 쿵, 사람(말탈 브라더스·휴먼 러너)은 눈 밟는 소리
         const elephant = ab === 'ELEPHANT';
@@ -1373,6 +1386,20 @@ export class Game {
         }
         this.stepPhase[i] = ph % 1;
         this.audio.updateRacerLoop(String(i), 'gallop', pos, 0, { active: false, own });
+        // 말탈 브라더스: 뒤집어쓴 골판지 탈이 중간중간 버석거린다 (박스 소리의 짧은 대목, 들쭉날쭉한 간격)
+        if (ab === 'COSTUME') {
+          this.creakT[i] = (this.creakT[i] ?? Math.random() * 2) - dt;
+          if (active && k.boostT <= 0 && this.creakT[i] <= 0) {
+            this.creakT[i] = 1.5 + Math.random() * 3;
+            const early = Math.random() < 0.75; // 0.16~1.08초 대목이 길고 풍부하다
+            this.audio.playSegment('cardboardOpen', early ? 0.15 + Math.random() * 0.4 : 1.24, early ? 0.35 + Math.random() * 0.35 : 0.22, {
+              pos,
+              minGain: own ? 0.5 : 0,
+              gain: 0.7,
+              rate: 0.9 + Math.random() * 0.3,
+            });
+          }
+        }
       } else {
         const heavy = ab === 'GIRAFFE' ? 1.2 : 1;
         this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy, active, own });
@@ -1383,8 +1410,8 @@ export class Game {
         this.audio.updateBoostLoop(String(i), 'africaLoop', pos, on, own);
         if (own) this.audio.duckBgm(on);
       }
-      // 트로이 목마: 부스트 동안만 나무 바퀴 굴러가는 소리
-      if (ab === 'TROJAN') this.audio.updateBoostLoop(String(i), 'woodCreak', pos, k.boostT > 0 && !k.finished, own);
+      // 트로이 목마: 부스트 동안만 나무 바퀴 굴러가는 소리 (절반 볼륨)
+      if (ab === 'TROJAN') this.audio.updateBoostLoop(String(i), 'woodCreak', pos, k.boostT > 0 && !k.finished, own, 0.5);
     }
 
     // HUD

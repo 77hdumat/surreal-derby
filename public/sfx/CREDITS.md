@@ -30,3 +30,4 @@
 | human-ahh.mp3 | 휴먼 러너 부스터 | https://pixabay.com/sound-effects/people-ahh-shoot-362740/ |
 | tribal-drums.mp3 | 배경 음악 (메뉴·대기실·레이스 반복) | https://pixabay.com/sound-effects/musical-tribal-drums-526712/ |
 | africa-loop.mp3 | 제브라 다니오 부스터 노래 | https://pixabay.com/sound-effects/musical-quot-africa-loop-quot-467023/ |
+| wood-creak-run.mp3 | 트로이 목마 주행 중 나무 삐걱임 | https://pixabay.com/sound-effects/household-wood-creaking-30692/ |
