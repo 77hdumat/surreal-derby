@@ -508,9 +508,6 @@ export class UIManager {
     // HUD 가 보인 뒤에야 캔버스 크기를 알 수 있다
     requestAnimationFrame(() => this.minimap?.build());
     $('item-box').classList.toggle('hidden', !showItems);
-    $('keys-hint').textContent = showItems
-      ? '↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트 · X 아이템 · 드리프트 직후 ↑ 순간부스터 · GO 직전 ↑ 출발부스터'
-      : '↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트 · 드리프트 직후 ↑ 순간부스터 · GO 직전 ↑ 출발부스터';
     this.menu.classList.add('hidden');
     this.lobby.classList.add('hidden');
     this.hud.classList.remove('hidden');

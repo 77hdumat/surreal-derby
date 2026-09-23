@@ -145,6 +145,7 @@ export const COW_ASSET: AnimalAssetConfig = {
 /** "Giraffe" by Amx360 — 달리기 클립 1개. 모델 +z 전방 */
 export const GIRAFFE_ASSET: AnimalAssetConfig = {
   url: `${BASE}/models/giraffe.glb`,
+  keepTexture: true, // 얼룩무늬가 곧 기린
   fitHeight: 5.6,
   yaw: Math.PI / 2,
   clips: { run: 'Animation' },
