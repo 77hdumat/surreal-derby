@@ -52,7 +52,12 @@ export class Game {
   screen: Screen = 'MENU';
   mode: Mode = 'none';
   net: Net | null = null;
+  /** 레이스 슬롯 (race.karts 인덱스) */
   mySlot = 0;
+  /** 로비(네트워크) 슬롯 */
+  lobbySlot = 0;
+  /** 로비 슬롯 → 레이스 슬롯 (-1 = 출전 안 함) */
+  private netToRace: number[] = [];
   private lobby: LobbySlot[] = [];
 
 
@@ -77,6 +82,12 @@ export class Game {
   private rearLook = new THREE.Vector3();
   /** 아이템 명중 시 피격자를 잠시 보여주는 PiP (슬롯, 종료 시각 ms) */
   private hitCam: { slot: number; until: number; label: string } | null = null;
+  /** PiP 는 씬을 한 번 더 그리므로 저해상도 렌더 타깃에 20Hz 로만 그리고, 화면에는 그 텍스처를 붙인다 */
+  private pipTarget = new THREE.WebGLRenderTarget(384, 216, { depthBuffer: true });
+  private pipScene = new THREE.Scene();
+  private pipQuadCam = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0, 1);
+  private pipQuad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false }));
+  private pipAccum = 0;
   private obstacleMeshes = new ObstacleMeshes();
   private itemVisuals = new ItemVisuals();
   private lastFinishCount = -1;
@@ -158,6 +169,8 @@ export class Game {
     this.race = new KartRace(this.track, RACER_DEFINITIONS);
     this.scene.add(this.obstacleMeshes.group);
     this.scene.add(this.itemVisuals.group);
+    (this.pipQuad.material as THREE.MeshBasicMaterial).map = this.pipTarget.texture;
+    this.pipScene.add(this.pipQuad);
     this.camera = new GameCamera(this.track, window.innerWidth / window.innerHeight);
     this.effects = new EffectsManager(this.renderer, this.scene, this.camera.camera, fxCanvas);
     this.ui = new UIManager(RACER_DEFINITIONS);
@@ -307,6 +320,7 @@ export class Game {
     this.audio.init();
     this.mode = 'solo';
     this.mySlot = 0;
+    this.lobbySlot = 0;
     this.lobby = [this.mySlotData(), this.emptySlot(), this.emptySlot(), this.emptySlot()];
     this.screen = 'LOBBY';
     this.ui.setChatEnabled(false);
@@ -324,6 +338,7 @@ export class Game {
     this.net = net;
     this.mode = 'host';
     this.mySlot = 0;
+    this.lobbySlot = 0;
     this.lobby = [this.mySlotData(), this.emptySlot(), this.emptySlot(), this.emptySlot()];
     this.screen = 'LOBBY';
     this.ui.showLobby('…', true);
@@ -337,7 +352,7 @@ export class Game {
         /* ignore */
       }
       this.ui.showLobby(code, true);
-      this.ui.setLobbyMsg('친구에게 코드를 알려주세요 (코드 클릭 = 초대 링크 복사). 빈 자리는 CPU 가 채웁니다');
+      this.ui.setLobbyMsg('친구에게 코드를 알려주세요 (코드 클릭 = 초대 링크 복사). 참가한 사람끼리만 달립니다');
       this.ui.setStartEnabled(true);
       this.renderLobby();
     };
@@ -360,10 +375,11 @@ export class Game {
       if (name) this.hostChat(`${name} 퇴장`, -1, true);
       if (this.waitingLoaded) this.checkAllLoaded();
       // 레이스 중 이탈: 그 말은 CPU 가 이어받아 달린다 (트랙에 멈춰 있지 않게)
-      if ((this.screen === 'RACE' || this.screen === 'RESULT') && this.race.slots[slot] && !this.race.owned[slot]) {
-        this.race.slots[slot].cpu = true;
-        this.race.owned[slot] = true;
-        this.latestRemote[slot] = null;
+      const r = this.netToRace[slot] ?? -1;
+      if (r >= 0 && (this.screen === 'RACE' || this.screen === 'RESULT') && this.race.slots[r] && !this.race.owned[r]) {
+        this.race.slots[r].cpu = true;
+        this.race.owned[r] = true;
+        this.latestRemote[r] = null;
         if (name) this.hostChat(`${name} 의 말은 CPU 가 이어서 달립니다`, -1, true);
       }
     };
@@ -426,12 +442,14 @@ export class Game {
         this.renderLobby();
         this.broadcastLobby();
         break;
-      case 'st':
-        if (this.screen === 'RACE' || this.screen === 'RESULT') {
-          this.remotes[slot]?.push(m.ts, m.k);
-          this.latestRemote[slot] = { ts: m.ts, k: m.k };
+      case 'st': {
+        const r = this.netToRace[slot] ?? -1;
+        if (r >= 0 && (this.screen === 'RACE' || this.screen === 'RESULT')) {
+          this.remotes[r]?.push(m.ts, m.k);
+          this.latestRemote[r] = { ts: m.ts, k: m.k };
         }
         break;
+      }
       case 'ping':
         this.net?.broadcast({ t: 'pong', t0: m.t0 });
         break;
@@ -441,7 +459,7 @@ export class Game {
   /** 호스트: 채팅 표시 + 전원 브로드캐스트 (from -1 = 시스템) */
   private hostChat(text: string, from: number, sys: boolean): void {
     const name = sys ? '' : this.lobby[from]?.name ?? 'P' + (from + 1);
-    this.ui.addChat(name, text, from === this.mySlot && !sys, sys);
+    this.ui.addChat(name, text, from === this.lobbySlot && !sys, sys);
     this.net?.broadcast({ t: 'chat', text, from, name, sys });
   }
 
@@ -456,7 +474,7 @@ export class Game {
 
   private renderLobby(): void {
     const isHost = this.mode !== 'client';
-    this.ui.renderLobby(this.lobby, this.mySlot, isHost);
+    this.ui.renderLobby(this.lobby, this.lobbySlot, isHost);
     if (this.mode === 'host') {
       const humans = this.lobby.filter((s) => s.human);
       const allReady = humans.every((s, i) => i === 0 || s.ready);
@@ -516,6 +534,7 @@ export class Game {
     if (!net) return;
     switch (m.t) {
       case 'welcome':
+        this.lobbySlot = m.slot;
         this.mySlot = m.slot;
         net.send({ t: 'hello', name: this.ui.displayNick, mountId: this.ui.mountId, jockeyId: this.ui.jockeyId, wins: this.ui.wins });
         break;
@@ -560,7 +579,7 @@ export class Game {
         this.toLobby();
         break;
       case 'chat':
-        this.ui.addChat(m.name ?? '', String(m.text).slice(0, 120), m.from === this.mySlot && !m.sys, !!m.sys);
+        this.ui.addChat(m.name ?? '', String(m.text).slice(0, 120), m.from === this.lobbySlot && !m.sys, !!m.sys);
         break;
       case 'iev':
         if (this.screen === 'RACE' || this.screen === 'RESULT') for (const e of m.ev) this.applyRemoteItemEvent(e, -1);
@@ -581,9 +600,9 @@ export class Game {
       this.net?.send({ t: 'pick', mountId, jockeyId });
       return;
     }
-    if (this.lobby[this.mySlot]) {
-      this.lobby[this.mySlot].mountId = mountId;
-      this.lobby[this.mySlot].jockeyId = jockeyId;
+    if (this.lobby[this.lobbySlot]) {
+      this.lobby[this.lobbySlot].mountId = mountId;
+      this.lobby[this.lobbySlot].jockeyId = jockeyId;
       this.renderLobby();
       this.broadcastLobby();
     }
@@ -668,14 +687,19 @@ export class Game {
       this.lobby[0] = this.mySlotData();
     }
     const usedMounts = new Set(this.lobby.filter((s) => s.human).map((s) => s.mountId));
-    const slots: SlotConfig[] = this.lobby.map((s, i) => {
-      if (s.human) return { slot: i, name: s.name, mountId: s.mountId, jockeyId: s.jockeyId, cpu: false };
-      // 빈 자리: 안 겹치는 말 + 무작위 기수
+    const slots: SlotConfig[] = [];
+    this.lobby.forEach((s, i) => {
+      if (s.human) {
+        slots.push({ slot: slots.length, lobby: i, name: s.name, mountId: s.mountId, jockeyId: s.jockeyId, cpu: false });
+        return;
+      }
+      // 멀티에서는 빈 자리를 비워 둔다 (사람끼리만). 혼자 달리기만 CPU 로 채운다
+      if (this.mode !== 'solo') return;
       const pool = RACER_DEFINITIONS.filter((d) => !usedMounts.has(d.id));
       const d = (pool.length ? pool : RACER_DEFINITIONS)[Math.floor(Math.random() * (pool.length ? pool.length : RACER_DEFINITIONS.length))];
       usedMounts.add(d.id);
       const j = JOCKEYS[Math.floor(Math.random() * JOCKEYS.length)];
-      return { slot: i, name: `CPU ${i + 1}`, mountId: d.id, jockeyId: j.id, cpu: true };
+      slots.push({ slot: slots.length, lobby: i, name: `CPU ${i + 1}`, mountId: d.id, jockeyId: j.id, cpu: true });
     });
     const seed = (Math.random() * 0x7fffffff) >>> 0;
     // 게스트 준비 신호는 브로드캐스트 직후부터 들어올 수 있으니 여기서 초기화
@@ -696,6 +720,9 @@ export class Game {
     this.ui.lockPick(true);
     this.ui.setLobbyMsg('레이스 준비 중…');
     this.ui.setStartEnabled(false, '준비 중…');
+    // 로비 ↔ 레이스 슬롯 매핑
+    this.netToRace = [0, 1, 2, 3].map((i) => slots.findIndex((s) => (s.lobby ?? s.slot) === i));
+    this.mySlot = Math.max(0, this.netToRace[this.lobbySlot] ?? 0);
     await this.racers.setLineup(slots);
     if (gen !== this.raceGen) return; // 세팅 중 나감
     const me = this.mySlot;
@@ -764,8 +791,8 @@ export class Game {
   /** 호스트: 사람 슬롯이 전부 loaded 를 보냈으면(또는 타임아웃) 카운트다운 */
   private checkAllLoaded(force = false): void {
     if (!this.waitingLoaded || this.screen !== 'RACE') return;
-    const humans = this.race.slots.filter((s) => !s.cpu && s.slot !== this.mySlot && this.lobby[s.slot]?.human);
-    const ready = humans.every((s) => this.loadedSlots.has(s.slot));
+    const humans = this.race.slots.filter((s) => !s.cpu && s.slot !== this.mySlot && this.lobby[s.lobby ?? s.slot]?.human);
+    const ready = humans.every((s) => this.loadedSlots.has(s.lobby ?? s.slot));
     if (!ready && !force) return;
     this.waitingLoaded = false;
     if (this.loadedTimer) clearTimeout(this.loadedTimer);
@@ -1021,12 +1048,13 @@ export class Game {
     if (!winner || this.screen === 'RESULT') return;
     const cfg = this.race.slots[winner.slot];
     if (!cfg || cfg.cpu) return;
+    const winnerLobby = cfg.lobby ?? winner.slot;
     if (winner.slot === this.mySlot) {
       const w = this.ui.addWin();
-      if (this.lobby[this.mySlot]) this.lobby[this.mySlot].wins = w;
+      if (this.lobby[this.lobbySlot]) this.lobby[this.lobbySlot].wins = w;
     }
-    if (this.mode === 'host' && this.lobby[winner.slot]?.human) {
-      if (winner.slot !== this.mySlot) this.lobby[winner.slot].wins = (this.lobby[winner.slot].wins ?? 0) + 1;
+    if (this.mode === 'host' && this.lobby[winnerLobby]?.human) {
+      if (winner.slot !== this.mySlot) this.lobby[winnerLobby].wins = (this.lobby[winnerLobby].wins ?? 0) + 1;
       this.broadcastLobby();
     }
   }
@@ -1036,8 +1064,8 @@ export class Game {
       this.net?.send({ t: 'name', name });
       return;
     }
-    if (this.lobby[this.mySlot]) {
-      this.lobby[this.mySlot].name = name;
+    if (this.lobby[this.lobbySlot]) {
+      this.lobby[this.lobbySlot].name = name;
       if (this.race.slots[this.mySlot]) this.race.slots[this.mySlot].name = name;
       this.renderLobby();
       this.broadcastLobby();
@@ -1165,23 +1193,35 @@ export class Game {
     this.rearCam.aspect = w / h;
     this.rearCam.updateProjectionMatrix();
     const r = this.renderer;
-    const shadowAuto = r.shadowMap.autoUpdate;
-    r.shadowMap.autoUpdate = false;
-    r.setRenderTarget(null);
+    // 1) 20Hz 로만 저해상도 타깃에 씬을 그린다 (씬 전체를 매 프레임 두 번 그리지 않게)
+    this.pipAccum += 1;
+    if (this.pipAccum >= 6) {
+      this.pipAccum = 0;
+      const shadowAuto = r.shadowMap.autoUpdate;
+      r.shadowMap.autoUpdate = false;
+      const myVisual = this.racers.visuals[this.mySlot];
+      if (myVisual && hideSelf) myVisual.root.visible = false;
+      // 먼 배경(나무·산·관중석)은 PiP 에서 뺀다 — 드로우콜이 확 준다
+      const scenery = this.track.group;
+      const sceneryWas = scenery.visible;
+      scenery.visible = false;
+      r.setRenderTarget(this.pipTarget);
+      r.clear();
+      r.render(this.scene, this.rearCam);
+      r.setRenderTarget(null);
+      scenery.visible = sceneryWas;
+      if (myVisual && hideSelf) myVisual.root.visible = true;
+      r.shadowMap.autoUpdate = shadowAuto;
+    }
+    // 2) 매 프레임 그 텍스처만 화면 구석에 붙인다 (드로우콜 1개)
     r.autoClear = false;
     r.setScissorTest(true);
     r.setViewport(Math.round(rect.left), Math.round(H - rect.bottom), w, h);
     r.setScissor(Math.round(rect.left), Math.round(H - rect.bottom), w, h);
-    r.clearDepth();
-    // 후방 캠에선 내 말을 가려서 뒤쫓는 상대만 보이게 (명중 캠은 그대로)
-    const myVisual = this.racers.visuals[this.mySlot];
-    if (myVisual && hideSelf) myVisual.root.visible = false;
-    r.render(this.scene, this.rearCam);
-    if (myVisual && hideSelf) myVisual.root.visible = true;
+    r.render(this.pipScene, this.pipQuadCam);
     r.setScissorTest(false);
     r.setViewport(0, 0, W, H);
     r.autoClear = true;
-    r.shadowMap.autoUpdate = shadowAuto;
   }
 
   /**

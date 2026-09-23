@@ -19,6 +19,8 @@ import {
 
 export interface SlotConfig {
   slot: number;
+  /** 로비(네트워크) 슬롯 번호 — 레이스 슬롯과 다를 수 있다 (빈 자리를 건너뛰므로) */
+  lobby?: number;
   name: string;
   mountId: string;
   jockeyId: string;
@@ -88,7 +90,7 @@ export class KartRace {
 
   /** 출발선(=결승선) 바로 앞에 4명 나란히 (앞뒤 차이 없음) */
   setup(slots: SlotConfig[], owned?: (slot: SlotConfig) => boolean, seed = 1): void {
-    this.slots = slots.slice(0, MAX_SLOTS).map((s, i) => ({ ...s, slot: i }));
+    this.slots = slots.slice(0, MAX_SLOTS).map((s, i) => ({ ...s, slot: i, lobby: s.lobby ?? i }));
     this.seed = seed;
     this.obstacles = generateObstacles(seed, this.track);
     const mySlot = this.slots.findIndex((s) => (owned ? owned(s) : true) && !s.cpu);

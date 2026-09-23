@@ -139,10 +139,15 @@ describe('게이지 규칙', () => {
     const st = spawn(10, 0);
     for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     st.gauge = 0.3;
+    // 드리프트를 시작한 뒤 벽 밖으로 밀어 넣는다
+    for (let i = 0; i < 20; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    expect(st.drifting).toBe(true);
+    expect(st.gauge).toBeGreaterThan(0.3);
+    const out = track.getPoint(st.s, track.width / 2 + 2);
+    st.x = out.x;
+    st.z = out.z;
     let wall = false;
-    for (let i = 0; i < 240 && !wall; i++) {
-      for (const e of stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT)) if (e.k === 'wall') wall = true;
-    }
+    for (const e of stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT)) if (e.k === 'wall') wall = true;
     expect(wall).toBe(true);
     expect(st.gauge).toBeCloseTo(0.3, 6);
     expect(st.drifting).toBe(false);
