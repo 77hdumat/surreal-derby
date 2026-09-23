@@ -10,10 +10,7 @@
 | gallop-single.mp3 | 말발굽 (보조) | https://pixabay.com/sound-effects/city-single-horse-galopp-6152/ |
 | run-grass.mp3 | 휴먼 러너 잔디 달리기 루프 | https://pixabay.com/sound-effects/film-special-effects-running-in-grass-6237/ |
 | neigh.mp3 | 말 울음 | https://pixabay.com/sound-effects/nature-horse-neigh-390297/ |
-| engine-loop.mp3 | 모터사이클 엔진 루프 | https://pixabay.com/sound-effects/city-motorcycle-engine-sound-68728/ |
-| engine-rev.mp3 / engine-rev2.mp3 | 엔진 부스터 | https://pixabay.com/sound-effects/city-motorcycle-engine-rev-337867/ , https://pixabay.com/sound-effects/city-motorcycle-engine-rev-2-337870/ |
-| moto-passby.mp3 | 부스트 통과음 | https://pixabay.com/sound-effects/film-special-effects-fast-motorcycle-pass-by-559409/ |
-| engine-fail.mp3 | 엔진 고장 | https://pixabay.com/sound-effects/film-special-effects-car-engine-failure-352768/ |
+| engine-rev2.mp3 | 모터 스탤리온 부스터 시동 | https://pixabay.com/sound-effects/city-motorcycle-engine-rev-2-337870/ |
 | elephant.mp3 / elephant-growl.mp3 / elephant-angry.mp3 | 코끼리 | https://pixabay.com/sound-effects/nature-elephant-trumpeting-494313/ , https://pixabay.com/sound-effects/nature-elephant-trumpets-growls-6047/ , https://pixabay.com/sound-effects/nature-angry-elephant-40916/ |
 | cow.mp3 / cow2.mp3 | 소 울음 | https://pixabay.com/sound-effects/nature-cow-mooing-343423/ , https://pixabay.com/sound-effects/nature-cow-moo-122255/ |
 | cardboard-drop.mp3 / cardboard-open.mp3 | 골판지 붕괴/복구 | https://pixabay.com/sound-effects/dropping-cardboard-box-453026/ , https://pixabay.com/sound-effects/film-special-effects-cardboard-box-open-182560/ |
@@ -25,7 +22,6 @@
 | airhorn.mp3 | 결승 | https://pixabay.com/sound-effects/film-special-effects-air-horn-sound-effect-372453/ |
 | fanfare.mp3 / tada.mp3 | 결과 화면 | https://pixabay.com/sound-effects/film-special-effects-success-fanfare-trumpets-6185/ , https://pixabay.com/sound-effects/musical-tada-fanfare-a-6313/ |
 | cow-moo.mp3 | 레이지 불 부스터 울음 | https://pixabay.com/sound-effects/nature-cow-mooing-343423/ |
-| motor-run.mp3 | 모터 스탤리온 주행음 | https://pixabay.com/sound-effects/city-motor-brake-sound-324220/ |
 | elephant-step.mp3 | 코끼리 발자국 (앞부분 쿵) | https://pixabay.com/sound-effects/film-special-effects-huge-thump-515983/ |
 | wood-creak.mp3 | 트로이 목마 주행 삐걱임 | https://pixabay.com/sound-effects/film-special-effects-wooden-ship-break-85277/ |
 | tribal-drums.mp3 | 얼룩말 부스터 북소리 | https://pixabay.com/sound-effects/musical-tribal-drums-526712/ |

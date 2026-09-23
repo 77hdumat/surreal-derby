@@ -9,11 +9,7 @@ const SFX = {
   gallopSingle: 'gallop-single.mp3',
   runGrass: 'run-grass.mp3',
   neigh: 'neigh.mp3',
-  engineLoop: 'engine-loop.mp3',
-  engineRev: 'engine-rev.mp3',
   engineRev2: 'engine-rev2.mp3',
-  motoPass: 'moto-passby.mp3',
-  engineFail: 'engine-fail.mp3',
   elephant: 'elephant.mp3',
   elephantGrowl: 'elephant-growl.mp3',
   elephantAngry: 'elephant-angry.mp3',
@@ -35,7 +31,6 @@ const SFX = {
   fanfare: 'fanfare.mp3',
   tada: 'tada.mp3',
   cowMoo: 'cow-moo.mp3',
-  motorRun: 'motor-run.mp3',
   elephantStep: 'elephant-step.mp3',
   woodCreak: 'wood-creak.mp3',
   tribalDrums: 'tribal-drums.mp3',
@@ -46,8 +41,8 @@ const SFX = {
 } as const;
 
 export type SfxName = keyof typeof SFX;
-/** gallop 말발굽 · grass 잔디 달리기 · engine 엔진 · motor 모터 스탤리온 주행음 · wood 트로이 목마 나무 삐걱임 */
-type LoopKind = 'gallop' | 'grass' | 'engine' | 'motor' | 'wood';
+/** gallop 말발굽 · grass 잔디 달리기 */
+type LoopKind = 'gallop' | 'grass';
 
 interface LoopNode {
   src: AudioBufferSourceNode;
@@ -144,8 +139,10 @@ export class AudioManager {
   }
 
   /**
-   * 부스트 발동: 전투기 애프터버너 느낌의 합성음 — 부스트가 끝날 때까지 "부우웅~" 이 이어진다.
-   * 노이즈 스위프(600→3200Hz) + 톱니파 저음 상승(70→160Hz) + 점화 '킥'. duration 동안 유지 후 짧게 사그라듦.
+   * 부스트 발동: 카트라이더 부스터처럼 "펑 — 슈우우웅" 하는 분사음. 부스트가 끝날 때까지 이어진다.
+   *  · 점화: 저음 쿵 + 짧은 폭발 노이즈
+   *  · 분사: 두꺼운 공기 노이즈 두 겹(낮은 굉음 + 쉬익), 필터가 확 열렸다 살짝 닫히며 천천히 일렁인다
+   *  · 저음 울림: 낮은 사인파 (톱니파를 쓰면 장난감 RC카처럼 들려서 뺐다)
    */
   jetBoost(strength = 1, duration = 3): void {
     if (!this.ctx || this._muted) return;
@@ -154,69 +151,93 @@ export class AudioManager {
     const end = t + Math.max(0.5, duration);
     const out = ctx.createGain();
     out.gain.value = 0.0001;
-    out.gain.exponentialRampToValueAtTime(0.9 * strength, t + 0.06);
-    out.gain.exponentialRampToValueAtTime(0.45 * strength, t + 0.9);
-    out.gain.setValueAtTime(0.45 * strength, end - 0.05);
-    out.gain.exponentialRampToValueAtTime(0.0001, end + 0.35);
+    out.gain.exponentialRampToValueAtTime(1.0 * strength, t + 0.05);
+    out.gain.exponentialRampToValueAtTime(0.55 * strength, t + 0.7);
+    out.gain.setValueAtTime(0.55 * strength, end - 0.05);
+    out.gain.exponentialRampToValueAtTime(0.0001, end + 0.45);
     out.connect(this.sfx);
-    // 1) 노이즈 (제트 분사): 점화 때 확 열렸다가 유지
-    const n = ctx.createBufferSource();
-    n.buffer = this.noise();
-    n.loop = true;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.Q.value = 1.2;
-    bp.frequency.setValueAtTime(600, t);
-    bp.frequency.exponentialRampToValueAtTime(3200, t + 0.35);
-    bp.frequency.exponentialRampToValueAtTime(1300, t + 1.2);
-    bp.frequency.setValueAtTime(1300, end - 0.05);
-    bp.frequency.exponentialRampToValueAtTime(500, end + 0.35);
-    const ng = ctx.createGain();
-    ng.gain.value = 0.8;
-    n.connect(bp);
-    bp.connect(ng);
-    ng.connect(out);
-    n.start(t);
-    n.stop(end + 0.4);
-    // 2) 저음 톱니파 (터빈 회전): 올라갔다가 부스트 동안 "부우웅" 유지, 끝에서 내려감
-    const o = ctx.createOscillator();
-    o.type = 'sawtooth';
-    o.frequency.setValueAtTime(70, t);
-    o.frequency.exponentialRampToValueAtTime(160, t + 0.5);
-    o.frequency.exponentialRampToValueAtTime(120, t + 1.2);
-    o.frequency.setValueAtTime(120, end - 0.05);
-    o.frequency.exponentialRampToValueAtTime(60, end + 0.35);
+
+    // 1) 분사 굉음: 낮게 깔린 두꺼운 바람 (저역 통과)
+    const roar = ctx.createBufferSource();
+    roar.buffer = this.noise();
+    roar.loop = true;
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 500;
-    const og = ctx.createGain();
-    og.gain.value = 0.4;
-    // 살짝 떨리는 회전감 (6Hz 비브라토)
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 6;
-    const lg = ctx.createGain();
-    lg.gain.value = 4;
-    lfo.connect(lg);
-    lg.connect(o.frequency);
-    o.connect(lp);
-    lp.connect(og);
-    og.connect(out);
-    o.start(t);
-    lfo.start(t);
-    o.stop(end + 0.4);
-    lfo.stop(end + 0.4);
-    // 3) 킥 (점화 순간)
-    const k = ctx.createOscillator();
-    k.type = 'sine';
-    k.frequency.setValueAtTime(220, t);
-    k.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+    lp.Q.value = 0.8;
+    lp.frequency.setValueAtTime(300, t);
+    lp.frequency.exponentialRampToValueAtTime(1500, t + 0.18);
+    lp.frequency.exponentialRampToValueAtTime(850, t + 0.9);
+    lp.frequency.setValueAtTime(850, end - 0.05);
+    lp.frequency.exponentialRampToValueAtTime(220, end + 0.45);
+    const rg = ctx.createGain();
+    rg.gain.value = 1.1;
+    roar.connect(lp);
+    lp.connect(rg);
+    rg.connect(out);
+    // 2) 쉬익: 공기를 가르는 중고역 (슈우웅 스윕)
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = this.noise();
+    hiss.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 0.7;
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(2600, t + 0.3);
+    bp.frequency.exponentialRampToValueAtTime(1400, t + 1.1);
+    bp.frequency.setValueAtTime(1400, end - 0.05);
+    bp.frequency.exponentialRampToValueAtTime(400, end + 0.45);
+    const hg = ctx.createGain();
+    hg.gain.value = 0.35;
+    hiss.connect(bp);
+    bp.connect(hg);
+    hg.connect(out);
+    // 불꽃이 일렁이듯 필터를 천천히 흔든다 (기계적으로 고정된 소리가 아니게)
+    const wob = ctx.createOscillator();
+    wob.frequency.value = 3.2;
+    const wg = ctx.createGain();
+    wg.gain.value = 140;
+    wob.connect(wg);
+    wg.connect(lp.frequency);
+    wg.connect(bp.frequency);
+    // 3) 저음 울림
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(48, t);
+    sub.frequency.exponentialRampToValueAtTime(62, t + 0.6);
+    const sg = ctx.createGain();
+    sg.gain.value = 0.35;
+    sub.connect(sg);
+    sg.connect(out);
+    for (const n of [roar, hiss, wob, sub]) {
+      n.start(t);
+      n.stop(end + 0.5);
+    }
+    // 4) 점화 "펑": 저음 쿵 + 짧게 터지는 노이즈
+    const kick = ctx.createOscillator();
+    kick.type = 'sine';
+    kick.frequency.setValueAtTime(120, t);
+    kick.frequency.exponentialRampToValueAtTime(38, t + 0.3);
     const kg = ctx.createGain();
-    kg.gain.setValueAtTime(0.9, t);
-    kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-    k.connect(kg);
-    kg.connect(out);
-    k.start(t);
-    k.stop(t + 0.35);
+    kg.gain.setValueAtTime(1.0, t);
+    kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    kick.connect(kg);
+    kg.connect(this.sfx);
+    kick.start(t);
+    kick.stop(t + 0.4);
+    const pop = ctx.createBufferSource();
+    pop.buffer = this.noise();
+    const pf = ctx.createBiquadFilter();
+    pf.type = 'lowpass';
+    pf.frequency.setValueAtTime(3000, t);
+    pf.frequency.exponentialRampToValueAtTime(400, t + 0.25);
+    const pg = ctx.createGain();
+    pg.gain.setValueAtTime(0.8 * strength, t);
+    pg.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+    pop.connect(pf);
+    pf.connect(pg);
+    pg.connect(this.sfx);
+    pop.start(t);
+    pop.stop(t + 0.3);
   }
 
   /**
@@ -410,7 +431,7 @@ export class AudioManager {
       this.racerLoops.delete(id);
     }
     if (!this.ctx) return null;
-    const name: SfxName = kind === 'engine' ? 'engineLoop' : kind === 'grass' ? 'runGrass' : kind === 'motor' ? 'motorRun' : kind === 'wood' ? 'woodCreak' : 'gallop';
+    const name: SfxName = kind === 'grass' ? 'runGrass' : 'gallop';
     const src = this.makeLoop(name, 1);
     if (!src) return null;
     const gain = this.ctx.createGain();
@@ -427,7 +448,7 @@ export class AudioManager {
   /**
    * 매 프레임 호출. speedNorm 0..1, heavy 는 코끼리 등 (저음/느림).
    */
-  updateRacerLoop(id: string, kind: LoopKind, pos: THREE.Vector3, speedNorm: number, opts: { heavy?: number; rpm?: number; failure?: boolean; active?: boolean; own?: boolean } = {}): void {
+  updateRacerLoop(id: string, kind: LoopKind, pos: THREE.Vector3, speedNorm: number, opts: { heavy?: number; active?: boolean; own?: boolean } = {}): void {
     if (!this.ctx) return;
     const node = this.ensureLoop(id, kind);
     if (!node) return;
@@ -435,29 +456,9 @@ export class AudioManager {
     // 내 말: 카메라 거리와 무관하게 항상 또렷하게
     const dist = opts.own ? 1.3 : this.distGain(pos);
     const active = opts.active ?? true;
-    let vol = 0;
-    let rate = 1;
-    if (kind === 'engine') {
-      const rpm = opts.rpm ?? 0.3;
-      rate = 0.75 + rpm * 0.9;
-      vol = active ? dist * 0.5 : 0;
-      if (opts.failure) {
-        rate = 0.6 + Math.random() * 0.15;
-        vol *= Math.random() < 0.5 ? 1 : 0.15;
-      }
-    } else if (kind === 'motor') {
-      // 달리는 속도만큼 모터 회전이 오른다
-      rate = 0.8 + speedNorm * 0.45;
-      vol = active ? dist * THREE.MathUtils.clamp(0.25 + speedNorm, 0, 1) * 0.6 : 0;
-    } else if (kind === 'wood') {
-      // 거대한 나무 목마가 굴러가며 삐걱이는 소리
-      rate = 0.85 + speedNorm * 0.3;
-      vol = active ? dist * THREE.MathUtils.clamp(speedNorm * 1.4, 0, 1) * 0.75 : 0;
-    } else {
-      const heavy = opts.heavy ?? 1;
-      rate = (0.75 + speedNorm * 0.5) / Math.sqrt(heavy);
-      vol = active ? dist * THREE.MathUtils.clamp(speedNorm * 1.3, 0, 1) * 0.55 * Math.min(1.6, heavy) : 0;
-    }
+    const heavy = opts.heavy ?? 1;
+    const rate = (0.75 + speedNorm * 0.5) / Math.sqrt(heavy);
+    const vol = active ? dist * THREE.MathUtils.clamp(speedNorm * 1.3, 0, 1) * 0.55 * Math.min(1.6, heavy) : 0;
     node.gain.gain.setTargetAtTime(vol, t, 0.08);
     node.src.playbackRate.setTargetAtTime(rate, t, 0.1);
   }

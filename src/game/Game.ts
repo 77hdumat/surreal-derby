@@ -1038,9 +1038,8 @@ export class Game {
         a.play('whooshEpic', { pos, minGain: near * 0.5, gain: 0.6 * g });
         break;
       case 'MOTORCYCLE': // 엔진 폭발
+        // 시동 소리만 (가벼운 오토바이 지나가는 소리는 장난감 같아서 뺐다) — 분사음은 jetBoost
         a.play('engineRev2', { pos, minGain: near, gain: 1.1 * g });
-        a.play('motoPass', { pos, minGain: near * 0.6, gain: 0.8 * g });
-        a.play('whoosh', { pos, minGain: near * 0.4, gain: 0.6 * g });
         break;
       case 'LONGBODY': // 몸 늘어남
         a.play('whooshEpic', { pos, minGain: near * 0.7, gain: 1.0 * g });
@@ -1361,10 +1360,7 @@ export class Game {
       const active = Math.abs(k.speed) > 1.5;
       const own = i === this.mySlot;
       const ab = def.specialAbility;
-      if (ab === 'MOTORCYCLE') {
-        // 달릴 땐 모터 주행음 (부스트 때 시동 소리는 playBoostSound 에서 그대로)
-        this.audio.updateRacerLoop(String(i), 'motor', pos, speedNorm, { active, own });
-      } else if (ab === 'TROJAN') {
+      if (ab === 'TROJAN') {
         // 평소엔 무거운 말발굽(병사 발소리 느낌), 나무 바퀴 삐걱임은 부스트 동안만 (아래)
         this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy: 1.4, active, own });
       } else if (ab === 'ELEPHANT' || ab === 'HUMAN' || ab === 'COSTUME') {
