@@ -61,6 +61,7 @@ export class ItemVisuals {
       ['missile', 6],
       ['waterfly', 6],
       ['banana', 18],
+      ['mine', 25],
       ['gas', 4],
     ];
     for (const [kind, n] of counts) {
@@ -163,6 +164,25 @@ export class ItemVisuals {
       return g;
     }
     if (p.kind === 'gas') return new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 10), this.gasMat);
+    if (p.kind === 'mine') {
+      // 지뢰: 검은 반구 + 빨간 점멸등 + 뿔
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.75, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.5, metalness: 0.6 }));
+      g.add(body);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshStandardMaterial({ color: 0xff2a2a, emissive: 0xff1a1a, emissiveIntensity: 1.6 }));
+      lamp.position.y = 0.72;
+      lamp.name = 'lamp';
+      g.add(lamp);
+      const spikeMat = new THREE.MeshStandardMaterial({ color: 0x4a4f57, metalness: 0.7, roughness: 0.4 });
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 6), spikeMat);
+        sp.position.set(Math.cos(a) * 0.62, 0.32, Math.sin(a) * 0.62);
+        sp.rotation.set(Math.cos(a) * 0.6, 0, -Math.sin(a) * 0.6);
+        g.add(sp);
+      }
+      return g;
+    }
     // 바나나: 휘어진 토러스 조각
     const b = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.3, 8, 14, Math.PI * 0.9), this.bananaMat);
     b.rotation.set(Math.PI / 2, 0, 0.5);
@@ -197,6 +217,11 @@ export class ItemVisuals {
         m.scale.setScalar(p.age > 1.1 ? 6.5 : 1);
       }
       if (p.kind === 'banana') m.rotation.y = time * 2;
+      if (p.kind === 'mine') {
+        m.rotation.y = time * 0.8;
+        const lamp = m.children.find((c) => c.name === 'lamp') as THREE.Mesh | undefined;
+        if (lamp) (lamp.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.4 + Math.abs(Math.sin(time * 6)) * 1.8;
+      }
     }
     for (const [id, m] of this.projMeshes) {
       if (alive.has(id)) continue;

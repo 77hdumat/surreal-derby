@@ -96,3 +96,25 @@ describe('물방울 탈출·착지 부스터', () => {
     expect(st.boostT).toBeGreaterThan(1);
   });
 });
+
+describe('자석 추월', () => {
+  it('대상에 붙기 직전 끊기고 추진 부스트로 지나간다', () => {
+    const sys = new ItemSystem(track, 0);
+    sys.setup(1, 0);
+    const me = kartAt(20, 0);
+    const ahead = kartAt(60, 0);
+    me.speed = 45;
+    ahead.speed = 35;
+    me.item = 'magnet';
+    sys.use(0, [me, ahead], [1, 0]);
+    expect(me.magnetT).toBeGreaterThan(0);
+    const P = { maxSpeed: 40, accel: 10, handling: 1, mass: 100, gaugeRate: 0.8, boostMul: 1.57, radius: 1.3, boostReach: 0 };
+    for (let i = 0; i < 180 && me.magnetT > 0; i++) {
+      sys.step(1 / 60, i / 60, [me, ahead], [true, false], [1, 0]);
+      stepKart(me, { steer: 0, throttle: 1, brake: 0, drift: false, boost: false }, P, track, 1 / 60);
+    }
+    expect(me.magnetT).toBe(0);
+    expect(me.boostT).toBeGreaterThan(1); // 추진 부스트로 이어진다
+    expect(me.speed).toBeGreaterThan(ahead.speed);
+  });
+});

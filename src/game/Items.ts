@@ -2,15 +2,16 @@ import type { TrackGeometry } from '../track/TrackGeometry';
 import { BOOST_DURATION, MAX_BOOSTS, type KartState } from './KartPhysics';
 import { mulberry32 } from './Obstacles';
 
-export type ItemKind = 'missile' | 'waterfly' | 'banana' | 'boost' | 'shield' | 'magnet' | 'ufo' | 'gas';
+export type ItemKind = 'missile' | 'waterfly' | 'banana' | 'mine' | 'boost' | 'shield' | 'magnet' | 'ufo' | 'gas';
 
 export const ITEM_INFO: Record<ItemKind, { name: string; emoji: string; desc: string }> = {
   missile: { name: '미사일', emoji: '🚀', desc: '앞 말을 추적해 스핀' },
   waterfly: { name: '물파리', emoji: '🪰', desc: '바로 앞 등수를 쫓아가 공중에 가둠 (좌우 연타로 탈출)' },
   banana: { name: '바나나', emoji: '🍌', desc: '뒤에 3개 떨어뜨림 — 밟으면 1초 미끄러짐' },
+  mine: { name: '지뢰', emoji: '💣', desc: '뒤에 5개 설치 — 밟으면 공중으로 날아감' },
   boost: { name: '부스터', emoji: '🔥', desc: '즉시 부스트 3초' },
   shield: { name: '실드', emoji: '🛡️', desc: '공격 1회 막음 (8초)' },
-  magnet: { name: '자석', emoji: '🧲', desc: '바로 앞 등수 쪽으로 350km/h 로 끌려감 (조향 가능)' },
+  magnet: { name: '자석', emoji: '🧲', desc: '앞 등수에게 350km/h 로 끌려갔다 튕겨 나가며 추월' },
   ufo: { name: 'UFO', emoji: '🛸', desc: '1등만 붙잡아 공중에 가둠' },
   gas: { name: '환각 가스', emoji: '🍄', desc: '나 빼고 전원 3초간 조작 반대' },
 };
@@ -27,7 +28,7 @@ export interface ItemBox {
 
 export interface Projectile {
   id: number;
-  kind: 'missile' | 'waterfly' | 'banana' | 'gas';
+  kind: 'missile' | 'waterfly' | 'banana' | 'mine' | 'gas';
   owner: number;
   x: number;
   z: number;
@@ -55,6 +56,8 @@ const MISSILE_TURN = 3.5;
 const BOMB_FLIGHT = 1.1;
 const BOMB_RADIUS = 6.5;
 const BANANA_LIFE = 40;
+/** 자석이 대상에 붙기 직전 끊기며 이어지는 추진 부스트 (초) */
+const MAGNET_EXIT_BOOST = 1.6;
 
 /** 한 랩에 5구간 × 5개 상자 */
 export function generateBoxes(track: TrackGeometry): ItemBox[] {
@@ -78,6 +81,7 @@ export function rollItem(rank: number, total: number, rnd: () => number): ItemKi
   const behind = total <= 1 ? 0 : (rank - 1) / (total - 1); // 0 = 1등, 1 = 꼴찌
   const table: [ItemKind, number][] = [
     ['banana', 3 - behind * 2],
+    ['mine', 1.5 + behind * 0.8],
     ['shield', 2.5 - behind * 1],
     ['waterfly', 2 + behind * 1.5],
     ['missile', 1.5 + behind * 2.5],
@@ -154,16 +158,20 @@ export class ItemSystem {
       const dx = t.x - k.x;
       const dz = t.z - k.z;
       const d = Math.hypot(dx, dz);
-      if (d < 4) {
-        k.magnetT = 0;
-        k.speed = Math.min(k.speed, t.speed + 8);
-        continue;
-      }
       // 대상 쪽으로 당기되 조향은 살려 둔다 (플레이어가 궤도를 틀 수 있다)
       const want = Math.atan2(-dz, dx);
       const err = Math.atan2(Math.sin(want - k.yaw), Math.cos(want - k.yaw));
-      k.yaw += Math.max(-2.2 * dt, Math.min(2.2 * dt, err));
+      // 가까워질수록 유도를 풀어 옆으로 스쳐 지나가게 — 관성으로 추월한다
+      const pull = d > 14 ? 2.2 : d > 7 ? 1.0 : 0;
+      k.yaw += Math.max(-pull * dt, Math.min(pull * dt, err));
       k.slip *= Math.max(0, 1 - 4 * dt);
+      // 붙기 직전에 끊어 그대로 튀어 나간다 (속도는 유지 → 추월)
+      if (d < 5.5) {
+        k.magnetT = 0;
+        k.magnetTarget = -1;
+        // 탈출 추진: 부스트로 전환해 관성이 이어진다
+        k.boostT = Math.max(k.boostT, MAGNET_EXIT_BOOST);
+      }
     }
     // 투사체
     for (const pr of this.projectiles) {
@@ -195,7 +203,8 @@ export class ItemSystem {
           if (pr.age > BOMB_FLIGHT + 1.5) pr.done = true;
         }
       } else {
-        pr.y = 0;
+        // 바나나·지뢰: 그 자리에 남는다
+        pr.y = pr.kind === 'mine' ? 0.25 : 0;
         if (pr.age > BANANA_LIFE) pr.done = true;
       }
       // 피격: 내가 소유한 말만 (자기 투사체는 0.5초간 면역)
@@ -203,13 +212,14 @@ export class ItemSystem {
         if (!owned[i] || pr.done) continue;
         const k = karts[i];
         if (k.finished || k.bubbleT > 0 || k.stunT > 0) continue;
-        if (pr.owner === i && pr.age < (pr.kind === 'banana' ? 1.5 : 0.5)) continue;
+        if (pr.owner === i && pr.age < (pr.kind === 'banana' || pr.kind === 'mine' ? 1.5 : 0.5)) continue;
         const dx = k.x - pr.x;
         const dz = k.z - pr.z;
         const d2 = dx * dx + dz * dz;
         let hit = false;
         if (pr.kind === 'missile' || pr.kind === 'waterfly') hit = d2 < 3.2 * 3.2;
         else if (pr.kind === 'gas') hit = pr.age >= BOMB_FLIGHT && d2 < BOMB_RADIUS * BOMB_RADIUS;
+        else if (pr.kind === 'mine') hit = d2 < 2.2 * 2.2;
         else hit = d2 < 1.8 * 1.8;
         if (!hit) continue;
         if (pr.kind === 'gas' && k.confuseT > 0) continue; // 이미 취함
@@ -228,6 +238,12 @@ export class ItemSystem {
     else if (kind === 'waterfly') k.bubbleT = 2.0; // 2초 공중에 갇혔다 떨어진다
     else if (kind === 'ufo') k.bubbleT = 2.7; // 2.45 초과 = UFO 연출 (ItemVisuals)
     else if (kind === 'banana') k.slipT = 1.0;
+    else if (kind === 'mine') {
+      // 공중으로 붕 떴다가 떨어진다 (물방울과 같은 곡선, 조작 불가)
+      k.bubbleT = 1.5;
+      k.escape = 0;
+      k.speed *= 0.35;
+    }
     else if (kind === 'gas') {
       k.confuseT = 3;
       return; // 취하는 건 게이지 손실 없음
@@ -299,6 +315,17 @@ export class ItemSystem {
           else o.confuseT = 3;
         });
         break;
+      case 'mine': {
+        // 뒤에 5개: 부채꼴로
+        const mx = ev.x - Math.cos(ev.yaw) * 4;
+        const mz = ev.z + Math.sin(ev.yaw) * 4;
+        const rx2 = Math.sin(ev.yaw);
+        const rz2 = Math.cos(ev.yaw);
+        for (let i = -2; i <= 2; i++) {
+          this.projectiles.push({ id: ev.id * 8 + (i + 2), kind: 'mine', owner: ev.slot, x: mx + rx2 * i * 3.4 - Math.cos(ev.yaw) * Math.abs(i) * 1.8, z: mz + rz2 * i * 3.4 + Math.sin(ev.yaw) * Math.abs(i) * 1.8, y: 0.25, yaw: ev.yaw, speed: 0, age: 0, target: -1, done: false });
+        }
+        break;
+      }
       case 'banana': {
         // 뒤에 3개: 가운데 + 좌우 3m
         const bx = ev.x - Math.cos(ev.yaw) * 3.5;

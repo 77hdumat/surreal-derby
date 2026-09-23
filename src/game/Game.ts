@@ -940,10 +940,15 @@ export class Game {
           if (me) this.ui.showToast('🛡️ 막았다!', 900);
         } else {
           this.audio.play(e.kind === 'banana' ? 'impact' : 'impactHeavy', { pos, minGain: me ? 0.8 : 0.3, gain: 0.9 });
+          if (e.kind === 'mine') {
+            this.audio.play('crash', { pos, minGain: me ? 0.7 : 0.3, gain: 0.9 });
+            this.effects.flashScreen(me ? 0.5 : 0.15);
+            this.particles.impact(pos!.clone().setY(0.5), 2.2);
+          }
           this.racers.bump(e.slot, e.kind !== 'banana');
           if (me) {
             this.camera.shake(0.5);
-            const msg = e.kind === 'gas' ? '🍄 어지럽다… 조작 반대!' : e.kind === 'waterfly' ? '🪰 ← → 연타로 탈출!' : `${ITEM_INFO[e.kind].emoji} 맞았다!`;
+            const msg = e.kind === 'gas' ? '🍄 어지럽다… 조작 반대!' : e.kind === 'waterfly' ? '🪰 ← → 연타로 탈출!' : e.kind === 'mine' ? '💣 지뢰!' : `${ITEM_INFO[e.kind].emoji} 맞았다!`;
             this.ui.showToast(msg, e.kind === 'waterfly' ? 2000 : 1200);
           }
         }
