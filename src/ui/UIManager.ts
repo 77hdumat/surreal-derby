@@ -35,6 +35,7 @@ export interface HudState {
   boostFrac: number;
   /** 들고 있는 아이템 표시 문자열 ('' = 없음) */
   item: string;
+  itemName: string;
   /** 두 번째 칸 (이모지) */
   item2: string;
   time: number;
@@ -57,6 +58,20 @@ export interface ResultRow {
 /**
  * HTML/CSS 오버레이: 메뉴 → 로비(말·기수 선택) → HUD → 결과.
  */
+/** 00:45.34 */
+function fmtTime(t: number): string {
+  const m = Math.floor(t / 60);
+  const sec = t - m * 60;
+  return `${String(m).padStart(2, '0')}:${sec.toFixed(2).padStart(5, '0')}`;
+}
+
+/** 1st 2nd 3rd 4th … */
+function ordinal(n: number): string {
+  const m100 = n % 100;
+  if (m100 >= 11 && m100 <= 13) return 'th';
+  return n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th';
+}
+
 export class UIManager {
   private defs: RacerDefinition[];
   private menu = $('menu');
@@ -69,6 +84,10 @@ export class UIManager {
   private rankList = $('rank-list');
   private lastRankKey = '';
   private lastLap = 0;
+  /** 랩 기록: 이번 랩 시작 시각과 최고 랩 */
+  private lapStart = 0;
+  private bestLap = Infinity;
+  private lastTime = 0;
 
   mountId: string;
   jockeyId: string;
@@ -514,33 +533,60 @@ export class UIManager {
     this.result.classList.add('hidden');
     this.lastRankKey = '';
     this.lastLap = 0;
+    this.lapStart = 0;
+    this.bestLap = Infinity;
+    this.lastTime = 0;
+    $('best-lap').textContent = '--:--.--';
     this.setCountdown('');
     $('hud-lap').textContent = '1';
     (document.querySelector('.lap-total') as HTMLElement).textContent = `/${LAPS}`;
   }
 
   updateHud(h: HudState): void {
+    // 새 레이스(시간이 되감김) → 랩 기록 초기화
+    if (h.time < this.lastTime - 0.5) {
+      this.lapStart = 0;
+      this.bestLap = Infinity;
+      this.lastLap = 0;
+      $('best-lap').textContent = '--:--.--';
+    }
+    this.lastTime = h.time;
     if (h.lap !== this.lastLap) {
+      // 한 바퀴를 마쳤으면 그 랩 기록으로 BEST 갱신
+      if (this.lastLap > 0 && h.lap > this.lastLap) {
+        const lapT = h.time - this.lapStart;
+        if (lapT < this.bestLap) {
+          this.bestLap = lapT;
+          $('best-lap').textContent = fmtTime(lapT);
+        }
+        this.lapStart = h.time;
+      }
       this.lastLap = h.lap;
       $('hud-lap').textContent = String(h.lap);
     }
     $('hud-pos').textContent = String(h.rank);
+    $('hud-pos-ord').textContent = ordinal(h.rank);
     $('hud-pos-total').textContent = `/${h.total}`;
-    $('hud-speed').textContent = String(Math.round(Math.abs(h.speed) * 3.6));
-    $('race-time').textContent = h.time.toFixed(1).padStart(4, '0');
+    const kmh = Math.round(Math.abs(h.speed) * 3.6);
+    $('hud-speed').textContent = String(kmh);
+    ($('speed-bar') as HTMLElement).style.width = `${Math.min(100, (kmh / 260) * 100)}%`;
+    $('race-time').textContent = fmtTime(h.time);
+    $('lap-time').textContent = fmtTime(Math.max(0, h.time - this.lapStart));
     const fill = $('gauge-fill');
     fill.style.width = `${Math.round(Math.min(1, h.gauge) * 100)}%`;
     const g = fill.parentElement!;
     g.classList.toggle('full', h.boosts >= 2 && !h.boosting);
     g.classList.toggle('boosting', h.boosting);
+    // 아이템 칸: 아이콘만 크게 (이름은 툴팁)
     const slot = $('item-slot');
-    if (slot.textContent !== (h.item || '—')) {
-      slot.textContent = h.item || '—';
+    if (slot.textContent !== h.item) {
+      slot.textContent = h.item;
+      slot.title = h.itemName;
       slot.classList.toggle('has', !!h.item);
     }
     const slot2 = $('item-slot2');
-    if (slot2.textContent !== (h.item2 || '·')) {
-      slot2.textContent = h.item2 || '·';
+    if (slot2.textContent !== h.item2) {
+      slot2.textContent = h.item2;
       slot2.classList.toggle('has', !!h.item2);
     }
     for (let i = 0; i < 2; i++) {

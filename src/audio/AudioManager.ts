@@ -14,10 +14,6 @@ const SFX = {
   engineRev2: 'engine-rev2.mp3',
   motoPass: 'moto-passby.mp3',
   engineFail: 'engine-fail.mp3',
-  crowdStadium: 'crowd-stadium.mp3',
-  crowdLoop: 'crowd-loop.mp3',
-  crowdRoar: 'crowd-roar.mp3',
-  crowdGasp: 'crowd-gasp.mp3',
   elephant: 'elephant.mp3',
   elephantGrowl: 'elephant-growl.mp3',
   elephantAngry: 'elephant-angry.mp3',
@@ -46,6 +42,7 @@ const SFX = {
   circusTadaa: 'circus-tadaa.mp3',
   snowStep: 'snow-step.mp3',
   humanAhh: 'human-ahh.mp3',
+  africaLoop: 'africa-loop.mp3',
 } as const;
 
 export type SfxName = keyof typeof SFX;
@@ -67,9 +64,9 @@ export class AudioManager {
   private buffers = new Map<SfxName, AudioBuffer>();
   private loading = false;
   private cameraPos = new THREE.Vector3();
-  private crowdGain!: GainNode;
-  private crowdTarget = 0.12;
-  private roar = 0;
+  /** 배경 음악 (부족 북소리 루프). 얼룩말 부스트 노래가 나올 땐 줄인다 */
+  private bgmGain!: GainNode;
+  private bgmDuck = 1;
   private windGain!: GainNode;
   /** 부스트 중 바람 가르는 소리 (하이패스 노이즈) */
   private rushGain: GainNode | null = null;
@@ -103,9 +100,9 @@ export class AudioManager {
     this.master.connect(ctx.destination);
     this.sfx = ctx.createGain();
     this.sfx.connect(this.master);
-    this.crowdGain = ctx.createGain();
-    this.crowdGain.gain.value = 0;
-    this.crowdGain.connect(this.master);
+    this.bgmGain = ctx.createGain();
+    this.bgmGain.gain.value = 0;
+    this.bgmGain.connect(this.master);
     this.windGain = ctx.createGain();
     this.windGain.gain.value = 0;
     this.windGain.connect(this.master);
@@ -305,18 +302,11 @@ export class AudioManager {
   private startAmbient(): void {
     if (this.ambientStarted || !this.ctx) return;
     this.ambientStarted = true;
-    // 관중: 두 겹을 다른 속도/시작점으로 깔아 루프 이음새를 숨김
-    for (const [name, rate, offset, vol] of [
-      ['crowdStadium', 1.0, 0, 0.7],
-      ['crowdLoop', 0.93, 7.3, 0.45],
-    ] as [SfxName, number, number, number][]) {
-      const src = this.makeLoop(name, rate);
-      if (!src) continue;
-      const g = this.ctx.createGain();
-      g.gain.value = vol;
-      src.connect(g);
-      g.connect(this.crowdGain);
-      src.start(0, offset);
+    // 배경 음악: 관중 함성 대신 부족 북소리를 메뉴·대기실·레이스 내내 반복
+    const bgm = this.makeLoop('tribalDrums', 1);
+    if (bgm) {
+      bgm.connect(this.bgmGain);
+      bgm.start();
     }
     const wind = this.makeLoop('wind', 1);
     if (wind) {
@@ -513,6 +503,7 @@ export class AudioManager {
 
   stopRacerLoops(): void {
     for (const id of [...this.boostLoops.keys()]) this.stopBoostLoop(id);
+    this.bgmDuck = 1;
     for (const [id, n] of this.racerLoops) {
       try {
         n.src.stop();
@@ -524,26 +515,17 @@ export class AudioManager {
     }
   }
 
-  // ---------------------------------------------------------------- 관중 / 바람
+  // ---------------------------------------------------------------- 배경 음악 / 바람
 
-  setExcitement(v: number): void {
-    this.crowdTarget = 0.12 + THREE.MathUtils.clamp(v, 0, 1) * 0.45;
+  /** 얼룩말 부스트 노래가 나오는 동안 배경 음악을 줄인다 */
+  duckBgm(on: boolean): void {
+    this.bgmDuck = on ? 0.25 : 1;
   }
 
-  crowdRoar(strength = 1): void {
-    this.roar = Math.min(1.2, this.roar + strength);
-    if (strength >= 0.5) this.play('crowdRoar', { gain: 0.35 * strength, cooldown: 2.5 });
-  }
-
-  crowdGasp(): void {
-    this.play('crowdGasp', { gain: 0.6, cooldown: 3 });
-  }
-
-  update(dt: number, cameraVel: number): void {
+  update(_dt: number, cameraVel: number): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.roar = Math.max(0, this.roar - dt * 0.8);
-    this.crowdGain.gain.setTargetAtTime(this.crowdTarget + this.roar * 0.3, t, 0.2);
+    this.bgmGain.gain.setTargetAtTime(0.32 * this.bgmDuck, t, 0.3);
     // 일반 바람은 낮게 (말발굽이 묻히지 않게), 부스트 바람은 샘플 루프로 크게
     const wind = THREE.MathUtils.clamp((cameraVel - 10) / 60, 0, 0.22);
     this.windGain.gain.setTargetAtTime(wind, t, 0.25);

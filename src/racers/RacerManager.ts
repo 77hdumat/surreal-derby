@@ -7,12 +7,13 @@ import type { TrackGeometry } from '../track/TrackGeometry';
 import type { ParticleManager } from '../effects/ParticleManager';
 import { whenAssetsIdle } from './rig/Assets';
 import type { Footprints } from '../effects/Footprints';
+import type { SkidMarks } from '../effects/SkidMarks';
 import type { KartParams, KartState } from '../game/KartPhysics';
 import type { RacerStatus } from '../game/RaceState';
 import type { SpecialAbility } from './Racer';
 import type { SlotConfig } from '../game/KartRace';
 import { jockeyById } from './Jockeys';
-import { BoostFlame } from '../effects/BoostFlame';
+import { WindSplit } from '../effects/WindSplit';
 import { bubbleLift } from '../effects/ItemVisuals';
 
 /**
@@ -30,7 +31,7 @@ export class RacerManager {
   private ctx: VisualContext[] = [];
   private dustPhase: number[] = [];
   private wasBoosting: boolean[] = [];
-  private flames: BoostFlame[] = [];
+  private winds: WindSplit[] = [];
   private exhaustTimer = 0;
   private tmpTan = new THREE.Vector3();
   private tmpBack = new THREE.Vector3();
@@ -38,6 +39,8 @@ export class RacerManager {
   private tmpFoot = new THREE.Vector3();
   /** 발자국 데칼 (Game 이 주입) */
   footprints: Footprints | null = null;
+  /** 드리프트 스키드 마크 (Game 이 주입) */
+  skids: SkidMarks | null = null;
 
   constructor(scene: THREE.Scene, track: TrackGeometry, particles: ParticleManager) {
     this.scene = scene;
@@ -105,18 +108,17 @@ export class RacerManager {
       this.ctx.push(this.makeCtx());
       this.dustPhase.push(Math.random());
       this.wasBoosting.push(false);
-      // 부스트 화염: 몸통 뒤 아래쪽에서 뒤로
-      const flame = new BoostFlame(4.4, 1.5);
-      flame.group.position.set(-v.height * 0.55 - 0.2, Math.max(0.45, v.height * 0.28), 0);
-      v.root.add(flame.group);
-      this.flames.push(flame);
+      // 부스트: 불꽃 대신 말과 기수를 기점으로 공기가 갈라지며 뒤로 찢겨 나가는 바람
+      const wind = new WindSplit(Math.max(2, v.height));
+      v.root.add(wind.group);
+      this.winds.push(wind);
     });
     await this.whenReady();
   }
 
   clear(): void {
-    for (const f of this.flames) f.dispose();
-    this.flames = [];
+    for (const w of this.winds) w.dispose();
+    this.winds = [];
     for (const v of this.visuals) {
       this.scene.remove(v.root);
       v.dispose();
@@ -231,12 +233,12 @@ export class RacerManager {
       ctx.stateTimer = k.boostT;
       ctx.cornerWeight = Math.max(this.track.cornerWeight(k.s), Math.abs(k.slip) / 0.45);
       ctx.boost = THREE.MathUtils.lerp(ctx.boost, k.boostT > 0 ? 1 : k.miniT > 0 ? 0.5 : 0, Math.min(1, dt * 6));
-      const flame = this.flames[i];
-      if (flame) {
+      const wind = this.winds[i];
+      if (wind) {
         const want = k.finished ? 0 : k.boostT > 0 ? 1 : k.miniT > 0 ? 0.55 : 0;
-        flame.setIntensity(THREE.MathUtils.lerp(flame.value, want, Math.min(1, dt * (want > flame.value ? 12 : 5))));
-        flame.setBlue(k.boostBlue && k.boostT > 0 ? 1 : 0);
-        flame.update(time + i * 1.7);
+        wind.setIntensity(THREE.MathUtils.lerp(wind.value, want, Math.min(1, dt * (want > wind.value ? 12 : 5))));
+        wind.setBlue(k.boostBlue && k.boostT > 0 ? 1 : 0);
+        wind.update(time + i * 1.7, cameraPos);
       }
       ctx.bump = k.bumpT;
       ctx.bumpDir = k.bumpDir;
@@ -244,6 +246,20 @@ export class RacerManager {
       // 슬립각 → 몸 기준 횡속도 (+ = 오른쪽). 오른쪽 드리프트(slip>0)는 코가 진행 방향보다 오른쪽 → 몸은 왼쪽으로 미끄러짐
       ctx.lateralVel = THREE.MathUtils.lerp(ctx.lateralVel, -Math.sin(k.slip) * k.speed, 0.25);
       v.update(ctx);
+      // 드리프트: 뒷발 두 줄로 땅을 긁은 자국 (공중·저속이면 줄을 끊는다)
+      if (this.skids) {
+        const skid = k.drifting && Math.abs(k.speed) > 3 && k.bubbleT <= 0 && !k.finished;
+        for (const side of [-1, 1]) {
+          const key = `${i}:${side}`;
+          if (!skid) {
+            this.skids.end(key);
+            continue;
+          }
+          this.tmpFoot.set(-v.height * 0.3, 0, side * Math.max(0.3, v.height * 0.14)).applyMatrix4(v.root.matrixWorld);
+          const h = k.yaw + k.slip;
+          this.skids.add(key, this.tmpFoot.x, this.tmpFoot.z, Math.cos(h), -Math.sin(h), 0.4, time);
+        }
+      }
 
       const distToCam = v.root.position.distanceTo(cameraPos);
       if (distToCam > 140 || Math.abs(k.speed) < 2) continue;
@@ -298,10 +314,6 @@ export class RacerManager {
         }
       }
       this.dustPhase[i] = phase;
-      if (doExhaust && (k.boostT > 0 || k.miniT > 0) && distToCam < 80) {
-        this.tmpHoof.set(-v.height * 0.55 - 1.5, 0.5, 0).applyMatrix4(v.root.matrixWorld);
-        this.particles.ember(this.tmpHoof, this.tmpBack);
-      }
     }
     this.scene.updateMatrixWorld();
   }

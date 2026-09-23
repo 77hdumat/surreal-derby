@@ -10,6 +10,7 @@ import { UIManager } from '../ui/UIManager';
 import { updateWind } from '../track/Vegetation';
 import { onAssetProgress } from '../racers/rig/Assets';
 import { Footprints } from '../effects/Footprints';
+import { SkidMarks } from '../effects/SkidMarks';
 import { installHsvFog } from '../effects/HsvFog';
 import { KartRace, MAX_SLOTS, type RaceMode, type SlotConfig } from './KartRace';
 import { InputManager } from './Input';
@@ -77,6 +78,7 @@ export class Game {
   private highQuality = false;
   private sun: THREE.DirectionalLight;
   private footprints: Footprints;
+  private skids: SkidMarks;
   private sceneryPromise: Promise<void> = Promise.resolve();
   private sunOffset = new THREE.Vector3(70, 95, 50);
   private tmp = new THREE.Vector3();
@@ -184,6 +186,9 @@ export class Game {
     this.footprints = new Footprints(1600);
     this.scene.add(this.footprints.mesh);
     this.racers.footprints = this.footprints;
+    this.skids = new SkidMarks(3000);
+    this.scene.add(this.skids.mesh);
+    this.racers.skids = this.skids;
     this.race = new KartRace(this.track, RACER_DEFINITIONS);
     this.scene.add(this.obstacleMeshes.group);
     this.scene.add(this.itemVisuals.group);
@@ -767,6 +772,7 @@ export class Game {
     this.sendAccum = 0;
     this.particles.clear();
     this.footprints.clear();
+    this.skids.clear();
     this.lastCount = -1;
     this.finishTimer = 0;
     this.excitement = 0.3;
@@ -783,7 +789,6 @@ export class Game {
     this.camera.distanceScale = Game.cameraScaleFor(this.racers.defs[this.mySlot]?.specialAbility);
     this.camera.update(0, this.race.karts[this.mySlot] ?? null, 0);
     this.racers.update(this.race.karts, this.race.params, 0, 0, this.camera.camera.position);
-    this.audio.setExcitement(0.3);
     this.audio.play('neigh', { gain: 0.5 });
     this.raceStarting = false;
     if (this.mode === 'solo') {
@@ -851,7 +856,6 @@ export class Game {
     } else {
       this.ui.setCountdown('GO!');
       this.audio.play('bell', { gain: 0.9 });
-      this.audio.crowdRoar(0.8);
       setTimeout(() => this.ui.setCountdown(''), 900);
     }
   }
@@ -915,7 +919,6 @@ export class Game {
         const first = this.race.karts.every((k, i) => i === slot || !k.finished || (k.finishTime ?? 0) >= (this.race.karts[slot].finishTime ?? 0));
         if (first) {
           this.audio.play('airhorn', { gain: 0.7 });
-          this.audio.crowdRoar(1.2);
           this.effects.flashScreen(0.6);
         }
         if (me) this.ui.showToast(`${this.race.rankOf(slot)}위 골인!`, 2500);
@@ -1014,51 +1017,41 @@ export class Game {
         a.play('cardboardOpen', { pos, minGain: near, gain: g });
         a.play('scream', { pos, minGain: near * 0.7, gain: 0.7 * g, rate: 0.85 });
         a.play('whooshEpic', { pos, minGain: near * 0.5, gain: 0.5 * g });
-        a.crowdRoar(0.7);
         break;
       case 'ELEPHANT': // 물대포
         a.play('elephant', { pos, minGain: near * 0.5, gain: 0.5 * g });
         a.play('whoosh', { pos, minGain: near * 0.5, gain: 0.7 * g, rate: 0.7 });
-        a.crowdRoar(0.4);
         break;
       case 'COW': // 분노
         a.play('cowMoo', { pos, minGain: near, gain: 1.1 * g });
-        a.crowdRoar(0.5);
         break;
       case 'COSTUME': // 탈 벗어 들고 질주
         a.play('scream', { pos, minGain: near, gain: 0.8 * g, rate: 1.15 });
         a.play('whooshEpic', { pos, minGain: near * 0.6, gain: 0.7 * g });
-        a.crowdRoar(0.9);
         break;
       case 'HUMAN': // 이족보행
         a.play('whoosh', { pos, minGain: near * 0.6, gain: 0.8 * g });
         a.play('humanAhh', { pos, minGain: near, gain: 1.0 * g });
-        a.crowdRoar(0.5);
         break;
       case 'CIRCUS': // 서커스
         a.play('circusTadaa', { pos, minGain: near, gain: 0.9 * g });
         a.play('whooshEpic', { pos, minGain: near * 0.5, gain: 0.6 * g });
-        a.crowdRoar(0.8);
         break;
       case 'MOTORCYCLE': // 엔진 폭발
         a.play('engineRev2', { pos, minGain: near, gain: 1.1 * g });
         a.play('motoPass', { pos, minGain: near * 0.6, gain: 0.8 * g });
         a.play('whoosh', { pos, minGain: near * 0.4, gain: 0.6 * g });
-        a.crowdRoar(0.8);
         break;
       case 'LONGBODY': // 몸 늘어남
         a.play('whooshEpic', { pos, minGain: near * 0.7, gain: 1.0 * g });
         a.play('scream', { pos, minGain: near * 0.4, gain: 0.6 * g, rate: 0.9 });
-        a.crowdRoar(0.6);
         break;
       case 'GIRAFFE': // 목 뻗기
         a.play('whooshEpic', { pos, minGain: near * 0.7, gain: 1.0 * g, rate: 0.8 });
         a.play('neigh', { pos, minGain: near * 0.4, gain: 0.5 * g, rate: 0.8 });
-        a.crowdRoar(0.9);
         break;
       default: // 얼룩말: 슈퍼 스프린트
         a.play('whooshEpic', { pos, minGain: near, gain: 0.9 * g });
-        a.crowdRoar(0.5);
     }
   }
 
@@ -1138,6 +1131,7 @@ export class Game {
         const w = this.race.results[0]?.slot ?? 0;
         this.camera.setResultFocus(this.racers.worldPosition(w, this.tmp));
         this.racers.update(this.race.karts, this.race.params, dt, this.race.time, this.camera.camera.position);
+        this.skids.update(this.race.time);
         this.camera.update(dt, null, 0);
         this.track.updateCrowd(this.globalTime, 0.5);
         this.particles.update(dt);
@@ -1341,19 +1335,19 @@ export class Game {
     this.prevBoostT = myKart.boostT;
     this.audio.setBoostRush(boost);
     this.racers.update(this.race.karts, this.race.params, dt, this.race.time, this.camera.camera.position);
+    this.skids.update(this.race.time);
     this.particles.update(dt);
     this.camera.update(dt, myKart, boost);
     // 속도감: 부스트 잔상·스피드라인 강하게, 고속 주행 자체도 살짝
     const speedK = THREE.MathUtils.clamp((Math.abs(myKart.speed) - 28) / 25, 0, 1);
-    this.effects.setAfterimage(Math.max(this.camera.boostNearby * 0.75, speedK * 0.25));
-    this.effects.setSpeedLines(Math.max(this.camera.boostNearby * 1.3, speedK * 0.35));
+    this.effects.setAfterimage(Math.max(this.camera.boostNearby * 0.8, speedK * 0.25));
+    this.effects.setSpeedLines(Math.max(this.camera.boostNearby * 1.9, speedK * 0.4));
     this.effects.setSlowMo(0);
     if (myKart.drifting) this.camera.shake(dt * 0.08);
 
     // 분위기: 마지막 랩일수록 관중 열기 ↑
     const lapFrac = THREE.MathUtils.clamp(myKart.progress / (this.track.finishS + LAPS * this.track.length), 0, 1);
     this.excitement = THREE.MathUtils.lerp(this.excitement, 0.3 + lapFrac * 0.6, Math.min(1, dt * 0.5));
-    this.audio.setExcitement(this.excitement);
     this.track.updateCrowd(this.globalTime, this.excitement);
 
     // 사운드 루프
@@ -1387,8 +1381,12 @@ export class Game {
         const heavy = ab === 'GIRAFFE' ? 1.2 : 1;
         this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy, active, own });
       }
-      // 얼룩말: 부스트 쓰는 동안만 부족 북소리
-      if (ab === 'CLASSIC') this.audio.updateBoostLoop(String(i), 'tribalDrums', pos, k.boostT > 0 && !k.finished, own);
+      // 얼룩말: 부스트 쓰는 동안만 Africa 노래 (내 말이면 그동안 배경 북소리를 줄인다)
+      if (ab === 'CLASSIC') {
+        const on = k.boostT > 0 && !k.finished;
+        this.audio.updateBoostLoop(String(i), 'africaLoop', pos, on, own);
+        if (own) this.audio.duckBgm(on);
+      }
       // 트로이 목마: 부스트 동안만 나무 바퀴 굴러가는 소리
       if (ab === 'TROJAN') this.audio.updateBoostLoop(String(i), 'woodCreak', pos, k.boostT > 0 && !k.finished, own);
     }
@@ -1430,7 +1428,8 @@ export class Game {
       boostBlue: myKart.boostBlue,
       boostLeft: myKart.boostT,
       boostFrac: myKart.boostT / Math.max(0.01, this.boostTotal),
-      item: myKart.item ? `${ITEM_INFO[myKart.item as ItemKind].emoji} ${ITEM_INFO[myKart.item as ItemKind].name}` : '',
+      item: myKart.item ? ITEM_INFO[myKart.item as ItemKind].emoji : '',
+      itemName: myKart.item ? ITEM_INFO[myKart.item as ItemKind].name : '',
       item2: myKart.item2 ? ITEM_INFO[myKart.item2 as ItemKind].emoji : '',
       time: this.race.time,
       order,

@@ -170,7 +170,8 @@ export class MotorRig extends HorseRig {
   }
 
   protected buildDecor(): void {
-    const chrome = std(0xe8ecf2, { roughness: 0.2, metalness: 0.95 });
+    // 반사가 눈부시지 않게: 하이라이트 최고 밝기 ≈15% (GGX 피크 ∝ 1/α², α=거칠기²) + 환경 반사 15%
+    const chrome = std(0xe8ecf2, { roughness: 0.32, metalness: 0.95, envMapIntensity: 0.15 });
     const hair = std(0x0a0a0c, { roughness: 0.35, metalness: 0.1 });
     // 리젠트: 일본 양아치식 — 앞머리를 크게 부풀려 높이 세운 검은 뽕머리
     const pomp = new THREE.Mesh(
@@ -235,7 +236,7 @@ export class MotorRig extends HorseRig {
       grip.rotation.z = Math.PI / 2;
       frame.add(grip);
     }
-    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), std(0xc41e1e, { roughness: 0.25, metalness: 0.4 }));
+    const tank = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), std(0xc41e1e, { roughness: 0.4, metalness: 0.4, envMapIntensity: 0.15 }));
     tank.scale.set(1.3, 0.55, 0.9);
     tank.position.set(0.05, 0.05, 0);
     tank.castShadow = true;
@@ -289,11 +290,8 @@ export class MotorRig extends HorseRig {
     }
     // 와리가리: 횡속도 방향으로 몸을 눕힘
     this.body.rotation.x += THREE.MathUtils.clamp(ctx.lateralVel * 0.12, -0.5, 0.5);
-    this.flames.forEach((f) => {
-      f.visible = boosting;
-      const sc = 0.7 + Math.random() * 0.8;
-      f.scale.set(sc, sc * 1.4, sc);
-    });
+    // 부스트 불꽃은 쓰지 않는다 (바람 가르기 연출로 대체). 역화만 아래 엔진 고장에서 번쩍
+    this.flames.forEach((f) => (f.visible = false));
     if (this.pompadour) this.pompadour.rotation.z = Math.sin(time * 6) * 0.05 * ctx.speedNorm - wh * 0.2;
     this.updateEngineFailure(ctx);
     // 엔진 드르릉

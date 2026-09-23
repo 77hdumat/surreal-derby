@@ -103,9 +103,11 @@ export class GameCamera {
         const trapped = kart.bubbleT > 0 ? 1 : 0;
         this.trap += (trapped - this.trap) * Math.min(1, (trapped ? 3 : 2) * dt);
         const lift = kart.bubbleT > 0 ? 4.5 * Math.min(1, kart.bubbleT / 0.4) : 0;
-        // 거리는 속도·부스트와 무관하게 고정 (부스트 때 멀어지지 않게). 살짝 대각선 위에서 내려다본다
-        const back = (5.0 + 3.5 * this.trap) * ds;
-        const up = (4.3 + 2.5 * this.trap) * ds + lift * 0.6;
+        // 살짝 대각선 위에서 내려다본다
+        // 부스트 중엔 살짝 더 붙는다 (시야각이 넓어지며 멀어 보이는 것을 상쇄)
+        const near = 1 - 0.15 * this.boostNearby;
+        const back = (5.0 * near + 3.5 * this.trap) * ds;
+        const up = (4.3 * (1 - 0.1 * this.boostNearby) + 2.5 * this.trap) * ds + lift * 0.6;
         // 기본 오른쪽으로 살짝 비켜 대각선 구도 + 드리프트 중엔 미끄러지는 반대쪽으로
         const wantSide = 0.9 * ds - kart.slip * 5 + Math.sin(this.time * 0.9) * 5 * this.trap;
         this.sideOffset += (wantSide - this.sideOffset) * Math.min(1, 4 * dt);
@@ -137,7 +139,8 @@ export class GameCamera {
 
     this.boostNearby = THREE.MathUtils.lerp(this.boostNearby, this.mode === 'CHASE' ? boost : 0, Math.min(1, dt * 5));
     const speedFov = kart && this.mode === 'CHASE' ? THREE.MathUtils.clamp(Math.abs(kart.speed) / 50, 0, 1.2) * 14 : 0;
-    const target = BASE_FOV + this.boostNearby * 24 + speedFov;
+    // 부스트 시야각 확대는 절반만 (너무 멀어 보이지 않게)
+    const target = BASE_FOV + this.boostNearby * 12 + speedFov;
     this.fovCur = THREE.MathUtils.lerp(this.fovCur, target, Math.min(1, dt * 5));
     if (Math.abs(this.camera.fov - this.fovCur) > 0.01) {
       this.camera.fov = this.fovCur;

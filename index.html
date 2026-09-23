@@ -17,27 +17,28 @@
 
       <!-- ===== HUD ===== -->
       <div id="hud" class="hidden">
-        <div class="hud-top">
-          <div class="title-tag"><span class="tag-round">대결</span> 초현실 경마 그랑프리</div>
-          <div class="lap-box"><span class="lap-label">LAP</span><span id="hud-lap">1</span><span class="lap-total">/3</span></div>
-          <div class="race-time" id="race-time">00.0</div>
+        <!-- 카트라이더식 배치: 왼쪽 위 부스터·아이템 칸 → 큰 등수 → 순위 / 오른쪽 위 랩·기록 → 미니맵 / 오른쪽 아래 속도 -->
+        <div class="kr-slots">
+          <div class="boost-slots"><span class="pip" id="pip-0"></span><span class="pip" id="pip-1"></span></div>
+          <div class="item-box" id="item-box"><span id="item-slot" class="item-slot"></span><span id="item-slot2" class="item-slot2"></span></div>
         </div>
-        <div class="ranking">
-          <div class="ranking-head">순위</div>
-          <ol id="rank-list"></ol>
+        <div class="pos-box"><span id="hud-pos">4</span><span class="pos-suffix" id="hud-pos-ord">th</span><span id="hud-pos-total">/4</span></div>
+        <div class="ranking"><ol id="rank-list"></ol></div>
+        <div class="lap-box"><span id="hud-lap">1</span><span class="lap-total">/2</span></div>
+        <div class="time-box">
+          <div><span>LAP</span><b id="lap-time">00:00.00</b></div>
+          <div><span>TIME</span><b id="race-time">00:00.00</b></div>
+          <div><span>BEST</span><b id="best-lap">--:--.--</b></div>
         </div>
-        <div class="pos-box"><span id="hud-pos">4</span><span class="pos-suffix">위</span><span id="hud-pos-total">/4</span></div>
+        <div id="minimap-wrap" class="minimap-wrap"><canvas id="minimap"></canvas></div>
+        <div class="speed"><div class="speed-num"><span id="hud-speed">0</span><span class="unit">KM/H</span></div><div class="speed-bar"><i id="speed-bar"></i></div></div>
         <div id="countdown"></div>
         <div id="hud-toast" class="hidden"></div>
         <div id="net-info"></div>
-        <div id="minimap-wrap" class="minimap-wrap"><canvas id="minimap"></canvas></div>
         <div id="rear-pip" class="hidden"><span class="pip-label">REAR</span><span class="pip-gap" id="pip-gap"></span></div>
         <div class="gauge-wrap">
-          <div class="item-box" id="item-box"><span class="item-label">ITEM · X</span><span id="item-slot" class="item-slot">—</span><span id="item-slot2" class="item-slot2">·</span></div>
-          <div class="speed"><span id="hud-speed">0</span><span class="unit">km/h</span></div>
-          <div class="boost-slots"><span class="pip" id="pip-0"></span><span class="pip" id="pip-1"></span></div>
           <div class="boost-timer" id="boost-timer"><div id="boost-timer-fill"></div></div>
-            <div class="gauge"><div id="gauge-fill"></div><div class="gauge-label" id="gauge-label">DRIFT → 게이지</div></div>
+          <div class="gauge"><div id="gauge-fill"></div><div class="gauge-label" id="gauge-label">DRIFT → 게이지</div></div>
         </div>
         <div class="controls">
           <button id="btn-quality" class="quality" title="렌더링 품질">HD</button>

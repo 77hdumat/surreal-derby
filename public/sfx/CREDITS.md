@@ -14,10 +14,6 @@
 | engine-rev.mp3 / engine-rev2.mp3 | 엔진 부스터 | https://pixabay.com/sound-effects/city-motorcycle-engine-rev-337867/ , https://pixabay.com/sound-effects/city-motorcycle-engine-rev-2-337870/ |
 | moto-passby.mp3 | 부스트 통과음 | https://pixabay.com/sound-effects/film-special-effects-fast-motorcycle-pass-by-559409/ |
 | engine-fail.mp3 | 엔진 고장 | https://pixabay.com/sound-effects/film-special-effects-car-engine-failure-352768/ |
-| crowd-stadium.mp3 | 관중 앰비언스 루프 | https://pixabay.com/sound-effects/people-live-football-match-stadium-crowd-cheering-563439/ |
-| crowd-loop.mp3 | 관중 앰비언스 루프 (레이어 2) | https://pixabay.com/sound-effects/people-crowd-cheering-in-stadium-435357/ |
-| crowd-roar.mp3 | 함성 | https://pixabay.com/sound-effects/people-crowd-cheering-379666/ |
-| crowd-gasp.mp3 | 관중 탄식 (사고) | https://pixabay.com/sound-effects/people-crowd-shocked-reaction-352766/ |
 | elephant.mp3 / elephant-growl.mp3 / elephant-angry.mp3 | 코끼리 | https://pixabay.com/sound-effects/nature-elephant-trumpeting-494313/ , https://pixabay.com/sound-effects/nature-elephant-trumpets-growls-6047/ , https://pixabay.com/sound-effects/nature-angry-elephant-40916/ |
 | cow.mp3 / cow2.mp3 | 소 울음 | https://pixabay.com/sound-effects/nature-cow-mooing-343423/ , https://pixabay.com/sound-effects/nature-cow-moo-122255/ |
 | cardboard-drop.mp3 / cardboard-open.mp3 | 골판지 붕괴/복구 | https://pixabay.com/sound-effects/dropping-cardboard-box-453026/ , https://pixabay.com/sound-effects/film-special-effects-cardboard-box-open-182560/ |
@@ -36,3 +32,5 @@
 | circus-tadaa.mp3 | 서커스 스타 부스터 | https://pixabay.com/sound-effects/musical-tadaa-47995/ |
 | snow-step.mp3 | 말탈 브라더스·휴먼 러너 발자국 | https://pixabay.com/sound-effects/film-special-effects-foot-step-snow-12-189872/ |
 | human-ahh.mp3 | 휴먼 러너 부스터 | https://pixabay.com/sound-effects/people-ahh-shoot-362740/ |
+| tribal-drums.mp3 | 배경 음악 (메뉴·대기실·레이스 반복) | https://pixabay.com/sound-effects/musical-tribal-drums-526712/ |
+| africa-loop.mp3 | 제브라 다니오 부스터 노래 | https://pixabay.com/sound-effects/musical-quot-africa-loop-quot-467023/ |

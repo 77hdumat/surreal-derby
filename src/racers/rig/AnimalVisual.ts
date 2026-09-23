@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { storybookify } from './Storybookify';
+import { storybookify, type CartoonPaint } from './Storybookify';
 import { toonify } from '../../track/Storybook';
 
 /** 말 옆 번호판 표시 여부 */
@@ -51,8 +51,8 @@ export type RigBone =
 
 export interface AnimalAssetConfig {
   url: string;
-  /** 동화책 변환 때 텍스처 무늬를 유지 (기린 얼룩처럼 무늬가 곧 캐릭터인 경우) */
-  keepTexture?: boolean;
+  /** 동화책 변환 때 무늬를 3색 만화풍으로 다시 칠함 (기린 얼룩처럼 무늬가 곧 캐릭터인 경우) */
+  paint?: CartoonPaint;
   /** 바인드 포즈 바운딩 박스 높이를 이 값(m)에 맞춰 자동 스케일 */
   fitHeight: number;
   /** 모델이 +x 를 보도록 하는 Y 회전 */
@@ -160,7 +160,7 @@ export abstract class AnimalVisual implements RacerVisual {
       const asset = await instantiate(this.cfg.url);
       const model = asset.scene;
       // 동화책·카툰 톤: 실사 모델은 텍스처를 평균색으로 납작하게, 그 뒤 전부 셀 셰이딩
-      if (!this.cfg.url.includes('/storybook/')) storybookify(model, 1.12, this.cfg.keepTexture);
+      if (!this.cfg.url.includes('/storybook/')) storybookify(model, 1.12, this.cfg.paint);
       toonify(model);
       model.rotation.y = this.cfg.yaw;
       // updateMatrixWorld 여야 SkinnedMesh 가 bindMatrixInverse 를 갱신한다 (updateWorldMatrix 는 건너뜀)
