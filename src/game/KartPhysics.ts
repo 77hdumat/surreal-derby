@@ -369,30 +369,39 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const steerDir = Math.sign(inp.steer);
   if (steerDir !== 0 && steerDir === Math.sign(st.steerHold || steerDir)) st.steerHold = steerDir * Math.min(0.9, Math.abs(st.steerHold) + dt);
   else st.steerHold = steerDir === 0 ? 0 : steerDir * dt;
-  const hold = Math.min(1, Math.abs(st.steerHold) / 0.55); // 0 → 1 (0.55초)
+  const hold = Math.min(1, Math.abs(st.steerHold) / 0.7); // 0 → 1 (0.7초)
   const speedFrac = Math.min(1, Math.abs(st.speed) / p.maxSpeed);
   const grip = Math.min(1, Math.abs(st.speed) / 10); // 저속에서는 잘 안 돌아감
-  let yawRate = inp.steer * p.handling * (1.7 + 1.0 * hold) * grip * (1 - 0.22 * speedFrac);
+  let yawRate = inp.steer * p.handling * (1.05 + 0.95 * hold) * grip * (1 - 0.3 * speedFrac);
   if (st.slipT > 0) yawRate += Math.sin(time * 23 + st.slipT * 9) * 2.5; // 바나나: 비틀거림
   // 드리프트 완급: 누른 시간이 길수록 깊어진다 (0 → 0.8s). 얕은 드리프트 = 살짝 미끄러지며 게이지 효율 ↑, 깊은 드리프트 = 유턴급 회전
   const deep = st.drifting ? Math.min(1, st.driftTime / 0.5) : 0;
   // 드리프트 중 ↑ 를 떼면 덜 미끄러지고 더 꺾인다 (카트라이더 완급 조절)
   const easing = st.drifting && inp.throttle <= 0 ? 1 : 0;
   // 드리프트: 깊을수록 확 돌고, ↑ 를 떼거나 브레이크를 밟으면 더 조인다 (헤어핀 유턴)
-  if (st.drifting) yawRate *= (1.4 + 1.6 * deep) * (1 + 0.18 * easing) * (1 + 0.35 * Math.min(1, inp.brake));
+  if (st.drifting) yawRate *= (1.5 + 1.7 * deep) * (1 + 0.18 * easing) * (1 + 0.35 * Math.min(1, inp.brake));
   if (st.speed < 0) yawRate = -yawRate;
   st.yaw -= yawRate * dt;
 
   // ---- 슬립 (드리프트 시 옆으로 미끄러짐)
   if (st.drifting) {
-    const slideMul = (0.55 + 0.45 * deep) * (1 - 0.45 * easing); // ↑ 떼면 슬립 절반
-    const target = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) * MAX_SLIP * slideMul : st.slip * Math.max(0, 1 - dt);
+    // 방향키를 놓아도 자동으로 미끄러진다: 코너 방향 + 지금 꺾고 있는 방향
+    const corner = track.cornerWeight(st.s + Math.max(6, st.speed * 0.35));
+    const trackTurn = Math.sign(angleDelta(track.yawAt(st.s + 18) - track.yawAt(st.s)));
+    const autoDir = corner > 0.25 && trackTurn !== 0 ? -trackTurn : Math.sign(st.slip) || 0;
+    const dir = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) : autoDir;
+    // 빠를수록·코너가 급할수록 더 미끄러진다
+    const auto = Math.abs(inp.steer) > 0.2 ? 1 : 0.55 + corner * 0.35;
+    const slideMul = (0.55 + 0.45 * deep) * (1 - 0.45 * easing) * auto;
+    const target = dir === 0 ? st.slip * Math.max(0, 1 - dt) : dir * MAX_SLIP * slideMul;
     st.slip += (target - st.slip) * Math.min(1, (5 + 4 * easing) * dt);
     st.speed *= Math.max(0, 1 - (0.2 + 0.4 * deep + 0.25 * easing) * dt); // 깊을수록·↑ 뗄수록 속도 손실
     if (!(st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS)) {
       // 부스터 중 드리프트는 1.6배 (카트라이더의 부스터 드리프트 충전 보너스). 얕은 드리프트가 충전 효율이 좋다
       const bonus = (boosting ? 1.6 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep);
-      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * bonus * dt;
+      // 실제로 미끄러지는 동안(슬립 30% 이상)만 게이지가 찬다
+      const slipFrac = Math.abs(st.slip) / MAX_SLIP;
+      if (slipFrac > 0.3) st.gauge += (slipFrac - 0.3) / 0.7 * speedFrac * p.gaugeRate * bonus * dt * 1.4;
       if (st.gauge >= 1) {
         // 칸이 비어 있으면 일반 부스터, 다 찼으면 한 칸씩 파란 부스터로 승격
         if (st.boosts < MAX_BOOSTS) st.boosts++;

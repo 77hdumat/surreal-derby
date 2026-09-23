@@ -6,6 +6,8 @@ import { JOCKEYS, jockeyById, statBars, type Jockey } from '../racers/Jockeys';
 import type { LobbySlot } from '../net/Protocol';
 import type { RaceResult, SlotConfig } from '../game/KartRace';
 import { LAPS } from '../game/KartPhysics';
+import { Minimap, type MinimapRacer } from './Minimap';
+import type { TrackGeometry } from '../track/TrackGeometry';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 
@@ -207,6 +209,7 @@ export class UIManager {
 
   private chatEnabled = false;
   private chatHintTimer: ReturnType<typeof setTimeout> | null = null;
+  private minimap: Minimap | null = null;
   /** 지금 채팅을 열 수 있는지 (레이스 중엔 골인한 사람만) */
   canChat: (() => boolean) | null = null;
 
@@ -272,6 +275,18 @@ export class UIManager {
 
   get displayNick(): string {
     return this.nick || '플레이어';
+  }
+
+  /** 미니맵 준비 (트랙이 만들어진 뒤 한 번) */
+  initMinimap(track: TrackGeometry): void {
+    const c = document.getElementById('minimap') as HTMLCanvasElement | null;
+    if (!c) return;
+    this.minimap = new Minimap(c, track);
+    window.addEventListener('resize', () => this.minimap?.build());
+  }
+
+  drawMinimap(racers: MinimapRacer[], boxes: { x: number; z: number; takenT: number }[]): void {
+    this.minimap?.draw(racers, boxes);
   }
 
   /** 경기 방식 버튼 표시 갱신 */

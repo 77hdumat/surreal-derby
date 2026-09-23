@@ -119,7 +119,7 @@ describe('게이지 규칙', () => {
     for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     st.gauge = 0.99;
     st.gaugeAtDriftStart = 0.99;
-    for (let i = 0; i < 10; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
     expect(st.boosts).toBe(1);
     expect(st.gauge).toBeLessThan(0.2);
     // 2칸이 다 차면 다음 충전부터는 파란 부스터로 승급
@@ -234,5 +234,25 @@ describe('파란 부스터', () => {
     stepKart(st2, inp({ throttle: 1, boost: true }), P, track, DT);
     for (let i = 0; i < 90; i++) stepKart(st2, inp({ throttle: 1 }), P, track, DT);
     expect(blueTop).toBeGreaterThan(st2.speed * 1.1);
+  });
+});
+
+describe('자동 드리프트', () => {
+  it('코너에서 Shift 만 눌러도 미끄러지고, 미끄러지는 동안만 게이지가 찬다', () => {
+    // 곡률이 큰 지점 찾기
+    let cs = 0;
+    for (let s = 0; s < track.length; s += 5) if (track.cornerWeight(s) > 0.9) { cs = s; break; }
+    const st = spawn(cs - 30, 0);
+    st.speed = P.maxSpeed * 0.9;
+    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    const g0 = st.gauge;
+    // 방향키 없이 Shift 만
+    for (let i = 0; i < 45; i++) stepKart(st, inp({ throttle: 1, drift: true, steer: 0.25 }), P, track, DT);
+    expect(Math.abs(st.slip)).toBeGreaterThan(0.1);
+    expect(st.gauge).toBeGreaterThan(g0);
+    // 드리프트를 놓으면 더는 안 찬다
+    const g1 = st.gauge;
+    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    expect(st.gauge).toBeCloseTo(g1, 6);
   });
 });

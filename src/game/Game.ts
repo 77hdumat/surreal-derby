@@ -21,7 +21,7 @@ import { ITEM_INFO, type ItemEvent, type ItemKind } from './Items';
 import { encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
 import { RemoteKart } from '../net/RemoteKart';
 import { LAPS, START_BOOST_LATE, START_BOOST_WINDOW, applyStartBoost, currentLap } from './KartPhysics';
-import { JOCKEYS } from '../racers/Jockeys';
+import { JOCKEYS, jockeyById } from '../racers/Jockeys';
 
 type Mode = 'none' | 'solo' | 'host' | 'client';
 type Screen = 'MENU' | 'LOBBY' | 'RACE' | 'RESULT';
@@ -84,6 +84,8 @@ export class Game {
   private rearLook = new THREE.Vector3();
   /** 아이템 명중 시 피격자를 잠시 보여주는 PiP (슬롯, 종료 시각 ms) */
   private hitCam: { slot: number; until: number; label: string } | null = null;
+  /** 미니맵 점 색 (기수 실크색) */
+  private minimapColors: string[] = [];
   /** PiP 는 씬을 한 번 더 그리므로 저해상도 렌더 타깃에 20Hz 로만 그리고, 화면에는 그 텍스처를 붙인다 */
   private pipTarget = new THREE.WebGLRenderTarget(384, 216, { depthBuffer: true });
   private pipScene = new THREE.Scene();
@@ -176,6 +178,7 @@ export class Game {
     this.camera = new GameCamera(this.track, window.innerWidth / window.innerHeight);
     this.effects = new EffectsManager(this.renderer, this.scene, this.camera.camera, fxCanvas);
     this.ui = new UIManager(RACER_DEFINITIONS);
+    this.ui.initMinimap(this.track);
 
     this.ui.onSolo = () => this.startSolo();
     this.ui.onHost = () => this.hostRoom();
@@ -744,6 +747,7 @@ export class Game {
     this.race.authority = mode !== 'client';
     this.race.setup(slots, (s) => (mode === 'solo' ? true : mode === 'host' ? s.cpu || s.slot === me : s.slot === me), seed, this.raceMode);
     this.obstacleMeshes.build(this.race.obstacles);
+    this.minimapColors = slots.map((cfg) => '#' + jockeyById(cfg.jockeyId).silks.toString(16).padStart(6, '0'));
     this.itemVisuals.build(this.race.items.boxes);
     this.itemVisuals.setSlots(slots.length, this.racers.visuals.map((v) => v.height));
     // 아이템 메시 셰이더를 미리 컴파일해 첫 사용 때 끊기지 않게
@@ -1370,6 +1374,11 @@ export class Game {
       return { name: this.race.slots[slot].name, emoji: d?.emoji ?? '', me: slot === this.mySlot, finished: this.race.karts[slot].finished };
     });
     this.ui.setChatLocked(!myKart.finished);
+    // 미니맵
+    this.ui.drawMinimap(
+      this.race.karts.map((k, i) => ({ x: k.x, z: k.z, color: this.minimapColors[i] ?? '#fff', me: i === this.mySlot, finished: k.finished })),
+      this.raceMode === 'item' ? this.race.items.boxes : [],
+    );
     this.itemVisuals.update(dt, this.race.time, this.race.items.boxes, this.race.items.projectiles, this.race.karts, this.racers.visuals.map((v) => v.root));
     // 1등 골인 뒤 10초 카운트다운 (미골인자에게)
     const fc = this.race.finishCountdown();
