@@ -26,7 +26,26 @@ export class ItemVisuals {
   private bombMat = new THREE.MeshPhysicalMaterial({ color: 0x4fc3f7, roughness: 0.1, transmission: 0.6, transparent: true, opacity: 0.85 });
   private bananaMat = new THREE.MeshStandardMaterial({ color: 0xffe14d, roughness: 0.6 });
   private gasMat = new THREE.MeshStandardMaterial({ color: 0xb06cff, transparent: true, opacity: 0.45, roughness: 1, emissive: 0x7a2cff, emissiveIntensity: 0.4 });
-  private bubbleMat = new THREE.MeshPhysicalMaterial({ color: 0x9be7ff, roughness: 0.05, transmission: 0.7, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+  /** 물방울: 하늘 굴절 유리 + 가장자리 광택 (three.js stereo 예제 참고). setRefraction 전엔 임시 재질 */
+  private bubbleGlass = new THREE.MeshBasicMaterial({ color: 0xbfeeff, transparent: true, opacity: 0.32, refractionRatio: 0.92, depthWrite: false });
+  private bubbleRim = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.FrontSide,
+    uniforms: { uColor: { value: new THREE.Color(0xbff3ff) } },
+    vertexShader: `
+      varying vec3 vN; varying vec3 vV;
+      void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `
+      uniform vec3 uColor; varying vec3 vN; varying vec3 vV;
+      void main(){
+        float f = pow(1.0 - max(dot(vN, vV), 0.0), 2.6);
+        // 위쪽 왼편 반사 하이라이트
+        float spot = smoothstep(0.93, 0.99, dot(vN, normalize(vec3(-0.35, 0.6, 0.7))));
+        gl_FragColor = vec4(uColor * f * 1.1 + vec3(spot), f * 0.9 + spot);
+      }`,
+  });
   private shieldMat = new THREE.MeshBasicMaterial({ color: 0x4dffb5, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
   private boxGeo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
   private tmp = new THREE.Vector3();
@@ -96,6 +115,13 @@ export class ItemVisuals {
     return m;
   }
 
+  /** 하늘 큐브맵으로 물방울을 굴절 유리로 */
+  setRefraction(cube: THREE.CubeTexture): void {
+    this.bubbleGlass.envMap = cube;
+    this.bubbleGlass.color.set(0xd6f6ff);
+    this.bubbleGlass.needsUpdate = true;
+  }
+
   /** 말별 효과 메시 준비 (슬롯 수만큼) */
   setSlots(n: number, heights: number[]): void {
     for (const m of [...this.bubbles, ...this.shields, ...this.ufos, ...this.gasRings]) this.group.remove(m);
@@ -105,7 +131,11 @@ export class ItemVisuals {
     this.gasRings = [];
     for (let i = 0; i < n; i++) {
       const h = Math.max(2.2, heights[i] ?? 2.2);
-      const bub = new THREE.Mesh(new THREE.SphereGeometry(h * 0.85, 24, 16), this.bubbleMat);
+      const bubGeo = new THREE.SphereGeometry(h * 0.85, 32, 20);
+      const bub = new THREE.Mesh(bubGeo, this.bubbleGlass);
+      const rim = new THREE.Mesh(bubGeo, this.bubbleRim);
+      rim.renderOrder = 2;
+      bub.add(rim);
       bub.visible = false;
       this.group.add(bub);
       this.bubbles.push(bub);
@@ -241,11 +271,11 @@ export class ItemVisuals {
       bub.visible = k.bubbleT > 0;
       if (bub.visible) {
         // 물방울에 갇혀 공중으로 떠올랐다가 끝날 때 떨어진다 (root 높이는 RacerManager 가 같은 곡선으로 올린다)
-        const lift = bubbleLift(k.bubbleT);
-        bub.position.set(this.tmp.x, h * 0.9 + lift + Math.sin(time * 4) * 0.15, this.tmp.z);
+        // 말(root 가 lift 만큼 떠오름)의 몸통 중심에 맞춘다
+        bub.position.set(this.tmp.x, this.tmp.y + h * 0.55 + Math.sin(time * 4) * 0.15, this.tmp.z);
         // 탈출 진행도만큼 부풀고 흔들린다 (곧 터질 것처럼)
         bub.scale.setScalar(0.9 + Math.sin(time * 6) * 0.05 + k.escape * 0.35);
-        (bub.material as THREE.MeshPhysicalMaterial).opacity = 0.55 - k.escape * 0.25;
+        (bub.material as THREE.MeshBasicMaterial).opacity = 0.32 - k.escape * 0.15;
       }
       sh.visible = k.shieldT > 0;
       if (sh.visible) {

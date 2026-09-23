@@ -186,6 +186,24 @@ describe('순간부스터', () => {
   });
 });
 
+describe('톡톡이', () => {
+  it('Shift+방향키 톡 → ↑ 뗐다 다시 누르면 끊기며 순간부스터, 연속 반복 가능', () => {
+    const st = spawn();
+    for (let i = 0; i < 240; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    let minis = 0;
+    for (let rep = 0; rep < 4; rep++) {
+      const steer = rep % 2 ? -1 : 1;
+      for (let i = 0; i < 8; i++) stepKart(st, inp({ throttle: 1, drift: true, steer }), P, track, DT); // 톡
+      expect(st.drifting).toBe(true);
+      for (let i = 0; i < 4; i++) stepKart(st, inp({ steer }), P, track, DT); // ↑ 뗌
+      for (const e of stepKart(st, inp({ throttle: 1 }), P, track, DT)) if (e.k === 'mini') minis++; // ↑ 다시
+      expect(st.drifting).toBe(false);
+      for (let i = 0; i < 10; i++) stepKart(st, inp({ throttle: 1, steer: -steer * 0.3 }), P, track, DT);
+    }
+    expect(minis).toBe(4);
+  });
+});
+
 describe('드리프트 잠금 (카트라이더식)', () => {
   it('Shift·방향키를 놓아도 계속 미끄러지고 게이지가 찬다, Shift 를 다시 누르면 끊긴다', () => {
     const st = spawn();

@@ -67,21 +67,20 @@ export function cpuInput(st: KartState, p: KartParams, track: TrackGeometry, oth
   const tooFast = ahead2 > 0.7 && st.speed > p.maxSpeed * 0.62 && st.boostT <= 0;
   out.throttle = tooFast ? 0 : prof.skill;
   out.brake = tooFast && st.speed > p.maxSpeed * 0.8 ? 0.6 : 0;
-  // 코너: 카트라이더식 드리프트 — 코너 진입에서 Shift 를 한 번 눌러 시작(잠금), 코너가 끝나면 한 번 더 눌러 끊는다
+  // 코너: 코너 동안 Shift + 방향키를 걸고, 충분히 돌았거나 코너가 풀리면 뗀다 (남은 슬립은 자연히 풀린다)
   prof.driftCooldown = Math.max(0, prof.driftCooldown - dt);
   const wantDrift = corner > Math.max(0.55, prof.driftEager) && st.speed > p.maxSpeed * 0.55 && Math.abs(out.steer) > 0.3;
   out.drift = false;
   if (!st.drifting) {
-    if (wantDrift && prof.driftCooldown <= 0 && !st.driftKeyWas) out.drift = true;
+    out.drift = wantDrift && prof.driftCooldown <= 0;
   } else {
-    // 진행 방향 기준으로 목표가 드리프트 반대쪽이 되면(=충분히 돌았음) · 코너가 풀리면 · 너무 깊으면 끊는다
     const moveErr = angleDelta(want - (st.yaw + st.slip));
     const turnedEnough = -Math.sign(moveErr) === -st.driftDir || Math.abs(moveErr) < 0.08;
     const straightAhead = track.cornerWeight(st.s + 20) < 0.2;
-    if ((straightAhead || turnedEnough || Math.abs(st.slip) > 0.7) && st.driftTime > 0.25 && !st.driftKeyWas) {
-      out.drift = true;
-      prof.driftCooldown = 0.6;
-    }
+    const release = straightAhead || turnedEnough || Math.abs(st.slip) > 0.7;
+    out.drift = !release;
+    if (!release) out.steer = st.driftDir;
+    else prof.driftCooldown = 0.5;
   }
   if (out.drift && !st.drifting && Math.abs(out.steer) < 0.35) out.steer = Math.sign(out.steer || -1) * 0.35;
   // 직선에서 게이지가 차 있으면 부스트

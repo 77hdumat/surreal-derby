@@ -5,7 +5,7 @@ import type { RaceEventType } from '../../events/RaceEvent';
 import { AnimalVisual } from './AnimalVisual';
 import { BoneSocket, AXIS_Y, AXIS_Z } from './BoneTools';
 import { RiderRig, type RiderColors, type RiderPose } from './RiderRig';
-import { STORY_HORSE, RIDER_ASSET_CFG } from './AssetConfigs';
+import { HORSE_ASSET, RIDER_ASSET_CFG } from './AssetConfigs';
 
 const damp = (cur: number, target: number, k: number, dt: number) => THREE.MathUtils.lerp(cur, target, 1 - Math.exp(-k * dt));
 
@@ -573,7 +573,8 @@ export class TrojanRig extends AnimalVisual {
     super(
       def,
       {
-        ...STORY_HORSE,
+        // 트로이 목마는 웅장한 조형 자세(앞다리를 치켜든 실사 말 골격)를 나무로 깎은 것 — 로우폴리 말로 바꾸지 않는다
+        ...HORSE_ASSET,
         // 전설의 목마: 5.5m 급 조형물
         fitHeight: 5.5,
         height: 6.5,

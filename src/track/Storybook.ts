@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { loadAsset } from '../racers/rig/Assets';
 import type { TrackGeometry } from './TrackGeometry';
 
@@ -10,14 +11,75 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const M = (n: string) => `${BASE}/models/storybook/${n}.glb`;
 
 export const PALETTE = {
-  skyTop: 0x78c4f0,
-  skyHorizon: 0xfff3dc,
-  ground: 0x9fd67a,
-  groundDark: 0x86c466,
-  track: 0xf0d9a6,
-  trackStripe: 0xe8cd92,
-  pond: 0x7fd3e6,
+  skyTop: 0x4fa8ec,
+  skyHorizon: 0xffe6c4,
+  ground: 0x8fd06a,
+  groundDark: 0x7cbd58,
+  // 흙 트랙: 초록 잔디와 확실히 구분되는 붉은 흙색
+  track: 0xc49a76,
+  trackStripe: 0xba8f6b,
+  trackEdge: 0x8a5a36,
+  pond: 0x5fc6e0,
 };
+
+/** 태양 방향: 늦은 오후(고도 ~24°) — 긴 그림자와 따뜻한 빛 (three.js keyframes 예제의 Sky 설정 참고) */
+export const STORY_SUN = new THREE.Vector3(0.62, 0.42, 0.66).normalize();
+
+let toonGradient: THREE.DataTexture | null = null;
+/** 셀 셰이딩 3단계 램프 (그림자 · 중간 · 밝음) */
+export function toonRamp(): THREE.DataTexture {
+  if (toonGradient) return toonGradient;
+  const data = new Uint8Array([110, 110, 185, 185, 255, 255]);
+  toonGradient = new THREE.DataTexture(data, data.length, 1, THREE.RedFormat);
+  toonGradient.minFilter = THREE.NearestFilter;
+  toonGradient.magFilter = THREE.NearestFilter;
+  toonGradient.needsUpdate = true;
+  return toonGradient;
+}
+
+/** MeshStandardMaterial → 카툰 셀 셰이딩 재질 (색·텍스처·투명도 유지) */
+export function toToon(mat: THREE.Material): THREE.Material {
+  const sm = mat as THREE.MeshStandardMaterial;
+  if (!sm.isMeshStandardMaterial) return mat;
+  const t = new THREE.MeshToonMaterial({
+    color: sm.color.clone(),
+    map: sm.map,
+    gradientMap: toonRamp(),
+    transparent: sm.transparent,
+    opacity: sm.opacity,
+    side: sm.side,
+    alphaTest: sm.alphaTest,
+    vertexColors: sm.vertexColors,
+    emissive: sm.emissive.clone(),
+    emissiveIntensity: sm.emissiveIntensity,
+  });
+  t.name = sm.name;
+  return t;
+}
+
+/** 오브젝트 전체 재질을 카툰으로 */
+export function toonify(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.material = Array.isArray(m.material) ? m.material.map(toToon) : toToon(m.material);
+  });
+}
+
+/** 물리 하늘: 맑고(탁도 0) 푸른 산란 + 낮은 해의 따뜻한 지평선 (three.js keyframes 예제 설정) */
+export function makeCartoonSky(): THREE.Mesh {
+  const sky = new Sky();
+  sky.scale.setScalar(4500);
+  const u = sky.material.uniforms;
+  u.turbidity.value = 0;
+  u.rayleigh.value = 3;
+  u.mieCoefficient.value = 0.004;
+  u.mieDirectionalG.value = 0.7;
+  u.sunPosition.value.copy(STORY_SUN);
+  sky.userData.noShadow = true;
+  sky.frustumCulled = false;
+  return sky;
+}
 
 /** 하늘 돔: 위는 하늘색, 지평선은 크림색 (안개·조명 영향 없음) */
 export function makeSkyDome(): THREE.Mesh {
@@ -49,20 +111,12 @@ export function makeSkyDome(): THREE.Mesh {
 
 /** 로우폴리 모델 재질을 동화책 톤으로: 거칠고 무광, 약간 밝게 */
 function soften(root: THREE.Object3D, shadow = true): void {
+  toonify(root);
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
     m.castShadow = shadow;
     m.receiveShadow = true;
-    const mats = Array.isArray(m.material) ? m.material : [m.material];
-    for (const mat of mats) {
-      const sm = mat as THREE.MeshStandardMaterial;
-      if (!sm.isMeshStandardMaterial) continue;
-      sm.roughness = 1;
-      sm.metalness = 0;
-      sm.flatShading = true;
-      sm.needsUpdate = true;
-    }
   });
 }
 
@@ -164,11 +218,11 @@ export async function loadStorybookWorld(track: TrackGeometry, rnd: () => number
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       m.castShadow = false;
-      const mat = m.material as THREE.MeshStandardMaterial;
-      if (mat.isMeshStandardMaterial) {
-        mat.color.set(0xffffff);
-        mat.emissive.set(0xffffff);
-        mat.emissiveIntensity = 0.35;
+      const mat = m.material as THREE.MeshToonMaterial;
+      if (mat.color) mat.color.set(0xffffff);
+      if (mat.emissive) {
+        mat.emissive.set(0xfff1dc);
+        mat.emissiveIntensity = 0.45;
       }
     });
     group.add(c);

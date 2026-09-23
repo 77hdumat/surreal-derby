@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSkyDome, loadStorybookWorld, driftClouds, PALETTE } from './Storybook';
+import { makeSkyDome, loadStorybookWorld, driftClouds, PALETTE, STORY_SUN, toonRamp } from './Storybook';
 
 import { TrackGeometry, type TrackFrame } from './TrackGeometry';
 export type { TrackFrame } from './TrackGeometry';
@@ -23,7 +23,7 @@ export class RaceTrack extends TrackGeometry {
   sky!: THREE.Object3D;
   private storyClouds: THREE.Object3D[] = [];
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
-  static readonly SUN_DIR = new THREE.Vector3(0.35, 1.05, 0.3).normalize();
+  static readonly SUN_DIR = STORY_SUN;
 
   constructor() {
     super();
@@ -53,7 +53,7 @@ export class RaceTrack extends TrackGeometry {
   private buildGround(): void {
     // 동화책 톤: 텍스처 없는 파스텔 초록
     const geo = new THREE.PlaneGeometry(4000, 4000);
-    const mat = new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 1, metalness: 0 });
+    const mat = new THREE.MeshToonMaterial({ color: PALETTE.ground, gradientMap: toonRamp() });
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
     m.position.y = -0.05;
@@ -93,7 +93,7 @@ export class RaceTrack extends TrackGeometry {
     geo.computeVertexNormals();
     geo.setAttribute('uv2', geo.attributes.uv);
     // 모래빛 코스 + 가장자리 흰 띠 + 20m 마다 옅은 줄무늬 (캔버스 텍스처 하나)
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: RaceTrack.trackTexture(), roughness: 1, metalness: 0 }));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ map: RaceTrack.trackTexture(), gradientMap: toonRamp() }));
     mesh.receiveShadow = true;
     this.group.add(mesh);
   }
@@ -110,11 +110,14 @@ export class RaceTrack extends TrackGeometry {
     g.fillRect(0, 0, 64, 128);
     g.fillStyle = hex(PALETTE.trackStripe);
     g.fillRect(0, 0, 32, 128);
-    // 양쪽 가장자리 빨강·흰 커브 (폭의 약 4%)
+    // 가장자리: 진한 흙 테두리 + 빨강·흰 커브 (잔디와 코스 경계가 또렷하게)
+    g.fillStyle = hex(PALETTE.trackEdge);
+    g.fillRect(0, 0, 64, 9);
+    g.fillRect(0, 119, 64, 9);
     for (let i = 0; i < 8; i++) {
-      g.fillStyle = i % 2 ? '#ffffff' : '#f07a6e';
-      g.fillRect(i * 8, 0, 8, 5);
-      g.fillRect(i * 8, 123, 8, 5);
+      g.fillStyle = i % 2 ? '#ffffff' : '#e8483d';
+      g.fillRect(i * 8, 0, 8, 6);
+      g.fillRect(i * 8, 122, 8, 6);
     }
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;

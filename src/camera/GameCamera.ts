@@ -38,6 +38,8 @@ export class GameCamera {
   private resultFocus = new THREE.Vector3();
   /** 탈것 크기에 따른 거리 배수 (트로이 목마 등 큰 말은 멀리서) */
   distanceScale = 1;
+  /** 물방울에 갇힌 정도 0..1 (구도 전환용) */
+  private trap = 0;
 
   constructor(track: TrackGeometry, aspect: number) {
     this.track = track;
@@ -97,14 +99,18 @@ export class GameCamera {
         // 빨라질수록 카메라가 낮고 가깝게 붙어 속도감 ↑
         // 말에 가깝게, 살짝 위에서 내려다보는 시점
         const ds = this.distanceScale;
+        // 물방울에 갇히면: 뒤·위로 빠지며 천천히 돌아 떠오른 물방울 전체를 보여준다
+        const trapped = kart.bubbleT > 0 ? 1 : 0;
+        this.trap += (trapped - this.trap) * Math.min(1, (trapped ? 3 : 2) * dt);
+        const lift = kart.bubbleT > 0 ? 4.5 * Math.min(1, kart.bubbleT / 0.4) : 0;
         // 거리는 속도·부스트와 무관하게 고정 (부스트 때 멀어지지 않게). 살짝 대각선 위에서 내려다본다
-        const back = 5.0 * ds;
-        const up = 4.3 * ds;
+        const back = (5.0 + 3.5 * this.trap) * ds;
+        const up = (4.3 + 2.5 * this.trap) * ds + lift * 0.6;
         // 기본 오른쪽으로 살짝 비켜 대각선 구도 + 드리프트 중엔 미끄러지는 반대쪽으로
-        const wantSide = 0.9 * ds - kart.slip * 5;
+        const wantSide = 0.9 * ds - kart.slip * 5 + Math.sin(this.time * 0.9) * 5 * this.trap;
         this.sideOffset += (wantSide - this.sideOffset) * Math.min(1, 4 * dt);
         this.desiredPos.set(kart.x - fx * back + rx * this.sideOffset, up, kart.z - fz * back + rz * this.sideOffset);
-        this.desiredLook.set(kart.x + fx * 5.5 * ds, 0.9 * ds, kart.z + fz * 5.5 * ds);
+        this.desiredLook.set(kart.x + fx * 5.5 * ds * (1 - this.trap), 0.9 * ds + lift * this.trap, kart.z + fz * 5.5 * ds * (1 - this.trap));
         // 고속·부스트에서 카메라가 뒤로 처지지 않게 빠르게 따라붙는다
         k = 18;
         break;

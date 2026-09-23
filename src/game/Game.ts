@@ -91,8 +91,11 @@ export class Game {
   private pipQuadCam = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0, 1);
   private pipQuad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false }));
   private pipAccum = 0;
+  private pipBg = new THREE.Color(0xa9d6f5);
   private obstacleMeshes = new ObstacleMeshes();
   private itemVisuals = new ItemVisuals();
+  /** 하늘 굴절 큐브맵 (물방울 유리) */
+  private skyRefraction: THREE.CubeTexture | null = null;
   private lastFinishCount = -1;
 
   /** 원격 말 상태 버퍼 (슬롯별) */
@@ -125,16 +128,16 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.95;
+    this.renderer.toneMappingExposure = 0.9;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // 여름 오후: 따뜻한 낮은 태양, 긴 그림자, 부드러운 안개 (HSV 안개: r=목표 명도, g=목표 채도)
     installHsvFog();
     // 동화책 톤: 멀수록 밝고 옅어지는 안개(HSV: r=명도 0.96, g=채도 0.18), 밝은 반구광
-    this.scene.fog = new THREE.Fog(new THREE.Color(0.96, 0.18, 0), 380, 2400);
-    this.scene.add(new THREE.HemisphereLight(0xdcefff, 0xa8cf80, 0.85));
-    this.sun = new THREE.DirectionalLight(0xfff0d6, 2.1);
+    this.scene.fog = new THREE.Fog(new THREE.Color(0.97, 0.22, 0), 320, 2200);
+    this.scene.add(new THREE.HemisphereLight(0xe4f1ff, 0xb6d88c, 1.05));
+    this.sun = new THREE.DirectionalLight(0xffe2b8, 2.3);
     this.sun.position.copy(this.sunOffset);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -159,6 +162,12 @@ export class Game {
       skyScene.add(this.track.sky);
       this.scene.environment = pmrem.fromScene(skyScene, 0, 1, 3000).texture;
       this.scene.environmentIntensity = 0.45;
+      // 물방울 굴절용 하늘 큐브맵 (three.js stereo 예제의 CubeRefractionMapping 방식)
+      const cubeRT = new THREE.WebGLCubeRenderTarget(256);
+      const cubeCam = new THREE.CubeCamera(1, 10000, cubeRT);
+      cubeCam.update(this.renderer, skyScene);
+      cubeRT.texture.mapping = THREE.CubeRefractionMapping;
+      this.skyRefraction = cubeRT.texture;
       this.track.group.add(this.track.sky);
       pmrem.dispose();
     }
@@ -173,6 +182,7 @@ export class Game {
     this.race = new KartRace(this.track, RACER_DEFINITIONS);
     this.scene.add(this.obstacleMeshes.group);
     this.scene.add(this.itemVisuals.group);
+    if (this.skyRefraction) this.itemVisuals.setRefraction(this.skyRefraction);
     (this.pipQuad.material as THREE.MeshBasicMaterial).map = this.pipTarget.texture;
     this.pipScene.add(this.pipQuad);
     this.camera = new GameCamera(this.track, window.innerWidth / window.innerHeight);
@@ -223,8 +233,8 @@ export class Game {
   /** 실사 HDRI 하늘: 배경·환경광으로 쓰고, HDRI 의 태양 방향에 DirectionalLight 를 맞춘다 */
   /** 동화책 월드: 하늘 돔은 RaceTrack 에 있다. 환경광은 그 돔에서 굽고, 로우폴리 풍경을 불러온다 */
   private async applySky(): Promise<void> {
-    this.scene.background = new THREE.Color(0xcfeaff);
-    this.scene.environmentIntensity = 0.45;
+    this.scene.background = null; // 물리 하늘(Sky) 이 배경
+    this.scene.environmentIntensity = 0.55;
     this.sunOffset.copy(RaceTrack.SUN_DIR).multiplyScalar(130);
     await this.track.loadRealAssets(RaceTrack.SUN_DIR);
   }
@@ -1209,11 +1219,14 @@ export class Game {
       const scenery = this.track.group;
       const sceneryWas = scenery.visible;
       scenery.visible = false;
+      const bgWas = this.scene.background;
+      this.scene.background = this.pipBg; // 하늘 돔이 같이 숨으니 하늘색으로 채운다
       r.setRenderTarget(this.pipTarget);
       r.clear();
       r.render(this.scene, this.rearCam);
       r.setRenderTarget(null);
       scenery.visible = sceneryWas;
+      this.scene.background = bgWas;
       if (myVisual && hideSelf) myVisual.root.visible = true;
       r.shadowMap.autoUpdate = shadowAuto;
     }

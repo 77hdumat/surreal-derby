@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { storybookify } from './Storybookify';
+import { toonify } from '../../track/Storybook';
 
 /** 말 옆 번호판 표시 여부 */
 export const SHOW_NUMBER_CLOTH = false;
@@ -155,6 +157,9 @@ export abstract class AnimalVisual implements RacerVisual {
     try {
       const asset = await instantiate(this.cfg.url);
       const model = asset.scene;
+      // 동화책·카툰 톤: 실사 모델은 텍스처를 평균색으로 납작하게, 그 뒤 전부 셀 셰이딩
+      if (!this.cfg.url.includes('/storybook/')) storybookify(model);
+      toonify(model);
       model.rotation.y = this.cfg.yaw;
       // updateMatrixWorld 여야 SkinnedMesh 가 bindMatrixInverse 를 갱신한다 (updateWorldMatrix 는 건너뜀)
       model.updateMatrixWorld(true);
