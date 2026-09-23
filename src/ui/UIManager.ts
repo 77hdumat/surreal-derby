@@ -1,3 +1,4 @@
+import { MenuScene } from './MenuScene';
 import * as THREE from 'three';
 import type { RacerDefinition } from '../racers/Racer';
 import { RacerFactory } from '../racers/RacerFactory';
@@ -148,6 +149,15 @@ export class UIManager {
       if (e.key === 'Enter' && joinCode.value.length === 5) this.onJoin?.(joinCode.value);
     });
     $('btn-solo').addEventListener('click', () => this.onSolo?.());
+    // 멀티로 하기 → 방 만들기 / 코드로 참가 펼치기
+    $('btn-multi').addEventListener('click', () => {
+      const sub = $('multi-sub');
+      sub.classList.toggle('hidden');
+      $('btn-multi').classList.toggle('open', !sub.classList.contains('hidden'));
+      if (!sub.classList.contains('hidden')) joinCode.focus();
+    });
+    // 시작 화면·대기실 배경: 바람 부는 동화책 들판 (둘 중 하나가 보일 때만 그림)
+    new MenuScene($('menu-bg') as HTMLCanvasElement, () => !this.menu.classList.contains('hidden') || !this.lobby.classList.contains('hidden')).start();
     $('btn-host').addEventListener('click', () => this.onHost?.());
     $('btn-join').addEventListener('click', () => {
       if (joinCode.value.length === 5) this.onJoin?.(joinCode.value);
@@ -420,7 +430,7 @@ export class UIManager {
   // ---------------------------------------------------------------- screens
 
   setLoading(loading: boolean, doneCount = 0, total = 0): void {
-    for (const id of ['btn-solo', 'btn-host', 'btn-join']) (document.getElementById(id) as HTMLButtonElement).disabled = loading;
+    for (const id of ['btn-solo', 'btn-multi', 'btn-host', 'btn-join']) (document.getElementById(id) as HTMLButtonElement).disabled = loading;
     this.setMenuMsg(loading ? `모델 로딩 중… ${total ? Math.round((doneCount / total) * 100) : 0}%` : '');
   }
 

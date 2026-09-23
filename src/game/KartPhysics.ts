@@ -362,8 +362,8 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   if (st.speed > maxCur) st.speed = Math.max(maxCur, st.speed - (st.speed - maxCur) * 0.6 * dt);
 
   // ---- 드리프트 (카트라이더식): 차체 방향(yaw) 과 진행 방향(yaw + slip) 을 분리한다.
-  //  · Shift + 방향키로 시작, 방향키를 누르고 있는 동안 유지 (Shift 도 누르고 있으면 더 깊고 날카롭게)
-  //  · 방향키를 떼면: 슬립이 서서히 풀리며 쭈욱 미끄러지다 자연 종료 (+ 순간부스터 창)
+  //  · Shift + 방향키를 누르는 동안: 그립이 확 낮아져 깊게 미끄러진다
+  //  · 떼면: 그립이 천천히 돌아오며 쭈욱 미끄러지다 슬립이 풀리면 자연 종료 (+ 순간부스터 창)
   //  · 미끄러지는 중 Shift + 방향키 다시 → 이어서 드리프트 / Shift 만 톡 · 역방향키 → 즉시 끊기
   //  · 톡톡이: 미끄러지는 중 ↑ 를 뗐다 다시 누르면 그 순간 끊기며 순간부스터
   const gaugeBefore = st.gauge;
@@ -393,7 +393,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     }
   } else {
     st.driftTime += dt;
-    driftHeld = steerSign === st.driftDir;
+    driftHeld = inp.drift && steerSign === st.driftDir;
     // 미끄러지는 중 반대쪽으로 Shift + 방향키 → 방향 전환해 이어서 드리프트
     if (inp.drift && steerSign === -st.driftDir && driftPressed) {
       st.driftDir = steerSign;
@@ -421,36 +421,27 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const speedFrac = Math.min(1, Math.abs(st.speed) / p.maxSpeed);
   const grip = Math.min(1, Math.abs(st.speed) / 10); // 저속에서는 잘 안 돌아감
   let yawRate: number;
-  // 아케이드 드리프트 (마리오카트·카트라이더 계열): 진행 방향의 회전율과 차체 각도(슬립)를 따로 제어한다.
-  //  · 진행 방향은 방향키가 직접 정하는 회전율로 돈다 → 경로가 입력에 정직하게 반응
-  //  · 차체는 목표 슬립각을 부드럽게 따라가 옆으로 누운 모양(과 게이지·감속)만 만든다
-  const travelOld = st.yaw + st.slip;
   if (st.drifting) {
-    const engaged = steerSign === st.driftDir;
-    const counter = steerSign === -st.driftDir;
-    const shift = inp.drift ? 1 : 0;
-    const brake = Math.min(1, inp.brake);
-    // 목표 슬립각: 방향키 유지 ~29°, Shift 까지 누르고 있으면 ~38°, 브레이크로 더 깊게. 떼면 0 으로 풀림
-    const target = engaged ? st.driftDir * (0.5 + 0.16 * shift + 0.18 * brake) : 0;
-    const rate = engaged ? 3.5 : counter ? 7 : inp.throttle > 0 ? 2.2 : 3;
-    st.slip += (target - st.slip) * Math.min(1, rate * dt);
-    st.slip = Math.max(-1.2, Math.min(1.2, st.slip));
-    // 걸고 있으면 일반 조향보다 확실히 크게(유턴 가능), 풀리는 중엔 남은 슬립만큼 완만히 계속 돈다
-    const slipFrac = Math.min(1, Math.abs(st.slip) / 0.5);
-    const turn = engaged
-      ? (1.35 + 0.35 * shift + 0.4 * brake) * (0.7 + 0.3 * hold)
-      : counter ? 0.15 * slipFrac : 0.75 * slipFrac;
-    yawRate = st.driftDir * p.handling * turn;
+    // 걸고 있는 동안: 안쪽으로 강하게(유턴까지), 뗀 뒤: 남은 슬립 방향으로 완만히 계속 돈다
+    const inner = steerSign === st.driftDir ? 1 : 0;
+    const base = driftHeld ? 0.8 + 1.5 * inner * (0.6 + 0.4 * hold) : 0.35 + 0.6 * inner;
+    yawRate = st.driftDir * p.handling * base * (1 + 0.35 * Math.min(1, inp.brake));
   } else {
     yawRate = inp.steer * p.handling * (1.05 + 0.95 * hold) * grip * (1 - 0.3 * speedFrac);
   }
   if (st.slipT > 0) yawRate += Math.sin(time * 23 + st.slipT * 9) * 2.5; // 바나나: 비틀거림
   if (st.speed < 0) yawRate = -yawRate;
   const dYaw = yawRate * dt;
+  st.yaw -= dYaw;
+  // 진행 방향은 관성으로 남는다: 차체가 돈 만큼 슬립이 생긴다 (드리프트 중에만)
+  if (st.drifting) st.slip += dYaw;
 
+  // ---- 슬립 복원 (그립): 드리프트 중엔 느리게(쭈욱), 평소엔 빠르게
   if (st.drifting) {
-    // 진행 방향을 돌리고, 차체는 진행 방향 - 슬립
-    st.yaw = travelOld - dYaw - st.slip;
+    // 걸고 있으면 그립이 낮아 깊게, 떼면 서서히 복원(쭈욱), ↑ 를 떼면 조금 더 빨리 붙는다
+    const gripRate = (driftHeld ? 0.9 : 1.9) + (inp.throttle > 0 ? 0 : 0.8) + (st.counterT > 0 ? 6 : 0);
+    st.slip -= st.slip * Math.min(1, gripRate * dt);
+    st.slip = Math.max(-1.2, Math.min(1.2, st.slip));
     // 옆으로 미끄러지는 동안 측면 마찰이 속도를 깎는다 (슬립각의 사인에 비례, 45° 넘으면 급감)
     const side = Math.sin(Math.min(1.2, Math.abs(st.slip)));
     st.speed *= Math.max(0, 1 - (0.1 + 0.55 * side + 1.2 * Math.max(0, Math.abs(st.slip) - 0.75)) * dt);
@@ -472,7 +463,6 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       }
     }
   } else {
-    st.yaw -= dYaw;
     st.slip -= st.slip * Math.min(1, 9 * dt);
     if (Math.abs(st.slip) < 1e-3) st.slip = 0;
   }

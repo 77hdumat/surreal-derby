@@ -30,8 +30,8 @@ describe('stepKart', () => {
     expect(st.drifting).toBe(true);
     expect(st.slip).toBeGreaterThan(0.15);
     expect(st.gauge).toBeGreaterThan(0.1);
-    // 놓으면 슬립 복원
-    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    // 놓으면 쭈욱 미끄러지다 슬립 복원 (코스트 ~1초 남짓)
+    for (let i = 0; i < 120; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.drifting).toBe(false);
     expect(Math.abs(st.slip)).toBeLessThan(0.05);
   });

@@ -55,44 +55,26 @@
       </div>
 
       <!-- ===== MENU ===== -->
-      <div id="menu" class="panel">
-        <div class="panel-inner">
-          <header class="intro-header">
-            <div class="brand">
-              <span class="brand-badge">대결 모드</span>
-              <h1>초현실 경마 그랑프리</h1>
-              <div class="brand-sub">SURREAL DERBY · KART BATTLE · 3.3KM CIRCUIT · 2 LAPS</div>
-            </div>
-          </header>
-          <div class="menu-body">
-            <div class="intro-hero"><img src="/cover.webp" alt="" /></div>
-            <div class="menu-panel">
-              <label class="field"><span>닉네임</span><input id="nick" maxlength="12" placeholder="이름" /></label>
-              <button id="btn-solo" class="nintendo-btn">혼자 달리기 <small>CPU 3명</small></button>
-              <button id="btn-host" class="nintendo-btn alt">방 만들기 <small>친구와 대결</small></button>
-              <div class="join-row">
-                <input id="join-code" maxlength="5" placeholder="방 코드" autocapitalize="characters" autocomplete="off" />
-                <button id="btn-join" class="text-btn">참가</button>
-              </div>
-              <div id="menu-msg" class="msg"></div>
-              <ul class="hint-list">
-                <li><b>↑ ↓ ← →</b> 이동</li>
-                <li><b>Shift</b> 드리프트 — 게이지 충전, 부스터 최대 2개 저장</li>
-                <li><b>Space</b> 부스터 (3초) · 부스터 2칸을 채운 뒤 계속 드리프트하면 <b>파란 부스터</b>(4.5초·더 빠름)로 승급</li>
-                <li>드리프트 직후 <b>↑</b> = 순간부스터 (연속 가능)</li>
-                <li>GO 직전에 <b>↑</b> = 출발 부스터</li>
-                <li>부딪히면 모으던 게이지를 잃음 · 진흙 주의</li>
-                <li><b>X</b> 또는 <b>Ctrl</b> 아이템 사용 — 선물 상자(한 바퀴 5구간)를 지나면 랜덤 획득(2개까지 보관), 상자는 8초 뒤 리젠</li>
-                <li>물파리에 갇히면 <b>← →</b> 연타로 탈출 · 떨어지는 순간 <b>↑</b> 누르면 착지 부스터<br>1등이 들어오면 10초 카운트다운 — 못 들어오면 리타이어</li>
-                <li>2바퀴 먼저 도는 사람이 승리 (3.3km 서킷)</li>
-              </ul>
+      <!-- 시작 화면·대기실 공용 배경: 바람 부는 들판 -->
+      <canvas id="menu-bg"></canvas>
+      <div id="menu" class="panel menu-scene">
+        <div class="menu-center">
+          <label class="menu-nick"><span>닉네임</span><input id="nick" maxlength="12" placeholder="이름" /></label>
+          <button id="btn-solo" class="nintendo-btn">시작하기</button>
+          <button id="btn-multi" class="nintendo-btn alt">멀티로 하기</button>
+          <div id="multi-sub" class="multi-sub hidden">
+            <button id="btn-host" class="nintendo-btn alt small">방 만들기</button>
+            <div class="join-row">
+              <input id="join-code" maxlength="5" placeholder="방 코드" autocapitalize="characters" autocomplete="off" />
+              <button id="btn-join" class="text-btn">참가</button>
             </div>
           </div>
+          <div id="menu-msg" class="msg"></div>
         </div>
       </div>
 
       <!-- ===== LOBBY ===== -->
-      <div id="lobby" class="panel hidden">
+      <div id="lobby" class="panel meadow hidden">
         <div class="panel-inner">
           <header class="intro-header">
             <div class="brand">
