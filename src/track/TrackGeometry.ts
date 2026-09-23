@@ -105,7 +105,7 @@ interface Sample {
  * s = 중심선 진행 거리(출발선 앞 s=0), lat = 횡방향(+ = 진행 방향 오른쪽).
  */
 export class TrackGeometry {
-  readonly width = 24;
+  readonly width = 36;
   readonly laneCount = 8;
   readonly length: number;
   /** 출발선 = 결승선 (s=0). 출발 그리드는 선 바로 앞(s>0)이라 첫 통과가 실제 1바퀴 뒤 */

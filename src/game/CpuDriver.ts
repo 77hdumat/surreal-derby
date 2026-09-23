@@ -21,7 +21,7 @@ export function cpuProfile(seed: number): CpuProfile {
     return x - Math.floor(x);
   };
   return {
-    lanePref: (r(1) - 0.5) * 12,
+    lanePref: (r(1) - 0.5) * 18,
     skill: 0.9 + r(2) * 0.1,
     driftEager: 0.25 + r(3) * 0.3,
     driftHold: 0,

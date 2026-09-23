@@ -66,7 +66,7 @@ export function generateBoxes(track: TrackGeometry): ItemBox[] {
   for (let row = 0; row < 5; row++) {
     const s = ((row + 0.5) / 5) * track.length;
     for (let i = 0; i < 5; i++) {
-      const lat = -9 + i * 4.5;
+      const lat = -13.5 + i * 6.75;
       const p = track.getPoint(s, lat);
       out.push({ id: id++, s, lat, x: p.x, z: p.z, takenT: -1 });
     }
