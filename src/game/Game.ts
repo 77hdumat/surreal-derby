@@ -903,8 +903,13 @@ export class Game {
         break;
       case 'use':
         if (e.kind === 'missile') this.audio.play('whooshEpic', { pos, minGain: me ? 0.7 : 0.3, gain: 0.8, rate: 1.4 });
+        else if (e.kind === 'gas') {
+          this.audio.play('whooshEpic', { gain: 0.7, rate: 0.6 });
+          const my = this.race.karts[this.mySlot];
+          if (e.slot === this.mySlot) this.ui.showToast('🍄 환각 가스 살포!', 1400);
+          else if (my && my.confuseT > 0) this.ui.showToast('🍄 어지럽다… 조작 반대!', 1800);
+        }
         else if (e.kind === 'waterfly') this.audio.play('whoosh', { pos, minGain: me ? 0.6 : 0.2, gain: 0.6, rate: 1.8 });
-        else if (e.kind === 'gas') this.audio.play('whoosh', { pos, minGain: me ? 0.6 : 0.2, gain: 0.7, rate: 0.9 });
         else if (e.kind === 'boost') {
           this.racers.boostFx(e.slot);
           this.audio.jetBoost(me ? 1 : 0.35);
@@ -1182,8 +1187,10 @@ export class Game {
     // 아이템 사용 (내 말)
     if (this.input.itemPressed) {
       this.input.itemPressed = false;
+      const my = this.race.karts[this.mySlot];
       const ev = this.race.useItem(this.mySlot);
       if (ev) this.race.itemEvents.push(ev);
+      else if (my?.item) this.ui.showToast(my.item === 'waterfly' || my.item === 'magnet' ? '앞에 대상이 없다' : '지금은 쓸 수 없다', 900);
     }
     if (this.race.itemEvents.length) {
       for (const e of this.race.itemEvents) this.onItemEvent(e, true);

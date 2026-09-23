@@ -1,5 +1,5 @@
 import type { TrackGeometry } from '../track/TrackGeometry';
-import { BOOST_DURATION, type KartState } from './KartPhysics';
+import { BOOST_DURATION, MAX_BOOSTS, type KartState } from './KartPhysics';
 import { mulberry32 } from './Obstacles';
 
 export type ItemKind = 'missile' | 'waterfly' | 'banana' | 'boost' | 'shield' | 'magnet' | 'ufo' | 'gas';
@@ -12,7 +12,7 @@ export const ITEM_INFO: Record<ItemKind, { name: string; emoji: string; desc: st
   shield: { name: '실드', emoji: '🛡️', desc: '공격 1회 막음 (8초)' },
   magnet: { name: '자석', emoji: '🧲', desc: '바로 앞 등수 쪽으로 350km/h 로 끌려감 (조향 가능)' },
   ufo: { name: 'UFO', emoji: '🛸', desc: '1등을 붙잡아 멈춤' },
-  gas: { name: '환각 가스', emoji: '🍄', desc: '맞으면 3초간 조작이 반대로' },
+  gas: { name: '환각 가스', emoji: '🍄', desc: '나 빼고 전원 3초간 조작 반대' },
 };
 
 export interface ItemBox {
@@ -241,7 +241,6 @@ export class ItemSystem {
     const k = karts[slot];
     if (!k || !k.item || k.finished || k.bubbleT > 0 || k.stunT > 0) return null;
     const kind = k.item as ItemKind;
-    if (kind === 'boost' && k.boostT > 0) return null; // 부스트 중엔 못 쓴다 (아이템 유지)
     let target = -1;
     const myRank = ranking.indexOf(slot);
     /** 바로 앞 등수 (골인 안 한 사람) */
@@ -289,7 +288,14 @@ export class ItemSystem {
         this.projectiles.push({ id: ev.id, kind: 'waterfly', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2.5, z: ev.z - Math.sin(ev.yaw) * 2.5, y: 1.6, yaw: ev.yaw, speed: 85, age: 0, target: ev.target, done: false });
         break;
       case 'gas':
-        this.projectiles.push({ id: ev.id, kind: 'gas', owner: ev.slot, x: ev.x + Math.cos(ev.yaw) * 2, z: ev.z - Math.sin(ev.yaw) * 2, y: 1, yaw: ev.yaw, speed: 38, age: 0, target: -1, done: false });
+        // 사용자 빼고 전원에게 즉시 (내가 소유한 말에만 적용 — 각자 자기 말을 판정)
+        karts.forEach((o, i) => {
+          if (i === ev.slot || o.finished) return;
+          const isMine = owned ? owned[i] : i === this.mySlot;
+          if (!isMine) return;
+          if (o.shieldT > 0) o.shieldT = 0;
+          else o.confuseT = 3;
+        });
         break;
       case 'banana': {
         // 뒤에 3개: 가운데 + 좌우 3m
@@ -304,8 +310,12 @@ export class ItemSystem {
       }
       case 'boost':
         if (mine && k) {
-          k.boostT = Math.max(k.boostT, BOOST_DURATION);
-          k.speed = Math.max(k.speed, k.speed * 1.1);
+          // 이미 부스트 중이면 게이지 칸에 쌓아 둔다 (키가 먹통이 되지 않게)
+          if (k.boostT > 0.25) k.boosts = Math.min(MAX_BOOSTS, k.boosts + 1);
+          else {
+            k.boostT = Math.max(k.boostT, BOOST_DURATION);
+            k.speed = Math.max(k.speed, k.speed * 1.1);
+          }
         }
         break;
       case 'shield':
