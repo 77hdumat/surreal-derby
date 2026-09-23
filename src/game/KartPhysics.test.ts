@@ -114,7 +114,7 @@ describe('부스터 연타', () => {
 });
 
 describe('게이지 규칙', () => {
-  it('가득 차면 부스터 1개로 바뀌고 최대 2개까지', () => {
+  it('가득 차면 부스터 1개로 바뀌고, 2칸이 차면 파란 부스터로 승급', () => {
     const st = spawn();
     for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     st.gauge = 0.99;
@@ -122,11 +122,18 @@ describe('게이지 규칙', () => {
     for (let i = 0; i < 10; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
     expect(st.boosts).toBe(1);
     expect(st.gauge).toBeLessThan(0.2);
+    // 2칸이 다 차면 다음 충전부터는 파란 부스터로 승급
     st.boosts = 2;
+    st.blueBoosts = 0;
     st.gauge = 0.99;
     for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: -1, drift: true }), P, track, DT);
     expect(st.boosts).toBe(2);
-    expect(st.gauge).toBeCloseTo(0.99, 6); // 꽉 차면 더 안 찬다
+    expect(st.blueBoosts).toBe(1);
+    // 둘 다 파랑이면 더는 안 찬다
+    st.blueBoosts = 2;
+    st.gauge = 0.99;
+    for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    expect(st.gauge).toBeCloseTo(0.99, 6);
   });
   it('드리프트 중 벽에 부딪히면 이번 드리프트 게이지를 잃는다', () => {
     const st = spawn(10, 0);
@@ -200,5 +207,27 @@ describe('resolveKartCollision', () => {
     const a = createKartState(0, 0, 0);
     const b = createKartState(5, 0, 0);
     expect(resolveKartCollision(a, P, b, P)).toBe(false);
+  });
+});
+
+describe('파란 부스터', () => {
+  it('파란 부스터가 먼저 쓰이고 더 길고 빠르다', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    st.boosts = 2;
+    st.blueBoosts = 1;
+    stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT);
+    expect(st.boostBlue).toBe(true);
+    expect(st.blueBoosts).toBe(0);
+    expect(st.boostT).toBeGreaterThan(BOOST_DURATION);
+    for (let i = 0; i < 90; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    const blueTop = st.speed;
+    // 일반 부스터와 비교
+    const st2 = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st2, inp({ throttle: 1 }), P, track, DT);
+    st2.boosts = 1;
+    stepKart(st2, inp({ throttle: 1, boost: true }), P, track, DT);
+    for (let i = 0; i < 90; i++) stepKart(st2, inp({ throttle: 1 }), P, track, DT);
+    expect(blueTop).toBeGreaterThan(st2.speed * 1.1);
   });
 });

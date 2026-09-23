@@ -15,12 +15,12 @@ export class BoostFlame {
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
-      uniforms: { uTime: { value: 0 }, uIntensity: { value: 0 }, uSeed: { value: Math.random() * 10 } },
+      uniforms: { uTime: { value: 0 }, uIntensity: { value: 0 }, uSeed: { value: Math.random() * 10 }, uBlue: { value: 0 } },
       vertexShader: `
         varying vec2 vUv;
         void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
-        uniform float uTime; uniform float uIntensity; uniform float uSeed;
+        uniform float uTime; uniform float uIntensity; uniform float uSeed; uniform float uBlue;
         varying vec2 vUv;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed) * 43758.5453); }
         float noise(vec2 p){
@@ -44,6 +44,10 @@ export class BoostFlame {
           // 색: 뿌리 흰노랑 → 주황 → 꼬리 빨강
           vec3 col = mix(vec3(1.0, 0.95, 0.55), vec3(1.0, 0.45, 0.05), smoothstep(0.0, 0.45, t));
           col = mix(col, vec3(0.9, 0.1, 0.02), smoothstep(0.4, 1.0, t));
+          // 파란 부스터: 흰→하늘→파랑
+          vec3 blue = mix(vec3(0.85, 0.98, 1.0), vec3(0.15, 0.55, 1.0), smoothstep(0.0, 0.5, t));
+          blue = mix(blue, vec3(0.05, 0.2, 0.95), smoothstep(0.45, 1.0, t));
+          col = mix(col, blue, uBlue);
           gl_FragColor = vec4(col * (1.2 + 0.6 * n), a);
         }`,
     });
@@ -56,6 +60,11 @@ export class BoostFlame {
     a.frustumCulled = b.frustumCulled = false;
     this.group.add(a, b);
     this.group.visible = false;
+  }
+
+  /** 0 = 주황(일반), 1 = 파랑(강화) */
+  setBlue(v: number): void {
+    this.mat.uniforms.uBlue.value = v;
   }
 
   setIntensity(v: number): void {

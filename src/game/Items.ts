@@ -1,5 +1,5 @@
 import type { TrackGeometry } from '../track/TrackGeometry';
-import { BOOST_DURATION, MAX_BOOSTS, type KartState } from './KartPhysics';
+import { BLUE_BOOST_DURATION, MAX_BOOSTS, type KartState } from './KartPhysics';
 import { mulberry32 } from './Obstacles';
 
 export type ItemKind = 'missile' | 'waterfly' | 'banana' | 'mine' | 'boost' | 'shield' | 'magnet' | 'ufo' | 'gas';
@@ -9,7 +9,7 @@ export const ITEM_INFO: Record<ItemKind, { name: string; emoji: string; desc: st
   waterfly: { name: '물파리', emoji: '🪰', desc: '바로 앞 등수를 쫓아가 공중에 가둠 (좌우 연타로 탈출)' },
   banana: { name: '바나나', emoji: '🍌', desc: '뒤에 3개 떨어뜨림 — 밟으면 1초 미끄러짐' },
   mine: { name: '지뢰', emoji: '💣', desc: '뒤에 5개 설치 — 밟으면 공중으로 날아감' },
-  boost: { name: '부스터', emoji: '🔥', desc: '즉시 부스트 3초' },
+  boost: { name: '블루 부스터', emoji: '💙', desc: '즉시 파란 부스터 (더 길고 빠름)' },
   shield: { name: '실드', emoji: '🛡️', desc: '공격 1회 막음 (8초)' },
   magnet: { name: '자석', emoji: '🧲', desc: '앞 등수에게 350km/h 로 끌려갔다 튕겨 나가며 추월' },
   ufo: { name: 'UFO', emoji: '🛸', desc: '1등만 붙잡아 공중에 가둠' },
@@ -339,11 +339,14 @@ export class ItemSystem {
       }
       case 'boost':
         if (mine && k) {
-          // 이미 부스트 중이면 게이지 칸에 쌓아 둔다 (키가 먹통이 되지 않게)
-          if (k.boostT > 0.25) k.boosts = Math.min(MAX_BOOSTS, k.boosts + 1);
-          else {
-            k.boostT = Math.max(k.boostT, BOOST_DURATION);
-            k.speed = Math.max(k.speed, k.speed * 1.1);
+          // 이미 부스트 중이면 파란 부스터로 쌓아 둔다 (키가 먹통이 되지 않게)
+          if (k.boostT > 0.25) {
+            k.boosts = Math.min(MAX_BOOSTS, k.boosts + 1);
+            k.blueBoosts = Math.min(k.boosts, k.blueBoosts + 1);
+          } else {
+            k.boostBlue = true;
+            k.boostT = Math.max(k.boostT, BLUE_BOOST_DURATION);
+            k.speed = Math.max(k.speed, k.speed * 1.15);
           }
         }
         break;

@@ -44,6 +44,10 @@ export interface KartState {
   gauge: number;
   /** 모아 둔 부스터 개수 (최대 MAX_BOOSTS) */
   boosts: number;
+  /** 그중 파란 부스터(강화) 개수 — 먼저 쓰인다 */
+  blueBoosts: number;
+  /** 지금 터진 부스트가 파란 부스터인가 */
+  boostBlue: boolean;
   /** 직전 스텝의 부스트 키 상태 (누른 순간만 잡기 위해) */
   boostKeyWas: boolean;
   /** 이번 드리프트 시작 시점 게이지 — 부딪히면 여기로 되돌린다 */
@@ -106,6 +110,9 @@ export type KartEvent = { k: 'wall' } | { k: 'boost' } | { k: 'mini' } | { k: 'l
 export const LAPS = 2; // 서킷 3.3km × 2
 export const MAX_BOOSTS = 2;
 export const BOOST_DURATION = 3.0;
+/** 파란 부스터: 1.5배 길고 더 빠르다 */
+export const BLUE_BOOST_DURATION = BOOST_DURATION * 1.5;
+export const BLUE_BOOST_EXTRA = 1.22;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
 export const MINI_DURATION = 0.55;
 export const MINI_MUL = 1.18;
@@ -139,6 +146,8 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     drifting: false,
     gauge: 0,
     boosts: 0,
+    blueBoosts: 0,
+    boostBlue: false,
     boostKeyWas: false,
     gaugeAtDriftStart: 0,
     boostT: 0,
@@ -296,10 +305,14 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   st.boostKeyWas = inp.boost;
   if (!st.finished && inp.boost && st.boosts > 0 && st.boostT <= 0.25) {
     st.boosts--;
-    st.boostT = BOOST_DURATION + st.boostT; // 남은 시간은 이어 붙인다
-    st.speed = Math.max(st.speed, p.maxSpeed * 1.15); // 점화 순간 확 튀어나간다
+    const blue = st.blueBoosts > 0;
+    if (blue) st.blueBoosts--;
+    st.boostBlue = blue;
+    st.boostT = (blue ? BLUE_BOOST_DURATION : BOOST_DURATION) + st.boostT; // 남은 시간은 이어 붙인다
+    st.speed = Math.max(st.speed, p.maxSpeed * (blue ? 1.3 : 1.15)); // 점화 순간 확 튀어나간다
     events.push({ k: 'boost' });
   }
+  if (st.boostT <= 0) st.boostBlue = false;
   const boosting = st.boostT > 0;
   if (boosting) st.boostT = Math.max(0, st.boostT - dt);
   // ---- 순간부스터: 드리프트를 끝낸 직후(창 안에) ↑ 를 누르면 짧은 가속. 짧게 드리프트→↑ 를 반복하면 연속으로 (톡톡이)
@@ -316,8 +329,9 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   if (mini) st.miniT = Math.max(0, st.miniT - dt);
   const magnet = st.magnetT > 0;
   // 자석: 300~400km/h 로 대상에게 달라붙는다 (방향은 Items.step 이 대상 쪽으로 돌린다)
-  const maxCur = p.maxSpeed * (boosting ? p.boostMul : mini ? MINI_MUL : 1) * (st.slipT > 0 ? 0.6 : 1) * (magnet ? 2.6 : 1);
-  const accel = p.accel * (boosting ? 4.5 : magnet ? 12 : mini ? 2.6 : 1);
+  const boostMul = p.boostMul * (st.boostBlue ? BLUE_BOOST_EXTRA : 1);
+  const maxCur = p.maxSpeed * (boosting ? boostMul : mini ? MINI_MUL : 1) * (st.slipT > 0 ? 0.6 : 1) * (magnet ? 2.6 : 1);
+  const accel = p.accel * (boosting ? (st.boostBlue ? 5.5 : 4.5) : magnet ? 12 : mini ? 2.6 : 1);
 
   // ---- 종방향
   if (inp.throttle > 0) {
@@ -365,13 +379,16 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     const target = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) * MAX_SLIP * slideMul : st.slip * Math.max(0, 1 - dt);
     st.slip += (target - st.slip) * Math.min(1, (5 + 4 * easing) * dt);
     st.speed *= Math.max(0, 1 - (0.2 + 0.4 * deep + 0.25 * easing) * dt); // 깊을수록·↑ 뗄수록 속도 손실
-    if (st.boosts < MAX_BOOSTS) {
+    if (!(st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS)) {
       // 부스터 중 드리프트는 1.6배 (카트라이더의 부스터 드리프트 충전 보너스). 얕은 드리프트가 충전 효율이 좋다
       const bonus = (boosting ? 1.6 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep);
       st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * bonus * dt;
       if (st.gauge >= 1) {
-        st.boosts++;
-        st.gauge = st.boosts < MAX_BOOSTS ? st.gauge - 1 : 0;
+        // 칸이 비어 있으면 일반 부스터, 다 찼으면 한 칸씩 파란 부스터로 승격
+        if (st.boosts < MAX_BOOSTS) st.boosts++;
+        else if (st.blueBoosts < st.boosts) st.blueBoosts++;
+        const full = st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS;
+        st.gauge = full ? 0 : st.gauge - 1;
         st.gaugeAtDriftStart = 0; // 이미 확보한 부스터는 부딪혀도 안 잃는다
       }
     }

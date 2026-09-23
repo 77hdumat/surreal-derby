@@ -235,6 +235,7 @@ export class RacerManager {
       if (flame) {
         const want = k.finished ? 0 : k.boostT > 0 ? 1 : k.miniT > 0 ? 0.55 : 0;
         flame.setIntensity(THREE.MathUtils.lerp(flame.value, want, Math.min(1, dt * (want > flame.value ? 12 : 5))));
+        flame.setBlue(k.boostBlue && k.boostT > 0 ? 1 : 0);
         flame.update(time + i * 1.7);
       }
       ctx.bump = k.bumpT;

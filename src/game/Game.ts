@@ -821,7 +821,7 @@ export class Game {
       case 'boost':
         this.racers.boostFx(slot);
         this.playBoostSound(slot, pos, me);
-        this.audio.jetBoost(me ? 1 : 0.35);
+        this.audio.jetBoost((me ? 1 : 0.35) * 1.25);
         if (me) {
           this.camera.shake(0.35);
           this.effects.flashScreen(0.3);
@@ -921,7 +921,7 @@ export class Game {
         else if (e.kind === 'waterfly') this.audio.play('whoosh', { pos, minGain: me ? 0.6 : 0.2, gain: 0.6, rate: 1.8 });
         else if (e.kind === 'boost') {
           this.racers.boostFx(e.slot);
-          this.audio.jetBoost(me ? 1 : 0.35);
+          this.audio.jetBoost((me ? 1 : 0.35) * 1.25);
         } else if (e.kind === 'shield') this.audio.play('bell', { pos, minGain: me ? 0.5 : 0.2, gain: 0.5, rate: 1.6 });
         else if (e.kind === 'ufo') {
           this.audio.play('engineRev2', { gain: 0.6, rate: 0.7 });
@@ -1337,7 +1337,9 @@ export class Game {
       speed: myKart.speed,
       gauge: myKart.gauge,
       boosts: myKart.boosts,
+      blueBoosts: myKart.blueBoosts,
       boosting: myKart.boostT > 0,
+      boostBlue: myKart.boostBlue,
       item: myKart.item ? `${ITEM_INFO[myKart.item as ItemKind].emoji} ${ITEM_INFO[myKart.item as ItemKind].name}` : '',
       item2: myKart.item2 ? ITEM_INFO[myKart.item2 as ItemKind].emoji : '',
       time: this.race.time,

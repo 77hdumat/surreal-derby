@@ -22,7 +22,11 @@ export interface HudState {
   speed: number;
   gauge: number;
   boosts: number;
+  /** 그중 파란 부스터 수 */
+  blueBoosts: number;
   boosting: boolean;
+  /** 지금 터진 부스트가 파란색인가 */
+  boostBlue: boolean;
   /** 들고 있는 아이템 표시 문자열 ('' = 없음) */
   item: string;
   /** 두 번째 칸 (이모지) */
@@ -485,9 +489,14 @@ export class UIManager {
       slot2.textContent = h.item2 || '·';
       slot2.classList.toggle('has', !!h.item2);
     }
-    $('pip-0').classList.toggle('on', h.boosts >= 1);
-    $('pip-1').classList.toggle('on', h.boosts >= 2);
-    $('gauge-label').textContent = h.boosting ? 'BOOST!!' : h.boosts >= 2 ? 'MAX · SPACE → BOOST' : h.boosts >= 1 ? 'SPACE → BOOST' : 'DRIFT → 게이지';
+    for (let i = 0; i < 2; i++) {
+      const pip = $(`pip-${i}`);
+      pip.classList.toggle('on', h.boosts >= i + 1);
+      // 파란 부스터는 먼저 쓰이므로 왼쪽부터 파랗게
+      pip.classList.toggle('blue', h.blueBoosts >= i + 1);
+    }
+    g.classList.toggle('blue', h.boostBlue);
+    $('gauge-label').textContent = h.boosting ? (h.boostBlue ? 'BLUE BOOST!!!' : 'BOOST!!') : h.blueBoosts > 0 ? 'SPACE → BLUE BOOST' : h.boosts >= 2 ? 'MAX · 계속 드리프트 → 블루' : h.boosts >= 1 ? 'SPACE → BOOST' : 'DRIFT → 게이지';
     const key = h.order.map((o) => o.name + (o.finished ? '!' : '')).join('|');
     if (key !== this.lastRankKey) {
       this.lastRankKey = key;
