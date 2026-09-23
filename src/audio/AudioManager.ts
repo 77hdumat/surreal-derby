@@ -38,10 +38,19 @@ const SFX = {
   airhorn: 'airhorn.mp3',
   fanfare: 'fanfare.mp3',
   tada: 'tada.mp3',
+  cowMoo: 'cow-moo.mp3',
+  motorRun: 'motor-run.mp3',
+  elephantStep: 'elephant-step.mp3',
+  woodCreak: 'wood-creak.mp3',
+  tribalDrums: 'tribal-drums.mp3',
+  circusTadaa: 'circus-tadaa.mp3',
+  snowStep: 'snow-step.mp3',
+  humanAhh: 'human-ahh.mp3',
 } as const;
 
 export type SfxName = keyof typeof SFX;
-type LoopKind = 'gallop' | 'grass' | 'engine';
+/** gallop 말발굽 · grass 잔디 달리기 · engine 엔진 · motor 모터 스탤리온 주행음 · wood 트로이 목마 나무 삐걱임 */
+type LoopKind = 'gallop' | 'grass' | 'engine' | 'motor' | 'wood';
 
 interface LoopNode {
   src: AudioBufferSourceNode;
@@ -138,20 +147,22 @@ export class AudioManager {
   }
 
   /**
-   * 부스트 발동: 전투기 애프터버너 느낌의 합성음.
-   * 노이즈 스위프(600→3200Hz, 0.35s) + 톱니파 저음 상승(70→160Hz) + 짧은 하이 '킥'. 3초에 걸쳐 감쇠.
+   * 부스트 발동: 전투기 애프터버너 느낌의 합성음 — 부스트가 끝날 때까지 "부우웅~" 이 이어진다.
+   * 노이즈 스위프(600→3200Hz) + 톱니파 저음 상승(70→160Hz) + 점화 '킥'. duration 동안 유지 후 짧게 사그라듦.
    */
-  jetBoost(strength = 1): void {
+  jetBoost(strength = 1, duration = 3): void {
     if (!this.ctx || this._muted) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
+    const end = t + Math.max(0.5, duration);
     const out = ctx.createGain();
     out.gain.value = 0.0001;
     out.gain.exponentialRampToValueAtTime(0.9 * strength, t + 0.06);
-    out.gain.exponentialRampToValueAtTime(0.35 * strength, t + 0.9);
-    out.gain.exponentialRampToValueAtTime(0.0001, t + 3.0);
+    out.gain.exponentialRampToValueAtTime(0.45 * strength, t + 0.9);
+    out.gain.setValueAtTime(0.45 * strength, end - 0.05);
+    out.gain.exponentialRampToValueAtTime(0.0001, end + 0.35);
     out.connect(this.sfx);
-    // 1) 노이즈 스위프 (제트 분사)
+    // 1) 노이즈 (제트 분사): 점화 때 확 열렸다가 유지
     const n = ctx.createBufferSource();
     n.buffer = this.noise();
     n.loop = true;
@@ -160,30 +171,43 @@ export class AudioManager {
     bp.Q.value = 1.2;
     bp.frequency.setValueAtTime(600, t);
     bp.frequency.exponentialRampToValueAtTime(3200, t + 0.35);
-    bp.frequency.exponentialRampToValueAtTime(900, t + 3.0);
+    bp.frequency.exponentialRampToValueAtTime(1300, t + 1.2);
+    bp.frequency.setValueAtTime(1300, end - 0.05);
+    bp.frequency.exponentialRampToValueAtTime(500, end + 0.35);
     const ng = ctx.createGain();
     ng.gain.value = 0.8;
     n.connect(bp);
     bp.connect(ng);
     ng.connect(out);
     n.start(t);
-    n.stop(t + 3.1);
-    // 2) 저음 톱니파 (터빈 회전 상승)
+    n.stop(end + 0.4);
+    // 2) 저음 톱니파 (터빈 회전): 올라갔다가 부스트 동안 "부우웅" 유지, 끝에서 내려감
     const o = ctx.createOscillator();
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(70, t);
     o.frequency.exponentialRampToValueAtTime(160, t + 0.5);
-    o.frequency.exponentialRampToValueAtTime(90, t + 3.0);
+    o.frequency.exponentialRampToValueAtTime(120, t + 1.2);
+    o.frequency.setValueAtTime(120, end - 0.05);
+    o.frequency.exponentialRampToValueAtTime(60, end + 0.35);
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.value = 500;
     const og = ctx.createGain();
-    og.gain.value = 0.35;
+    og.gain.value = 0.4;
+    // 살짝 떨리는 회전감 (6Hz 비브라토)
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 6;
+    const lg = ctx.createGain();
+    lg.gain.value = 4;
+    lfo.connect(lg);
+    lg.connect(o.frequency);
     o.connect(lp);
     lp.connect(og);
     og.connect(out);
     o.start(t);
-    o.stop(t + 3.1);
+    lfo.start(t);
+    o.stop(end + 0.4);
+    lfo.stop(end + 0.4);
     // 3) 킥 (점화 순간)
     const k = ctx.createOscillator();
     k.type = 'sine';
@@ -196,6 +220,67 @@ export class AudioManager {
     kg.connect(out);
     k.start(t);
     k.stop(t + 0.35);
+  }
+
+  /**
+   * 부스트 종료 알림: 터빈이 식는 '슈우웅↓' (톱니파 하강 + 노이즈 필터 닫힘) 뒤에 짧은 '톡' 두 번.
+   * 부스트가 끝났다는 걸 화면을 안 봐도 알 수 있게.
+   */
+  boostEnd(): void {
+    if (!this.ctx || this._muted) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.value = 0.7;
+    out.connect(this.sfx);
+    // 1) 터빈 파워다운
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(190, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.45);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1400, t);
+    lp.frequency.exponentialRampToValueAtTime(200, t + 0.45);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.5, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    o.connect(lp);
+    lp.connect(og);
+    og.connect(out);
+    o.start(t);
+    o.stop(t + 0.52);
+    // 2) 분사 꺼짐 (노이즈, 필터가 닫히며 사그라듦)
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise();
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 0.9;
+    bp.frequency.setValueAtTime(2600, t);
+    bp.frequency.exponentialRampToValueAtTime(300, t + 0.35);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.45, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+    n.connect(bp);
+    bp.connect(ng);
+    ng.connect(out);
+    n.start(t);
+    n.stop(t + 0.4);
+    // 3) 톡-톡 (내림 두 음) — 끝났다는 확실한 신호
+    [[660, 0.12], [440, 0.24]].forEach(([f, dt]) => {
+      const s = t + dt;
+      const b = ctx.createOscillator();
+      b.type = 'triangle';
+      b.frequency.setValueAtTime(f, s);
+      const bg = ctx.createGain();
+      bg.gain.setValueAtTime(0.0001, s);
+      bg.gain.exponentialRampToValueAtTime(0.35, s + 0.01);
+      bg.gain.exponentialRampToValueAtTime(0.0001, s + 0.11);
+      b.connect(bg);
+      bg.connect(out);
+      b.start(s);
+      b.stop(s + 0.12);
+    });
   }
 
   private async loadAll(): Promise<void> {
@@ -335,7 +420,7 @@ export class AudioManager {
       this.racerLoops.delete(id);
     }
     if (!this.ctx) return null;
-    const name: SfxName = kind === 'engine' ? 'engineLoop' : kind === 'grass' ? 'runGrass' : 'gallop';
+    const name: SfxName = kind === 'engine' ? 'engineLoop' : kind === 'grass' ? 'runGrass' : kind === 'motor' ? 'motorRun' : kind === 'wood' ? 'woodCreak' : 'gallop';
     const src = this.makeLoop(name, 1);
     if (!src) return null;
     const gain = this.ctx.createGain();
@@ -370,6 +455,14 @@ export class AudioManager {
         rate = 0.6 + Math.random() * 0.15;
         vol *= Math.random() < 0.5 ? 1 : 0.15;
       }
+    } else if (kind === 'motor') {
+      // 달리는 속도만큼 모터 회전이 오른다
+      rate = 0.8 + speedNorm * 0.45;
+      vol = active ? dist * THREE.MathUtils.clamp(0.25 + speedNorm, 0, 1) * 0.6 : 0;
+    } else if (kind === 'wood') {
+      // 거대한 나무 목마가 굴러가며 삐걱이는 소리
+      rate = 0.85 + speedNorm * 0.3;
+      vol = active ? dist * THREE.MathUtils.clamp(speedNorm * 1.4, 0, 1) * 0.75 : 0;
     } else {
       const heavy = opts.heavy ?? 1;
       rate = (0.75 + speedNorm * 0.5) / Math.sqrt(heavy);
@@ -379,7 +472,47 @@ export class AudioManager {
     node.src.playbackRate.setTargetAtTime(rate, t, 0.1);
   }
 
+  private boostLoops = new Map<string, { src: AudioBufferSourceNode; gain: GainNode }>();
+
+  /** 부스트를 쓰는 동안만 울리는 루프 (얼룩말 부족 북). 부스트가 시작되면 처음부터, 끝나면 짧게 페이드아웃 */
+  updateBoostLoop(id: string, name: SfxName, pos: THREE.Vector3, on: boolean, own: boolean): void {
+    if (!this.ctx) return;
+    let n = this.boostLoops.get(id);
+    if (on && !n) {
+      const src = this.makeLoop(name, 1);
+      if (!src) return;
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(gain);
+      gain.connect(this.sfx);
+      src.start();
+      n = { src, gain };
+      this.boostLoops.set(id, n);
+    }
+    if (!n) return;
+    const t = this.ctx.currentTime;
+    if (on) {
+      n.gain.gain.setTargetAtTime((own ? 1 : this.distGain(pos)) * 0.8, t, 0.05);
+    } else {
+      this.stopBoostLoop(id);
+    }
+  }
+
+  private stopBoostLoop(id: string): void {
+    const n = this.boostLoops.get(id);
+    if (!n || !this.ctx) return;
+    this.boostLoops.delete(id);
+    const t = this.ctx.currentTime;
+    n.gain.gain.setTargetAtTime(0, t, 0.08);
+    try {
+      n.src.stop(t + 0.4);
+    } catch {
+      /* ignore */
+    }
+  }
+
   stopRacerLoops(): void {
+    for (const id of [...this.boostLoops.keys()]) this.stopBoostLoop(id);
     for (const [id, n] of this.racerLoops) {
       try {
         n.src.stop();

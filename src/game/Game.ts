@@ -69,6 +69,11 @@ export class Game {
   private raceStarting = false;
   private finishTimer = 0;
   private excitement = 0.3;
+  /** 부스트 종료 알림용: 직전 프레임 남은 부스트와 이번 부스트의 총 길이 */
+  private prevBoostT = 0;
+  /** 발자국 소리 박자 (선수별 0..1) */
+  private stepPhase: number[] = [];
+  private boostTotal = 1;
   private highQuality = false;
   private sun: THREE.DirectionalLight;
   private footprints: Footprints;
@@ -862,7 +867,8 @@ export class Game {
       case 'boost':
         this.racers.boostFx(slot);
         this.playBoostSound(slot, pos, me);
-        this.audio.jetBoost((me ? 1 : 0.35) * 1.25);
+        // 부우웅~ 은 이번 부스트가 끝날 때까지
+        this.audio.jetBoost((me ? 1 : 0.35) * 1.25, this.race.karts[slot]?.boostT || 3);
         if (me) {
           this.camera.shake(0.35);
           this.effects.flashScreen(0.3);
@@ -962,7 +968,7 @@ export class Game {
         else if (e.kind === 'waterfly') this.audio.play('whoosh', { pos, minGain: me ? 0.6 : 0.2, gain: 0.6, rate: 1.8 });
         else if (e.kind === 'boost') {
           this.racers.boostFx(e.slot);
-          this.audio.jetBoost((me ? 1 : 0.35) * 1.25);
+          this.audio.jetBoost((me ? 1 : 0.35) * 1.25, this.race.karts[e.slot]?.boostT || 3);
         } else if (e.kind === 'shield') this.audio.play('bell', { pos, minGain: me ? 0.5 : 0.2, gain: 0.5, rate: 1.6 });
         else if (e.kind === 'ufo') {
           this.audio.play('engineRev2', { gain: 0.6, rate: 0.7 });
@@ -1016,7 +1022,7 @@ export class Game {
         a.crowdRoar(0.4);
         break;
       case 'COW': // 분노
-        a.play(Math.random() < 0.5 ? 'cow' : 'cow2', { pos, minGain: near, gain: 1.1 * g });
+        a.play('cowMoo', { pos, minGain: near, gain: 1.1 * g });
         a.crowdRoar(0.5);
         break;
       case 'COSTUME': // 탈 벗어 들고 질주
@@ -1026,11 +1032,11 @@ export class Game {
         break;
       case 'HUMAN': // 이족보행
         a.play('whoosh', { pos, minGain: near * 0.6, gain: 0.8 * g });
-        a.play('scream', { pos, minGain: near * 0.4, gain: 0.5 * g, rate: 1.2 });
+        a.play('humanAhh', { pos, minGain: near, gain: 1.0 * g });
         a.crowdRoar(0.5);
         break;
       case 'CIRCUS': // 서커스
-        a.play('tada', { pos, minGain: near, gain: 0.9 * g });
+        a.play('circusTadaa', { pos, minGain: near, gain: 0.9 * g });
         a.play('whooshEpic', { pos, minGain: near * 0.5, gain: 0.6 * g });
         a.crowdRoar(0.8);
         break;
@@ -1329,6 +1335,10 @@ export class Game {
     }
 
     const boost = myKart.boostT > 0 ? 1 : myKart.miniT > 0 ? 0.45 : 0;
+    // 부스트 종료 넛지: 새 부스트가 붙으면 총 길이 갱신, 끝나는 순간 파워다운 소리 (바로 이어 쓰면 생략)
+    if (myKart.boostT > this.prevBoostT + 0.05) this.boostTotal = myKart.boostT;
+    if (this.prevBoostT > 0 && myKart.boostT <= 0 && !myKart.finished) this.audio.boostEnd();
+    this.prevBoostT = myKart.boostT;
     this.audio.setBoostRush(boost);
     this.racers.update(this.race.karts, this.race.params, dt, this.race.time, this.camera.camera.position);
     this.particles.update(dt);
@@ -1356,15 +1366,31 @@ export class Game {
       const speedNorm = THREE.MathUtils.clamp(Math.abs(k.speed) / p.maxSpeed, 0, 1.2);
       const active = Math.abs(k.speed) > 1.5;
       const own = i === this.mySlot;
-      if (def.specialAbility === 'MOTORCYCLE') {
-        this.audio.updateRacerLoop(String(i), 'engine', pos, speedNorm, { rpm: k.boostT > 0 ? 1 : THREE.MathUtils.clamp(speedNorm, 0.15, 0.7), active: true, own });
-      } else if (def.specialAbility === 'HUMAN' || def.specialAbility === 'COSTUME') {
-        this.audio.updateRacerLoop(String(i), 'grass', pos, speedNorm, { active, own });
+      const ab = def.specialAbility;
+      if (ab === 'MOTORCYCLE') {
+        // 달릴 땐 모터 주행음 (부스트 때 시동 소리는 playBoostSound 에서 그대로)
+        this.audio.updateRacerLoop(String(i), 'motor', pos, speedNorm, { active, own });
+      } else if (ab === 'TROJAN') {
+        // 평소엔 무거운 말발굽(병사 발소리 느낌), 나무 바퀴 삐걱임은 부스트 동안만 (아래)
+        this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy: 1.4, active, own });
+      } else if (ab === 'ELEPHANT' || ab === 'HUMAN' || ab === 'COSTUME') {
+        // 발자국마다 한 번씩: 코끼리는 쿵, 사람(말탈 브라더스·휴먼 러너)은 눈 밟는 소리
+        const elephant = ab === 'ELEPHANT';
+        const hz = active ? Math.min(elephant ? 3.2 : 7, Math.abs(k.speed) / (elephant ? 4.5 : 2.2)) : 0;
+        const ph = (this.stepPhase[i] ?? Math.random()) + hz * dt;
+        if (ph >= 1) {
+          this.audio.play(elephant ? 'elephantStep' : 'snowStep', { pos, minGain: own ? (elephant ? 0.8 : 0.6) : 0, gain: elephant ? 0.9 : 0.7, rate: 0.93 + Math.random() * 0.14 });
+        }
+        this.stepPhase[i] = ph % 1;
+        this.audio.updateRacerLoop(String(i), 'gallop', pos, 0, { active: false, own });
       } else {
-        // 트로이 목마는 바퀴 굴러가는 소리 대신 무거운 말발굽(병사 발소리 느낌)
-        const heavy = def.specialAbility === 'ELEPHANT' ? 1.7 : def.specialAbility === 'GIRAFFE' ? 1.2 : def.specialAbility === 'TROJAN' ? 1.4 : 1;
+        const heavy = ab === 'GIRAFFE' ? 1.2 : 1;
         this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy, active, own });
       }
+      // 얼룩말: 부스트 쓰는 동안만 부족 북소리
+      if (ab === 'CLASSIC') this.audio.updateBoostLoop(String(i), 'tribalDrums', pos, k.boostT > 0 && !k.finished, own);
+      // 트로이 목마: 부스트 동안만 나무 바퀴 굴러가는 소리
+      if (ab === 'TROJAN') this.audio.updateBoostLoop(String(i), 'woodCreak', pos, k.boostT > 0 && !k.finished, own);
     }
 
     // HUD
@@ -1402,6 +1428,8 @@ export class Game {
       blueBoosts: myKart.blueBoosts,
       boosting: myKart.boostT > 0,
       boostBlue: myKart.boostBlue,
+      boostLeft: myKart.boostT,
+      boostFrac: myKart.boostT / Math.max(0.01, this.boostTotal),
       item: myKart.item ? `${ITEM_INFO[myKart.item as ItemKind].emoji} ${ITEM_INFO[myKart.item as ItemKind].name}` : '',
       item2: myKart.item2 ? ITEM_INFO[myKart.item2 as ItemKind].emoji : '',
       time: this.race.time,

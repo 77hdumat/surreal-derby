@@ -259,6 +259,13 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 .gauge.boosting #gauge-fill { background: linear-gradient(90deg, #ff3b3b, #ff9a3b); }
 @keyframes gaugePulse { from { filter: brightness(0.9); } to { filter: brightness(1.35); } }
 .gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; letter-spacing: 3px; font-weight: 900; color: #fff; -webkit-text-stroke: 0.5px #000; }
+/* 부스트 남은 시간: 게이지 위 두꺼운 바가 줄어든다. 마지막 0.6초는 깜빡임, 끝나면 사라짐 */
+.boost-timer { width: 100%; height: 12px; border: 2px solid #fff; border-radius: 999px; background: rgba(0,0,0,0.55); box-shadow: 0 0 0 2px #000; overflow: hidden; opacity: 0; transform: scaleY(0.4); transition: opacity 0.15s, transform 0.15s; }
+.boost-timer.on { opacity: 1; transform: none; }
+#boost-timer-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff3b3b, #ffb13b, #fff27a); box-shadow: 0 0 12px rgba(255,140,40,0.9); }
+.boost-timer.blue #boost-timer-fill { background: linear-gradient(90deg, #1a8cff, #2ad7ff, #bff8ff); box-shadow: 0 0 12px rgba(42,215,255,0.9); }
+.boost-timer.ending #boost-timer-fill { animation: boostEnding 0.12s steps(2) infinite; }
+@keyframes boostEnding { from { opacity: 1; } to { opacity: 0.25; } }
 .keys-hint { position: absolute; left: 22px; bottom: 66px; font-size: 11px; color: #cde; letter-spacing: 1px; background: rgba(0,0,0,0.45); padding: 3px 8px; border-radius: 4px; }
 #hud-toast { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); font-size: 46px; font-weight: 900; color: var(--yellow); -webkit-text-stroke: 2px #000; text-shadow: 5px 5px 0 #000; animation: subMajor 0.35s ease-out; white-space: nowrap; }
 #net-info { position: absolute; top: 60px; left: 22px; font-size: 11px; color: #9ab; font-family: 'Courier New', monospace; }

@@ -30,6 +30,9 @@ export interface HudState {
   boosting: boolean;
   /** 지금 터진 부스트가 파란색인가 */
   boostBlue: boolean;
+  /** 이번 부스트의 남은 시간(초)과 비율 (0 이면 부스트 아님) */
+  boostLeft: number;
+  boostFrac: number;
   /** 들고 있는 아이템 표시 문자열 ('' = 없음) */
   item: string;
   /** 두 번째 칸 (이모지) */
@@ -550,7 +553,12 @@ export class UIManager {
       pip.classList.toggle('blue', h.blueBoosts >= i + 1);
     }
     g.classList.toggle('blue', h.boostBlue);
-    $('gauge-label').textContent = h.boosting ? (h.boostBlue ? 'BLUE BOOST!!!' : 'BOOST!!') : h.blueBoosts > 0 ? 'SPACE → BLUE BOOST' : h.boosts >= 2 ? 'MAX · 계속 드리프트 → 블루' : h.boosts >= 1 ? 'SPACE → BOOST' : 'DRIFT → 게이지';
+    const bt = $('boost-timer');
+    bt.classList.toggle('on', h.boosting);
+    bt.classList.toggle('blue', h.boostBlue);
+    bt.classList.toggle('ending', h.boosting && h.boostLeft < 0.6);
+    ($('boost-timer-fill') as HTMLElement).style.width = `${Math.round(Math.max(0, Math.min(1, h.boostFrac)) * 100)}%`;
+    $('gauge-label').textContent = h.boosting ? `${h.boostBlue ? 'BLUE BOOST' : 'BOOST'} ${h.boostLeft.toFixed(1)}s` : h.blueBoosts > 0 ? 'SPACE → BLUE BOOST' : h.boosts >= 2 ? 'MAX · 계속 드리프트 → 블루' : h.boosts >= 1 ? 'SPACE → BOOST' : 'DRIFT → 게이지';
     const key = h.order.map((o) => o.name + (o.finished ? '!' : '')).join('|');
     if (key !== this.lastRankKey) {
       this.lastRankKey = key;
