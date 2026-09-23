@@ -28,7 +28,7 @@
         <div id="net-info"></div>
         <div id="rear-pip" class="hidden"><span class="pip-label">REAR</span><span class="pip-gap" id="pip-gap"></span></div>
         <div class="gauge-wrap">
-          <div class="item-box"><span class="item-label">ITEM · X</span><span id="item-slot" class="item-slot">—</span><span id="item-slot2" class="item-slot2">·</span></div>
+          <div class="item-box" id="item-box"><span class="item-label">ITEM · X</span><span id="item-slot" class="item-slot">—</span><span id="item-slot2" class="item-slot2">·</span></div>
           <div class="speed"><span id="hud-speed">0</span><span class="unit">km/h</span></div>
           <div class="boost-slots"><span class="pip" id="pip-0"></span><span class="pip" id="pip-1"></span></div>
           <div class="gauge"><div id="gauge-fill"></div><div class="gauge-label" id="gauge-label">DRIFT → 게이지</div></div>
@@ -37,7 +37,7 @@
           <button id="btn-quality" class="quality" title="렌더링 품질">HD</button>
           <button id="btn-mute" title="소리">🔊</button>
         </div>
-        <div class="keys-hint">↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트 · X/Ctrl 아이템 · 드리프트 직후 ↑ 순간부스터 · GO 직전 ↑ 출발부스터</div>
+        <div class="keys-hint" id="keys-hint">↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트 · X 아이템 · 드리프트 직후 ↑ 순간부스터 · GO 직전 ↑ 출발부스터</div>
         <div id="touch" class="hidden">
           <div class="touch-left">
             <button data-key="left">◀</button>
@@ -113,6 +113,11 @@
               <ol id="slot-list"></ol>
             </div>
             <div class="picker">
+              <div class="section-title">경기 방식</div>
+              <div id="mode-list" class="mode-list">
+                <button data-mode="item" class="mode-btn active"><b>🎁 아이템전</b><span>선물 상자로 미사일·물파리·지뢰…</span></button>
+                <button data-mode="speed" class="mode-btn"><b>⚡ 스피드전</b><span>아이템 없이 드리프트·부스터 실력만</span></button>
+              </div>
               <div class="section-title">말 선택</div>
               <ol id="mount-list"></ol>
               <div class="section-title">기수 선택</div>

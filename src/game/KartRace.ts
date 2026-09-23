@@ -29,6 +29,9 @@ export interface SlotConfig {
 
 export type RacePhaseK = 'IDLE' | 'COUNTDOWN' | 'RACING' | 'OVER';
 
+/** 경기 방식: 스피드전(아이템 없음) / 아이템전 */
+export type RaceMode = 'speed' | 'item';
+
 export type RaceEventK = (KartEvent | { k: 'bump'; other: number }) & { slot: number };
 
 export interface RaceResult {
@@ -61,6 +64,8 @@ export class KartRace {
   authority = true;
   obstacles: Obstacle[] = [];
   seed = 0;
+  /** 스피드전이면 아이템 상자·투사체가 없다 */
+  raceMode: RaceMode = 'item';
   /** 아이템전 (상자·투사체). mySlot 은 setup 에서 */
   items: ItemSystem;
   /** 이번 step 의 아이템 이벤트 (호출자가 비우고 남에게 보낸다) */
@@ -89,12 +94,14 @@ export class KartRace {
   }
 
   /** 출발선(=결승선) 바로 앞에 4명 나란히 (앞뒤 차이 없음) */
-  setup(slots: SlotConfig[], owned?: (slot: SlotConfig) => boolean, seed = 1): void {
+  setup(slots: SlotConfig[], owned?: (slot: SlotConfig) => boolean, seed = 1, raceMode: RaceMode = 'item'): void {
     this.slots = slots.slice(0, MAX_SLOTS).map((s, i) => ({ ...s, slot: i, lobby: s.lobby ?? i }));
     this.seed = seed;
     this.obstacles = generateObstacles(seed, this.track);
+    this.raceMode = raceMode;
     const mySlot = this.slots.findIndex((s) => (owned ? owned(s) : true) && !s.cpu);
     this.items.setup(seed, Math.max(0, mySlot));
+    if (raceMode === 'speed') this.items.boxes = [];
     this.itemEvents = [];
     this.firstFinishSeen = null;
     this.owned = this.slots.map((s) => (owned ? owned(s) : true));
@@ -190,7 +197,7 @@ export class KartRace {
     }
     this.computeRanking();
     // 아이템: 상자·투사체·피격 (소유 말만 판정)
-    this.items.step(dt, this.time, this.karts, this.owned, this.ranking);
+    if (this.raceMode === 'item') this.items.step(dt, this.time, this.karts, this.owned, this.ranking);
     if (this.items.events.length) {
       this.itemEvents.push(...this.items.events);
       this.items.events = [];
@@ -222,7 +229,7 @@ export class KartRace {
 
   /** 내 말이 아이템 사용 (이벤트를 돌려주면 남에게 보낸다) */
   useItem(slot: number): ItemEvent | null {
-    if (this.phase !== 'RACING') return null;
+    if (this.phase !== 'RACING' || this.raceMode !== 'item') return null;
     return this.items.use(slot, this.karts, this.ranking);
   }
 

@@ -175,6 +175,13 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 #slot-list li .kick { border: none; background: transparent; color: #aeaeb2; cursor: pointer; font-size: 14px; }
 #slot-list li .kick:hover { color: #e60012; }
 .picker { flex: 1; min-width: 0; }
+.mode-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
+.mode-btn { font-family: var(--font); text-align: left; background: #f5f5f7; border: 2px solid transparent; border-radius: 14px; padding: 10px 14px; cursor: pointer; transition: border-color 0.12s, background 0.12s, transform 0.12s; }
+.mode-btn:hover { background: #ececf0; transform: translateY(-1px); }
+.mode-btn.active { border-color: #e60012; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+.mode-btn b { display: block; font-size: 16px; color: #1d1d1f; }
+.mode-btn span { font-size: 11px; color: #8a8a8e; }
+.mode-list.readonly { opacity: 0.6; pointer-events: none; }
 #mount-list, #jockey-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; }
 #mount-list { grid-template-columns: repeat(3, 1fr); }
 #jockey-list { grid-template-columns: repeat(3, 1fr); }

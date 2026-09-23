@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { makeGrassField, makeTree, applyCloudShadow } from './Vegetation';
 import { grassMaterial } from './Environment';
-import { loadTreePrototypes, cloneTree, loadMountains, loadGrandstand, makeLake } from './SceneAssets';
-import { Dancers } from './Dancers';
+import { loadTreePrototypes, cloneTree, loadMountains, makeLake } from './SceneAssets';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
 import { TrackGeometry, type TrackFrame } from './TrackGeometry';
@@ -18,18 +17,11 @@ export class RaceTrack extends TrackGeometry {
   private screenCanvas!: HTMLCanvasElement;
   private screenCtx!: CanvasRenderingContext2D;
   private screenTex!: THREE.CanvasTexture;
-  private crowdMesh?: THREE.InstancedMesh;
-  private crowdHeadMesh?: THREE.InstancedMesh;
-  private crowdArmMeshes: THREE.InstancedMesh[] = [];
-  private crowdBase: Float32Array = new Float32Array(0);
-  private crowdPhase: Float32Array = new Float32Array(0);
-  private crowdScale: Float32Array = new Float32Array(0);
   private lightTowers: THREE.Mesh[] = [];
   private clouds: THREE.Group[] = [];
   /** 절차 나무 자리 — 실사 나무 로드 후 교체 */
   private treeSlots: { group: THREE.Group; height: number }[] = [];
   private pond?: THREE.Mesh;
-  private dancers?: Dancers;
   private lake?: THREE.Mesh;
   /** 호수/연못 자리 (트랙에서 가장 먼 곳) */
   private lakeSpot = new THREE.Vector3();
@@ -205,25 +197,7 @@ export class RaceTrack extends TrackGeometry {
         this.group.add(m);
       }),
     );
-    // 관중석 모듈 + 그 앞에서 춤추는 엽기 관중 (스펀지밥·뚱이·슈렉·피카츄·바나나·게·토끼·비보이)
-    // 출발 직선(z=60, +x 방향)의 오른쪽(+lat)에 관중석
-    const startF = this.getFrame(60);
-    const frontZ = startF.pos.z + this.width / 2 + 6;
-    const standLen = 240;
-    tasks.push(
-      loadGrandstand(frontZ, standLen).then((stand) => {
-        this.group.add(stand.group);
-      }),
-    );
-    {
-      const d = new Dancers();
-      const spots: [number, number][] = [];
-      const n = 12;
-      for (let i = 0; i < n; i++) spots.push([-standLen / 2 + 12 + (i + 0.5) * ((standLen - 24) / n), frontZ - 2.6 + (i % 2) * 1.2]);
-      this.group.add(d.group);
-      this.dancers = d;
-      tasks.push(d.load(spots, -1));
-    }
+    // 관중석·관중 없음 (대결 모드)
     // 호수: 반사 물
     try {
       const lake = makeLake(22 * 1.6, 22, sunDir);
@@ -240,7 +214,6 @@ export class RaceTrack extends TrackGeometry {
 
   /** 구름 표류 */
   updateAmbient(dt: number): void {
-    this.dancers?.update(dt);
     if (this.lake) {
       const n = this.lake.userData.waterNormals as THREE.Texture;
       n.offset.x += dt * 0.02;
@@ -252,47 +225,8 @@ export class RaceTrack extends TrackGeometry {
     }
   }
 
-  /** 관중 응원 강도 0..1 */
-  updateCrowd(time: number, excitement: number): void {
-    if (!this.crowdMesh || !this.crowdHeadMesh || this.crowdArmMeshes.length !== 2) return;
-    const dummy = new THREE.Object3D();
-    const n = this.crowdPhase.length;
-    const amp = 0.05 + excitement * 0.45;
-    for (let i = 0; i < n; i++) {
-      const ph = this.crowdPhase[i];
-      const scale = this.crowdScale[i];
-      const jump = Math.max(0, Math.sin(time * (6 + excitement * 6) + ph)) * amp;
-      dummy.position.set(this.crowdBase[i * 3], this.crowdBase[i * 3 + 1] + jump, this.crowdBase[i * 3 + 2]);
-      dummy.rotation.set(0, 0, Math.sin(time * 2.2 + ph) * 0.035 * excitement);
-      dummy.scale.set(scale, scale, scale);
-      dummy.updateMatrix();
-      this.crowdMesh.setMatrixAt(i, dummy.matrix);
-
-      dummy.position.y = this.crowdBase[i * 3 + 1] + jump + 0.92 * scale;
-      dummy.rotation.set(0, 0, 0);
-      dummy.scale.setScalar(scale);
-      dummy.updateMatrix();
-      this.crowdHeadMesh.setMatrixAt(i, dummy.matrix);
-
-      const wave = Math.sin(time * (3.5 + excitement * 4) + ph) * (0.25 + excitement * 0.7);
-      for (let side = 0; side < 2; side++) {
-        const sign = side === 0 ? -1 : 1;
-        dummy.position.set(
-          this.crowdBase[i * 3] + sign * 0.23 * scale,
-          this.crowdBase[i * 3 + 1] + jump + 0.62 * scale,
-          this.crowdBase[i * 3 + 2],
-        );
-        dummy.rotation.set(0, 0, sign * (0.45 + wave));
-        dummy.scale.setScalar(scale);
-        dummy.updateMatrix();
-        this.crowdArmMeshes[side].setMatrixAt(i, dummy.matrix);
-      }
-    }
-    this.crowdMesh.instanceMatrix.needsUpdate = true;
-    this.crowdHeadMesh.instanceMatrix.needsUpdate = true;
-    this.crowdArmMeshes[0].instanceMatrix.needsUpdate = true;
-    this.crowdArmMeshes[1].instanceMatrix.needsUpdate = true;
-  }
+  /** 관중 없음 — 호환용 no-op */
+  updateCrowd(_time: number, _excitement: number): void {}
 
   /** 식스샵(sixshop.com) 광고 간판 텍스처: 헤드라인 + 서브카피 + 로고 워드마크 */
   private makeAdTexture(headline: string, sub: string, bg: string, fg: string, accent: string): THREE.CanvasTexture {
@@ -462,9 +396,7 @@ export class RaceTrack extends TrackGeometry {
     const coord = { s: 0, lat: 0 };
     /** 트랙 띠(폭 + 여유) 안이면 true */
     const onTrack = (x: number, z: number, margin = 4) => Math.abs(this.project(x, z, coord).lat) < halfW + margin;
-    // 관중석 앞(출발 직선 오른쪽) 은 비운다
-    const stand = this.getFrame(60).pos.z;
-    const nearStand = (x: number, z: number) => x > -150 && x < 150 && z > stand + halfW && z < stand + halfW + 60;
+    const nearStand = (_x: number, _z: number) => false;
     const finishPt = this.getPoint(this.finishS, 0);
     const nearFinish = (x: number, z: number) => Math.hypot(x - finishPt.x, z - finishPt.z) < 60;
     const B = this.bounds;

@@ -66,6 +66,7 @@ export class UIManager {
 
   mountId: string;
   jockeyId: string;
+  raceMode: 'speed' | 'item';
   nick = '';
   private pickLocked = false;
 
@@ -91,6 +92,7 @@ export class UIManager {
   onToLobby: (() => void) | null = null;
   onChat: ((text: string) => void) | null = null;
   onNick: ((name: string) => void) | null = null;
+  onMode: ((mode: 'speed' | 'item') => void) | null = null;
   onToggleMute: (() => boolean) | null = null;
   onToggleQuality: (() => boolean) | null = null;
 
@@ -101,6 +103,15 @@ export class UIManager {
     if (!defs.some((d) => d.id === this.mountId)) this.mountId = defs[0].id;
     if (!JOCKEYS.some((j) => j.id === this.jockeyId)) this.jockeyId = JOCKEYS[0].id;
     this.nick = this.load('surreal-derby-nick', '');
+    this.raceMode = (this.load('surreal-derby-mode', 'item') === 'speed' ? 'speed' : 'item');
+    $('mode-list').querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => {
+      b.addEventListener('click', () => {
+        this.raceMode = b.dataset.mode === 'speed' ? 'speed' : 'item';
+        this.save('surreal-derby-mode', this.raceMode);
+        this.renderMode();
+        this.onMode?.(this.raceMode);
+      });
+    });
     const nick = $('nick') as HTMLInputElement;
     const lobbyNick = $('lobby-nick') as HTMLInputElement;
     nick.value = this.nick;
@@ -263,6 +274,16 @@ export class UIManager {
     return this.nick || '플레이어';
   }
 
+  /** 경기 방식 버튼 표시 갱신 */
+  renderMode(): void {
+    $('mode-list').querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.classList.toggle('active', b.dataset.mode === this.raceMode));
+  }
+
+  /** 방장만 바꿀 수 있다 */
+  setModeEditable(on: boolean): void {
+    $('mode-list').classList.toggle('readonly', !on);
+  }
+
   /** 누적 1등 횟수 (브라우저 저장) */
   get wins(): number {
     return Number(this.load('surreal-derby-wins', '0')) || 0;
@@ -413,6 +434,8 @@ export class UIManager {
     $('btn-ready').classList.toggle('hidden', isHost || !code);
     $('btn-race').classList.toggle('hidden', !isHost);
     this.lockPick(false);
+    this.renderMode();
+    this.setModeEditable(isHost);
     this.refreshPick(false);
     this.setupPreview(this.defs.find((x) => x.id === this.mountId) ?? this.defs[0], jockeyById(this.jockeyId));
   }
@@ -453,7 +476,11 @@ export class UIManager {
     list.querySelectorAll<HTMLButtonElement>('.kick').forEach((b) => b.addEventListener('click', () => this.onKick?.(Number(b.dataset.slot))));
   }
 
-  showHud(): void {
+  showHud(showItems = true): void {
+    $('item-box').classList.toggle('hidden', !showItems);
+    $('keys-hint').textContent = showItems
+      ? '↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트 · X 아이템 · 드리프트 직후 ↑ 순간부스터 · GO 직전 ↑ 출발부스터'
+      : '↑ 가속 · ↓ 브레이크 · ←→ 조향 · Shift 드리프트 · Space 부스트 · 드리프트 직후 ↑ 순간부스터 · GO 직전 ↑ 출발부스터';
     this.menu.classList.add('hidden');
     this.lobby.classList.add('hidden');
     this.hud.classList.remove('hidden');

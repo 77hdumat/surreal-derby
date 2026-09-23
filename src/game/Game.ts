@@ -12,7 +12,7 @@ import { onAssetProgress } from '../racers/rig/Assets';
 import { loadSky } from '../track/Environment';
 import { Footprints } from '../effects/Footprints';
 import { installHsvFog } from '../effects/HsvFog';
-import { KartRace, MAX_SLOTS, type SlotConfig } from './KartRace';
+import { KartRace, MAX_SLOTS, type RaceMode, type SlotConfig } from './KartRace';
 import { InputManager } from './Input';
 import { Net } from '../net/Net';
 import { ObstacleMeshes } from '../track/ObstacleMeshes';
@@ -56,6 +56,8 @@ export class Game {
   mySlot = 0;
   /** 로비(네트워크) 슬롯 */
   lobbySlot = 0;
+  /** 경기 방식 (방장이 정한다) */
+  raceMode: RaceMode = 'item';
   /** 로비 슬롯 → 레이스 슬롯 (-1 = 출전 안 함) */
   private netToRace: number[] = [];
   private lobby: LobbySlot[] = [];
@@ -187,6 +189,11 @@ export class Game {
     this.ui.onToLobby = () => this.toLobby();
     this.ui.onChat = (text) => this.sendChat(text);
     this.ui.onNick = (name) => this.changeNick(name);
+    this.ui.onMode = (mode) => {
+      if (this.mode === 'client') return; // 방장만 정한다
+      this.raceMode = mode;
+      this.broadcastLobby();
+    };
     // 대기실·결과 화면은 자유, 레이스 중엔 골인한 사람만
     this.ui.canChat = () => this.screen !== 'RACE' || !!this.race.karts[this.mySlot]?.finished;
     this.ui.onToggleMute = () => {
@@ -469,7 +476,7 @@ export class Game {
   }
 
   private broadcastLobby(): void {
-    this.net?.broadcast({ t: 'lobby', slots: this.lobby });
+    this.net?.broadcast({ t: 'lobby', slots: this.lobby, raceMode: this.raceMode });
   }
 
   private renderLobby(): void {
@@ -540,12 +547,18 @@ export class Game {
         break;
       case 'lobby':
         this.lobby = m.slots;
+        if (m.raceMode) {
+          this.raceMode = m.raceMode;
+          this.ui.raceMode = m.raceMode;
+          this.ui.renderMode();
+        }
         if (this.screen === 'LOBBY') this.renderLobby();
         break;
       case 'full':
         this.leaveRoom(m.why === 'playing' ? '경기가 진행 중입니다' : '방이 가득 찼습니다');
         break;
       case 'start':
+        if (m.raceMode) this.raceMode = m.raceMode;
         void this.beginRace(m.slots, m.seed);
         break;
       case 'count':
@@ -705,7 +718,8 @@ export class Game {
     // 게스트 준비 신호는 브로드캐스트 직후부터 들어올 수 있으니 여기서 초기화
     this.pendingSeed = seed;
     this.loadedSlots.clear();
-    this.net?.broadcast({ t: 'start', slots, seed });
+    this.raceMode = this.ui.raceMode;
+    this.net?.broadcast({ t: 'start', slots, seed, raceMode: this.raceMode });
     void this.beginRace(slots, seed);
   }
 
@@ -728,7 +742,7 @@ export class Game {
     const me = this.mySlot;
     const mode = this.mode;
     this.race.authority = mode !== 'client';
-    this.race.setup(slots, (s) => (mode === 'solo' ? true : mode === 'host' ? s.cpu || s.slot === me : s.slot === me), seed);
+    this.race.setup(slots, (s) => (mode === 'solo' ? true : mode === 'host' ? s.cpu || s.slot === me : s.slot === me), seed, this.raceMode);
     this.obstacleMeshes.build(this.race.obstacles);
     this.itemVisuals.build(this.race.items.boxes);
     this.itemVisuals.setSlots(slots.length, this.racers.visuals.map((v) => v.height));
@@ -759,7 +773,7 @@ export class Game {
     this.input.attach();
     this.input.clear();
     this.screen = 'RACE';
-    this.ui.showHud();
+    this.ui.showHud(this.raceMode === 'item');
     this.camera.setMode('CHASE', true);
     this.camera.distanceScale = Game.cameraScaleFor(this.racers.defs[this.mySlot]?.specialAbility);
     this.camera.update(0, this.race.karts[this.mySlot] ?? null, 0);
