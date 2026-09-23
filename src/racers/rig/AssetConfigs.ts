@@ -247,3 +247,102 @@ export const RIDER_ASSET_CFG: RiderAssetConfig = {
   bands: { boot: 0.16, breech: 0.5, collar: 0.87, hand: 0.44 },
   helmetOffset: [0.03, 0.14, 0],
 };
+
+// ================================================================ 동화책 스타일 (Quaternius, CC0)
+
+/** (GLTFLoader 가 노드 이름의 '.' 을 지우므로 'FrontUpperLeg.L' → 'FrontUpperLegL')
+ * Quaternius "Ultimate Animated Animals" 공통 골격 (말·백마·황소·사슴이 같다). 모델 +z 전방 */
+const QUATERNIUS_BONES: AnimalAssetConfig['bones'] = {
+  root: 'Body',
+  hips: 'Back',
+  spine: 'Torso',
+  chest: 'Torso3',
+  neck0: 'Neck1',
+  neck1: 'Neck2',
+  neck2: 'Neck3',
+  head: 'Head',
+  tail0: 'Tail1',
+  tail1: 'Tail3',
+  legFL_upper: 'FrontUpperLegL',
+  legFL_lower: 'FrontLowerLegL',
+  legFL_foot: 'FFL',
+  legFR_upper: 'FrontUpperLegR',
+  legFR_lower: 'FrontLowerLegR',
+  legFR_foot: 'FFR',
+  legBL_upper: 'BackUpperLegL',
+  legBL_lower: 'BackLowerLegL',
+  legBL_foot: 'FFBL',
+  legBR_upper: 'BackUpperLegR',
+  legBR_lower: 'BackLowerLegR',
+  legBR_foot: 'FFBR',
+};
+const QUATERNIUS_CLIPS: AnimalAssetConfig['clips'] = {
+  run: /^Gallop$/,
+  walk: /^Walk$/,
+  idle: /^Idle$/,
+  rear: /^Attack_Kick$/,
+  sleep: /^Idle_Headlow$/,
+  fallen: /^Death$/,
+  eat: /^Eating$/,
+};
+const QUATERNIUS_FEET = ['FFL', 'FFR', 'FFBL', 'FFBR'];
+
+/** 로우폴리 갈색 말 (동화책) */
+export const STORY_HORSE: AnimalAssetConfig = {
+  url: `${BASE}/models/storybook/horse.glb`,
+  fitHeight: 2.1,
+  yaw: Math.PI / 2,
+  clips: QUATERNIUS_CLIPS,
+  runStride: 5.4,
+  walkStride: 1.8,
+  bones: { ...QUATERNIUS_BONES, earL: 'Ear1L', earR: 'Ear1R' },
+  feetTips: QUATERNIUS_FEET,
+  height: 2.0,
+  seat: { bone: 'chest', offset: [-0.42, 0.3, 0] },
+  neckBob: 0.05,
+};
+
+/** 백마 — 서커스 스타 */
+export const STORY_WHITE_HORSE: AnimalAssetConfig = { ...STORY_HORSE, url: `${BASE}/models/storybook/whitehorse.glb` };
+
+/** 황소 — 레이지 불 */
+export const STORY_BULL: AnimalAssetConfig = {
+  ...STORY_HORSE,
+  url: `${BASE}/models/storybook/bull.glb`,
+  fitHeight: 1.95,
+  runStride: 5.0,
+  bones: { ...QUATERNIUS_BONES },
+  seat: { bone: 'chest', offset: [-0.45, 0.36, 0] },
+  neckBob: 0.03,
+};
+
+/** 얼룩말 — 제브라 다니오 (Quaternius "Animals" 구버전 골격) */
+export const STORY_ZEBRA: AnimalAssetConfig = {
+  url: `${BASE}/models/storybook/zebra.glb`,
+  fitHeight: 2.2,
+  yaw: Math.PI / 2,
+  clips: { run: /Run$/, walk: /\|Walk$/, idle: /Idle$/, rear: /Jump$/, fallen: /Death$/ },
+  runStride: 5.2,
+  walkStride: 1.8,
+  bones: {
+    root: 'Body',
+    hips: 'Hips',
+    spine: 'Torso',
+    chest: 'Shoulders',
+    neck0: 'Neck',
+    head: 'Head',
+    tail0: 'Tail1',
+    tail1: 'Tail3',
+    legFL_upper: 'FrontUpLegL',
+    legFL_lower: 'FrontLowLegL',
+    legFR_upper: 'FrontUpLegR',
+    legFR_lower: 'FrontLowLegR',
+    legBL_upper: 'BackUpLegL',
+    legBL_lower: 'BackLowLegL',
+    legBR_upper: 'BackUpLegR',
+    legBR_lower: 'BackLowLegR',
+  },
+  height: 2.0,
+  seat: { bone: 'chest', offset: [-0.62, 0.22, 0] },
+  neckBob: 0.04,
+};

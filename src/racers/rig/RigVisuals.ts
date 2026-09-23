@@ -5,7 +5,7 @@ import { loft } from '../Loft';
 import { AnimalVisual, type AnimalAssetConfig } from './AnimalVisual';
 import { AXIS_X, AXIS_Y, AXIS_Z, rotateBoneModelSpace } from './BoneTools';
 import { CHOPPER_POSE, RiderRig } from './RiderRig';
-import { HORSE_ASSET, ELEPHANT_ASSET, COW_ASSET, GIRAFFE_ASSET, ZEBRA_ASSET, RIDER_ASSET_CFG } from './AssetConfigs';
+import { STORY_HORSE, STORY_WHITE_HORSE, STORY_BULL, STORY_ZEBRA, ELEPHANT_ASSET, GIRAFFE_ASSET, RIDER_ASSET_CFG } from './AssetConfigs';
 
 const damp = (cur: number, target: number, k: number, dt: number) => THREE.MathUtils.lerp(cur, target, 1 - Math.exp(-k * dt));
 
@@ -25,7 +25,7 @@ function canvasTex(w: number, h: number, draw: (ctx: CanvasRenderingContext2D) =
 
 // ================================================================ 8. 클래식 호스
 export class HorseRig extends AnimalVisual {
-  constructor(def: RacerDefinition, fallback: RacerVisual, cfg: AnimalAssetConfig = HORSE_ASSET) {
+  constructor(def: RacerDefinition, fallback: RacerVisual, cfg: AnimalAssetConfig = STORY_HORSE) {
     super(def, cfg, fallback);
   }
   protected updateSpecial(_ctx: VisualContext, _ph: number): void {}
@@ -34,7 +34,7 @@ export class HorseRig extends AnimalVisual {
 // ================================================================ 8. 제브라 다니오 (얼룩말)
 export class ZebraRig extends AnimalVisual {
   constructor(def: RacerDefinition, fallback: RacerVisual) {
-    super(def, ZEBRA_ASSET, fallback);
+    super(def, STORY_ZEBRA, fallback);
   }
 
   protected buildDecor(): void {
@@ -54,6 +54,10 @@ export class CircusRig extends HorseRig {
   private plume?: THREE.Group;
   private hoofTmp = new THREE.Vector3();
 
+  constructor(def: RacerDefinition, fallback: RacerVisual) {
+    super(def, fallback, STORY_WHITE_HORSE);
+  }
+
   protected buildRider(): void {
     // 서커스 기수: 흰 의상에 금장식, 금색 헬멧
     this.riderColors = { silks: 0xffffff, sleeves: 0xfdfaf0, helmet: 0xffd700, breeches: 0xffffff, boots: 0xffd700 };
@@ -61,18 +65,7 @@ export class CircusRig extends HorseRig {
   }
 
   protected buildDecor(): void {
-    // 백마: 얼룩 텍스처 대신 흰 털 (노멀맵은 유지해 결 살림), 갈기·꼬리도 흰색
-    this.model!.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
-      const mat = m.material as THREE.MeshStandardMaterial;
-      if (mat.name === 'Horse' || mat.name === 'Hair') {
-        mat.map = null;
-        mat.color.set(mat.name === 'Horse' ? 0xf3efe6 : 0xfaf7f0);
-        mat.roughness = 0.75;
-        mat.needsUpdate = true;
-      }
-    });
+    // 백마 모델은 이미 흰색 (동화책 스타일)
     // 깃털 장식 (머리)
     const plume = new THREE.Group();
     const colors = [0xff2a2a, 0xffd700, 0x2a7bff, 0xff2a2a, 0xffd700];
@@ -139,7 +132,7 @@ export class CircusRig extends HorseRig {
     // 뒷발굽이 땅에 닿도록: 회전된 자세에서 가장 낮은 뒷발굽 뼈 높이를 재서 몸을 들어 올림 + 깡충 뛰기
     this.body.updateWorldMatrix(true, true);
     let minY = Infinity;
-    for (const name of ['BN_L_Toe_2_055_0_059', 'BN_R_Toe_2_059_0_065']) {
+    for (const name of ['FFBL', 'FFBR']) {
       const b = this.model?.getObjectByName(name);
       if (!b) continue;
       b.getWorldPosition(this.hoofTmp);
@@ -172,7 +165,7 @@ export class MotorRig extends HorseRig {
   backfiring = false;
 
   constructor(def: RacerDefinition, fallback: RacerVisual) {
-    super(def, fallback, { ...HORSE_ASSET, hideMeshes: ['Saddle', 'Horseshoe'], tint: true, seat: { bone: 'chest', offset: [-0.45, 0.5, 0] } });
+    super(def, fallback, { ...STORY_HORSE, tint: true, seat: { bone: 'chest', offset: [-0.5, 0.36, 0] } });
     this.riderPose = CHOPPER_POSE;
   }
 
@@ -359,7 +352,7 @@ export class LongbodyRig extends HorseRig {
   private rider2?: RiderRig;
 
   constructor(def: RacerDefinition, fallback: RacerVisual) {
-    super(def, fallback, { ...HORSE_ASSET, seat: { bone: 'chest', offset: [-0.25, 0.42, 0] } });
+    super(def, fallback, { ...STORY_HORSE, seat: { bone: 'chest', offset: [-0.42, 0.3, 0] } });
   }
 
   protected buildDecor(): void {
@@ -464,7 +457,7 @@ export class CowRig extends AnimalVisual {
   private eyes: THREE.Mesh[] = [];
 
   constructor(def: RacerDefinition, fallback: RacerVisual) {
-    super(def, COW_ASSET, fallback);
+    super(def, STORY_BULL, fallback);
   }
 
   protected buildDecor(): void {
