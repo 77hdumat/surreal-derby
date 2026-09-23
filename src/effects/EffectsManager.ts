@@ -42,13 +42,19 @@ export class EffectsManager {
     this.ao.configuration.halfRes = true;
     this.ao.configuration.gammaCorrection = false;
     this.ao.setQualityMode('Performance');
+    this.ao.enabled = false;
     this.composer.addPass(this.ao);
     // 컬러 그레이딩 (거리 안개는 재질 셰이더의 HSV 안개가 담당)
     this.grade = makeGradePass();
+    // 동화책 톤: 채도 살짝 ↑, 크림색 오버레이, 대비 부드럽게
+    this.grade.uniforms.uVibrance.value = 0.3;
+    this.grade.uniforms.uContrast.value = 0.08;
+    this.grade.uniforms.uOverlayAmount.value = 0.1;
+    this.grade.uniforms.uOverlay.value = new THREE.Color('#fff4e0');
     this.composer.addPass(this.grade);
     this.afterimage = new AfterimagePass(0.1);
     this.composer.addPass(this.afterimage);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.22, 0.6, 0.92);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.15, 0.5, 0.95);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.fxCanvas = fxCanvas;
@@ -80,7 +86,7 @@ export class EffectsManager {
     this.pixelRatio = pixelRatio;
     this.composer.setPixelRatio(pixelRatio);
     // AO 는 가장 비싼 패스 — 고급 모드에서만, 그것도 Performance 프리셋·반 해상도로
-    this.ao.enabled = high;
+    this.ao.enabled = false; // 동화책 톤: 접촉 그림자는 그림자맵으로 충분
     this.ao.setQualityMode('Performance');
     this.ao.configuration.halfRes = true;
     this.ao.configuration.transparencyAware = false;

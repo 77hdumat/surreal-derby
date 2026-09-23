@@ -81,8 +81,11 @@ export class ParticleManager {
         void main(){
           vec2 c = gl_PointCoord - 0.5; float d = length(c);
           if (d > 0.5) discard;
-          float a = smoothstep(0.5, 0.1, d) * vAlpha;
-          gl_FragColor = vec4(vColor, a);
+          // 동화책 퍼프: 또렷한 원 + 위쪽 하이라이트 (그림책 수채 느낌)
+          float edge = smoothstep(0.5, 0.44, d);
+          float hi = smoothstep(0.35, 0.0, length(c - vec2(-0.12, -0.14)));
+          vec3 col = mix(vColor, vec3(1.0), hi * 0.35);
+          gl_FragColor = vec4(col, edge * vAlpha);
         }`,
     });
     this.points = new THREE.Points(this.geo, mat);
@@ -94,7 +97,7 @@ export class ParticleManager {
   }
 
   emit(o: EmitOptions): void {
-    const colors = o.colors ?? [0xc9a97a];
+    const colors = o.colors ?? [0xfff3dc, 0xf6e2b8];
     const spread = o.spread ?? 1;
     for (let k = 0; k < o.count; k++) {
       const i = this.free.pop();
@@ -170,16 +173,16 @@ export class ParticleManager {
   hoofDust(pos: THREE.Vector3, backward: THREE.Vector3, strength: number): void {
     this.emit({
       pos,
-      count: Math.round(1 + strength * 3),
+      count: Math.round(1 + strength * 1.5),
       vel: this.tmp.copy(backward).multiplyScalar(2 + strength * 3).setY(1.2 + strength),
-      spread: 1.2,
-      size: 0.35,
-      sizeVar: 0.4,
-      life: 0.7,
-      colors: [0xb08a5a, 0x9c7a4c, 0x6fbf4a, 0x8bd45e],
+      spread: 1.0,
+      size: 0.22,
+      sizeVar: 0.18,
+      life: 0.5,
+      colors: [0xfff3dc, 0xf3dcae, 0xe6f5d0, 0xffffff],
       gravity: 1.2,
-      grow: 0.9,
-      alpha: 0.55,
+      grow: 0.45,
+      alpha: 0.7,
     });
   }
 

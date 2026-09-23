@@ -9,7 +9,6 @@ import { AudioManager } from '../audio/AudioManager';
 import { UIManager } from '../ui/UIManager';
 import { updateWind } from '../track/Vegetation';
 import { onAssetProgress } from '../racers/rig/Assets';
-import { loadSky } from '../track/Environment';
 import { Footprints } from '../effects/Footprints';
 import { installHsvFog } from '../effects/HsvFog';
 import { KartRace, MAX_SLOTS, type RaceMode, type SlotConfig } from './KartRace';
@@ -126,15 +125,16 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.9;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // 여름 오후: 따뜻한 낮은 태양, 긴 그림자, 부드러운 안개 (HSV 안개: r=목표 명도, g=목표 채도)
     installHsvFog();
-    this.scene.fog = new THREE.Fog(new THREE.Color(0.64, 0.36, 0), 90, 560);
-    this.scene.add(new THREE.HemisphereLight(0xbcd7f5, 0x8c8776, 0.45));
-    this.sun = new THREE.DirectionalLight(0xfff6e8, 2.2);
+    // 동화책 톤: 멀수록 밝고 옅어지는 안개(HSV: r=명도 0.96, g=채도 0.18), 밝은 반구광
+    this.scene.fog = new THREE.Fog(new THREE.Color(0.96, 0.18, 0), 380, 2400);
+    this.scene.add(new THREE.HemisphereLight(0xdcefff, 0xa8cf80, 0.85));
+    this.sun = new THREE.DirectionalLight(0xfff0d6, 2.1);
     this.sun.position.copy(this.sunOffset);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -158,7 +158,7 @@ export class Game {
       const skyScene = new THREE.Scene();
       skyScene.add(this.track.sky);
       this.scene.environment = pmrem.fromScene(skyScene, 0, 1, 3000).texture;
-      this.scene.environmentIntensity = 0.38;
+      this.scene.environmentIntensity = 0.45;
       this.track.group.add(this.track.sky);
       pmrem.dispose();
     }
@@ -221,26 +221,12 @@ export class Game {
   }
 
   /** 실사 HDRI 하늘: 배경·환경광으로 쓰고, HDRI 의 태양 방향에 DirectionalLight 를 맞춘다 */
+  /** 동화책 월드: 하늘 돔은 RaceTrack 에 있다. 환경광은 그 돔에서 굽고, 로우폴리 풍경을 불러온다 */
   private async applySky(): Promise<void> {
-    try {
-      const sky = await loadSky(this.highQuality);
-      this.scene.background = sky.texture;
-      this.scene.environment = sky.texture;
-      this.scene.environmentIntensity = 0.55;
-      this.scene.backgroundIntensity = 1.0;
-      this.scene.backgroundBlurriness = 0;
-      this.track.sky.visible = false;
-      this.sunOffset.copy(sky.sunDir).multiplyScalar(130);
-      this.sun.intensity = 2.4;
-      await this.track.loadRealAssets(sky.sunDir);
-      const fog = this.scene.fog as THREE.Fog;
-      fog.color.setRGB(0.8, 0.16, 0);
-      fog.near = 200;
-      fog.far = 2600;
-    } catch (e) {
-      console.warn('[sky] HDRI 로드 실패 — 절차 하늘 유지', e);
-      await this.track.loadRealAssets(RaceTrack.SUN_DIR);
-    }
+    this.scene.background = new THREE.Color(0xcfeaff);
+    this.scene.environmentIntensity = 0.45;
+    this.sunOffset.copy(RaceTrack.SUN_DIR).multiplyScalar(130);
+    await this.track.loadRealAssets(RaceTrack.SUN_DIR);
   }
 
   start(): void {

@@ -48,7 +48,10 @@ export class BoostFlame {
           vec3 blue = mix(vec3(0.85, 0.98, 1.0), vec3(0.15, 0.55, 1.0), smoothstep(0.0, 0.5, t));
           blue = mix(blue, vec3(0.05, 0.2, 0.95), smoothstep(0.45, 1.0, t));
           col = mix(col, blue, uBlue);
-          gl_FragColor = vec4(col * (1.2 + 0.6 * n), a);
+          // 카툰: 알파를 계단으로 끊어 또렷한 불꽃 층
+          a = a > 0.55 ? 1.0 : a > 0.25 ? 0.7 : a > 0.08 ? 0.35 : 0.0;
+          if (a <= 0.0) discard;
+          gl_FragColor = vec4(col * 1.15, a * uIntensity);
         }`,
     });
     // 평면은 x 축을 따라 [-length, 0], 중심을 뒤로 밀어 뿌리가 원점

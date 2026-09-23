@@ -20,3 +20,22 @@
 - **dancer_crab**: "Dancing Crab - Uca Mjoebergi" by Bohdan Lvov (https://sketchfab.com/ostapblendercg) — https://sketchfab.com/3d-models/dancing-crab-uca-mjoebergi-280863886fee409ab3c8168f07caa89f — CC Attribution (http://creativecommons.org/licenses/by/4.0/)
 - **dancer_rabbit**: "Gangnam Style Dancing Rabbit Character" by antonmoek (https://sketchfab.com/antonmoek) — https://sketchfab.com/3d-models/gangnam-style-dancing-rabbit-character-a06d60f0ab144adc982cdc94bf24e368 — CC Attribution (http://creativecommons.org/licenses/by/4.0/)
 - **dancer_bboy**: "Atomic B-Boy (Animated, Low-poly) by Jungle Jim" by Jungle Jim (https://sketchfab.com/jungle_jim) — https://sketchfab.com/3d-models/atomic-b-boy-animated-low-poly-by-jungle-jim-2d4cd8f8528846fcb9b06697e8d2b1de — CC Attribution (http://creativecommons.org/licenses/by/4.0/)
+
+## 동화책 스타일 (CC0 1.0 — Quaternius, via poly.pizza)
+
+| 파일 | 원본 |
+|---|---|
+| storybook/horse.glb | Horse — https://poly.pizza/m/qvTrSG9pZF |
+| storybook/whitehorse.glb | White Horse — https://poly.pizza/m/bEdE4rmZy9 |
+| storybook/zebra.glb | Zebra — https://poly.pizza/m/iclPBR6SBZ |
+| storybook/bull.glb | Bull — https://poly.pizza/m/a8PIIYwF7r |
+| storybook/stag.glb | Stag — https://poly.pizza/m/tQdzbZ1Cmw |
+| storybook/tree_a.glb | Tree — https://poly.pizza/m/2paAm1ja4w |
+| storybook/tree_c.glb | Tree — https://poly.pizza/m/9nvGuZlbpE |
+| storybook/mountains.glb | Mountains — https://poly.pizza/m/w9VBrh7Nz0 |
+| storybook/mountain_group.glb | Mountain Group — https://poly.pizza/m/a52gSEEq8X |
+| storybook/cloud_a.glb | Cloud — https://poly.pizza/m/KdFNOVn1Gf |
+| storybook/cloud_c.glb | Cloud — https://poly.pizza/m/P1cMV8qtN2 |
+| storybook/bush.glb | Bush — https://poly.pizza/m/ooG6CkLyE8 |
+| storybook/flowers.glb | Flowers — https://poly.pizza/m/NBUxHir6FJ |
+| storybook/rock.glb | Rock — https://poly.pizza/m/RtLRqYjfMs |
