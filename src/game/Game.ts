@@ -705,6 +705,15 @@ export class Game {
     this.obstacleMeshes.build(this.race.obstacles);
     this.itemVisuals.build(this.race.items.boxes);
     this.itemVisuals.setSlots(slots.length, this.racers.visuals.map((v) => v.height));
+    // 아이템 메시 셰이더를 미리 컴파일해 첫 사용 때 끊기지 않게
+    try {
+      this.itemVisuals.setPrewarm(true);
+      this.renderer.compile(this.scene, this.camera.camera);
+    } catch (e) {
+      console.warn('[items] precompile', e);
+    } finally {
+      this.itemVisuals.setPrewarm(false);
+    }
     this.lastFinishCount = -1;
     this.hitCam = null;
     this.remotes = slots.map(() => new RemoteKart());
@@ -1190,7 +1199,7 @@ export class Game {
       const my = this.race.karts[this.mySlot];
       const ev = this.race.useItem(this.mySlot);
       if (ev) this.race.itemEvents.push(ev);
-      else if (my?.item) this.ui.showToast(my.item === 'waterfly' || my.item === 'magnet' ? '앞에 대상이 없다' : '지금은 쓸 수 없다', 900);
+      else if (my?.item) this.ui.showToast(my.item === 'waterfly' || my.item === 'magnet' ? '앞에 대상이 없다' : my.item === 'ufo' ? '내가 1등이다' : '지금은 쓸 수 없다', 900);
     }
     if (this.race.itemEvents.length) {
       for (const e of this.race.itemEvents) this.onItemEvent(e, true);

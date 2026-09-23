@@ -30,9 +30,13 @@ export class ItemVisuals {
   private shieldMat = new THREE.MeshBasicMaterial({ color: 0x4dffb5, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
   private boxGeo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
   private tmp = new THREE.Vector3();
+  /** 종류별 메시 풀 — 아이템을 쓰는 순간 만들지 않아 끊김이 없다 */
+  private pool: Record<string, THREE.Object3D[]> = {};
+  private poolBuilt = false;
 
   build(boxes: ItemBox[]): void {
     this.clear();
+    this.buildPool();
     for (const b of boxes) {
       const g = new THREE.Group();
       const cube = new THREE.Mesh(this.boxGeo, this.boxMat);
@@ -47,6 +51,48 @@ export class ItemVisuals {
       this.group.add(g);
       this.boxMeshes.set(b.id, g);
     }
+  }
+
+  /** 투사체 메시를 미리 만들어 둔다 (지오메트리·셰이더 컴파일을 레이스 전에) */
+  private buildPool(): void {
+    if (this.poolBuilt) return;
+    this.poolBuilt = true;
+    const counts: [string, number][] = [
+      ['missile', 6],
+      ['waterfly', 6],
+      ['banana', 18],
+      ['gas', 4],
+    ];
+    for (const [kind, n] of counts) {
+      this.pool[kind] = [];
+      for (let i = 0; i < n; i++) {
+        const m = this.createProjectileMesh(kind as Projectile['kind']);
+        m.visible = false;
+        this.group.add(m);
+        this.pool[kind].push(m);
+      }
+    }
+  }
+
+  /** 셰이더 프리컴파일용: 풀 전체를 잠시 보이게 한다 */
+  setPrewarm(on: boolean): void {
+    for (const arr of Object.values(this.pool)) for (const m of arr) m.visible = on;
+    for (const m of [...this.bubbles, ...this.shields, ...this.ufos, ...this.gasRings]) m.visible = on;
+    if (!on) for (const [, m] of this.projMeshes) m.visible = true;
+  }
+
+  /** 풀에서 하나 꺼내기 (모자라면 그때 만든다) */
+  private takeFromPool(kind: Projectile['kind']): THREE.Object3D {
+    const arr = this.pool[kind];
+    const free = arr?.find((m) => !m.visible);
+    if (free) {
+      free.visible = true;
+      return free;
+    }
+    const m = this.createProjectileMesh(kind);
+    this.group.add(m);
+    (this.pool[kind] ??= []).push(m);
+    return m;
   }
 
   /** 말별 효과 메시 준비 (슬롯 수만큼) */
@@ -84,7 +130,8 @@ export class ItemVisuals {
     }
   }
 
-  private makeProjectile(p: Projectile): THREE.Object3D {
+  private createProjectileMesh(kind: Projectile['kind']): THREE.Object3D {
+    const p = { kind } as Projectile;
     if (p.kind === 'missile') {
       const g = new THREE.Group();
       const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.3, 12), this.missileMat);
@@ -138,8 +185,8 @@ export class ItemVisuals {
       alive.add(p.id);
       let m = this.projMeshes.get(p.id);
       if (!m) {
-        m = this.makeProjectile(p);
-        this.group.add(m);
+        m = this.takeFromPool(p.kind);
+        m.scale.setScalar(1);
         this.projMeshes.set(p.id, m);
       }
       m.position.set(p.x, p.y + (p.kind === 'banana' ? 0 : 0.4), p.z);
@@ -153,7 +200,7 @@ export class ItemVisuals {
     }
     for (const [id, m] of this.projMeshes) {
       if (alive.has(id)) continue;
-      this.group.remove(m);
+      m.visible = false; // 풀로 반환
       this.projMeshes.delete(id);
     }
     // 말 위 효과
@@ -199,7 +246,7 @@ export class ItemVisuals {
   clear(): void {
     for (const m of this.boxMeshes.values()) this.group.remove(m);
     this.boxMeshes.clear();
-    for (const m of this.projMeshes.values()) this.group.remove(m);
+    for (const m of this.projMeshes.values()) m.visible = false;
     this.projMeshes.clear();
   }
 }

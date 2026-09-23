@@ -11,7 +11,7 @@ export const ITEM_INFO: Record<ItemKind, { name: string; emoji: string; desc: st
   boost: { name: '부스터', emoji: '🔥', desc: '즉시 부스트 3초' },
   shield: { name: '실드', emoji: '🛡️', desc: '공격 1회 막음 (8초)' },
   magnet: { name: '자석', emoji: '🧲', desc: '바로 앞 등수 쪽으로 350km/h 로 끌려감 (조향 가능)' },
-  ufo: { name: 'UFO', emoji: '🛸', desc: '1등을 붙잡아 멈춤' },
+  ufo: { name: 'UFO', emoji: '🛸', desc: '1등만 붙잡아 공중에 가둠' },
   gas: { name: '환각 가스', emoji: '🍄', desc: '나 빼고 전원 3초간 조작 반대' },
 };
 
@@ -263,8 +263,10 @@ export class ItemSystem {
         }
       });
     } else if (kind === 'ufo') {
-      target = ranking.find((s) => s !== slot && !karts[s].finished) ?? -1;
-      if (target < 0) return null;
+      // UFO 는 1등 전용 — 내가 1등이면 못 쓴다
+      const leader = ranking.find((s) => !karts[s].finished) ?? -1;
+      if (leader < 0 || leader === slot) return null;
+      target = leader;
     }
     k.item = k.item2;
     k.item2 = '';
