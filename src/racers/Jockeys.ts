@@ -8,7 +8,7 @@ export interface JockeyMul {
   handling: number;
   mass: number;
   gaugeRate: number;
-  boostMul: number;
+  boostAccel: number;
 }
 
 export interface Jockey {
@@ -26,7 +26,7 @@ export interface Jockey {
   mul: JockeyMul;
 }
 
-const base: JockeyMul = { maxSpeed: 1, accel: 1, handling: 1, mass: 1, gaugeRate: 1, boostMul: 1.57 };
+const base: JockeyMul = { maxSpeed: 1, accel: 1, handling: 1, mass: 1, gaugeRate: 1, boostAccel: 1 };
 
 /** 기수 6명. 말 스탯에 곱해져 조합 성능을 만든다 (카트라이더의 캐릭터×카트). */
 /** 기수 6명 — 보너스만 있음(페널티 없음). 말 스탯에 곱해진다 (카트라이더의 캐릭터×카트). */
@@ -34,7 +34,7 @@ export const JOCKEYS: Jockey[] = [
   { id: 'skull', name: '해골 기사', desc: '최고속 +8%', emoji: '💀', head: 'skull', silks: 0x1d1d1d, cloth: 0x6b0f1a, mul: { ...base, maxSpeed: 1.08 } },
   { id: 'robot', name: '로보 제트', desc: '가속 +25%', emoji: '🤖', head: 'robot', silks: 0x2a9dff, cloth: 0x0d1b2a, mul: { ...base, accel: 1.25 } },
   { id: 'cat', name: '냥냥이', desc: '조향 +15% · 게이지 충전 +20%', emoji: '🐱', head: 'cat', silks: 0xffb703, cloth: 0x7a4a12, mul: { ...base, handling: 1.15, gaugeRate: 1.2 } },
-  { id: 'alien', name: '외계인 X', desc: '부스트 출력 +12%', emoji: '👽', head: 'alien', silks: 0x8338ec, cloth: 0xc0f56b, mul: { ...base, boostMul: base.boostMul * 1.12 } },
+  { id: 'alien', name: '외계인 X', desc: '부스트 가속 +12%', emoji: '👽', head: 'alien', silks: 0x8338ec, cloth: 0xc0f56b, mul: { ...base, boostAccel: 1.12 } },
   { id: 'pumpkin', name: '호박 대장', desc: '전 능력 +4%', emoji: '🎃', head: 'pumpkin', silks: 0xf28c28, cloth: 0x2b2d42, mul: { ...base, maxSpeed: 1.04, accel: 1.04, handling: 1.04, gaugeRate: 1.04 } },
   { id: 'pig', name: '꿀꿀이', desc: '질량 +50% (안 밀림) · 조향 +5%', emoji: '🐷', head: 'pig', silks: 0xf4a3b5, cloth: 0x3a5a40, mul: { ...base, mass: 1.5, handling: 1.05 } },
 ];
@@ -51,7 +51,7 @@ interface MountKart {
   accel: number;
   handling: number;
   mass: number;
-  /** 부스트 배수 보정 (1 = 기수값 그대로) */
+  /** 부스트 가속 보정 (1 = 기수값 그대로). 부스트 최고속은 전원 동일 */
   boost?: number;
   /** 게이지 충전 보정 */
   gauge?: number;
@@ -86,7 +86,7 @@ export function kartParamsFor(def: RacerDefinition, j: Jockey): KartParams {
     handling: k.handling * m.handling,
     mass: k.mass * m.mass,
     gaugeRate: 0.8 * (k.gauge ?? 1) * m.gaugeRate,
-    boostMul: m.boostMul * (k.boost ?? 1),
+    boostAccel: m.boostAccel * (k.boost ?? 1),
     radius: 1.3,
     boostReach: k.reach ?? 0,
   };
@@ -101,7 +101,7 @@ export function statBars(def: RacerDefinition, j: Jockey): { label: string; valu
     { label: '가속', value: n(p.accel, 4, 16) },
     { label: '조향', value: n(p.handling, 0.85, 1.5) },
     { label: '충전', value: n(p.gaugeRate, 0.65, 1.1) },
-    { label: '부스트', value: n(p.boostMul, 1.4, 1.8) },
+    { label: '부스트', value: n(p.boostAccel, 0.9, 1.25) },
     { label: '질량', value: n(p.mass, 60, 260) },
   ];
 }

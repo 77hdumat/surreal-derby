@@ -22,8 +22,8 @@ export interface KartParams {
   mass: number;
   /** 드리프트 게이지 충전 속도 (1/s, 최대 슬립·최고속 기준) */
   gaugeRate: number;
-  /** 부스트 중 최고속 배수 */
-  boostMul: number;
+  /** 부스트 가속 배수 (1 = 기본). 부스트 최고속은 모든 말이 BOOST_TOP 으로 같다 */
+  boostAccel: number;
   /** 충돌 반지름 (m) */
   radius: number;
   /** 부스트 중 결승선 판정에 더해지는 코 길이 (기린 목·롱바디 몸통) */
@@ -54,6 +54,8 @@ export interface KartState {
   gaugeAtDriftStart: number;
   /** 남은 부스트 시간 (초) */
   boostT: number;
+  /** 이번 부스트가 켜진 뒤 지난 시간 (초) — 가속이 점점 붙는 램프용. 이어 붙인 부스트는 리셋 안 됨 */
+  boostAge: number;
   /** 남은 순간부스터 시간 (초) — 드리프트 직후 ↑ */
   miniT: number;
   /** 드리프트 종료 후 순간부스터 입력 창 (초) */
@@ -64,8 +66,10 @@ export interface KartState {
   driftDir: number;
   /** 직전 스텝의 Shift 상태 (눌린 순간 판정) */
   driftKeyWas: boolean;
-  /** 역조향 유지 시간 (드리프트 탈출 판정) */
+  /** 조향을 풀었거나 역조향한 누적 시간 — 일정 이상이면 드리프트가 풀린다 */
   counterT: number;
+  /** 드리프트가 자동으로 풀린 뒤 Shift 를 뗄 때까지 재진입 금지 (Shift 꾹 누르고 직진 방지) */
+  driftLock: boolean;
   /** 직전 스텝의 ↑ 상태 (톡톡이 판정) */
   throttleWas: boolean;
   /** 같은 방향으로 조향을 붙잡고 있는 시간 (초) — 길게 꺾을수록 더 돈다 */
@@ -122,7 +126,16 @@ export const MAX_BOOSTS = 2;
 export const BOOST_DURATION = 3.0;
 /** 파란 부스터: 1.5배 길고 더 빠르다 */
 export const BLUE_BOOST_DURATION = BOOST_DURATION * 1.5;
-export const BLUE_BOOST_EXTRA = 1.22;
+/** 부스트 최고속 — 말·기수와 무관하게 전원 동일 (350km/h) */
+export const BOOST_TOP = 350 / 3.6;
+/** 부스트 가속 (m/s²). 켜진 순간엔 BOOST_RAMP_START 배에서 시작해 BOOST_RAMP_TIME 동안 점점 붙는다 */
+export const BOOST_ACCEL = 38;
+export const BOOST_RAMP_START = 0.3;
+export const BOOST_RAMP_TIME = 0.8;
+/** 파란 부스터: 최고속은 같고 가속이 더 세다 */
+export const BLUE_BOOST_ACCEL = 1.2;
+/** 드리프트 중 조향을 풀거나(0.3s) 역조향하면(0.15s) 드리프트가 끝난다 */
+export const DRIFT_RELEASE_TIME = 0.3;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
 export const MINI_DURATION = 0.55;
 export const MINI_MUL = 1.18;
@@ -161,12 +174,14 @@ export function createKartState(x: number, z: number, yaw: number): KartState {
     boostKeyWas: false,
     gaugeAtDriftStart: 0,
     boostT: 0,
+    boostAge: 0,
     miniT: 0,
     miniWindow: 0,
     driftTime: 0,
     driftDir: 0,
     driftKeyWas: false,
     counterT: 0,
+    driftLock: false,
     throttleWas: false,
     steerHold: 0,
     padT: 0,
@@ -323,13 +338,17 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     const blue = st.blueBoosts > 0;
     if (blue) st.blueBoosts--;
     st.boostBlue = blue;
-    st.boostT = (blue ? BLUE_BOOST_DURATION : BOOST_DURATION) + st.boostT; // 남은 시간은 이어 붙인다
-    st.speed = Math.max(st.speed, p.maxSpeed * (blue ? 1.3 : 1.15)); // 점화 순간 확 튀어나간다
+    st.boostT = (blue ? BLUE_BOOST_DURATION : BOOST_DURATION) + st.boostT; // 남은 시간은 이어 붙인다 (속도 점프 없음 — 가속 램프로 붙는다)
     events.push({ k: 'boost' });
   }
   if (st.boostT <= 0) st.boostBlue = false;
   const boosting = st.boostT > 0;
-  if (boosting) st.boostT = Math.max(0, st.boostT - dt);
+  if (boosting) {
+    st.boostT = Math.max(0, st.boostT - dt);
+    st.boostAge += dt;
+  } else {
+    st.boostAge = 0;
+  }
   // ---- 순간부스터: 드리프트를 끝낸 직후(창 안에) ↑ 를 누르면 짧은 가속. 짧게 드리프트→↑ 를 반복하면 연속으로 (톡톡이)
   if (st.miniWindow > 0) {
     st.miniWindow = Math.max(0, st.miniWindow - dt);
@@ -344,13 +363,19 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   if (mini) st.miniT = Math.max(0, st.miniT - dt);
   const magnet = st.magnetT > 0;
   // 자석: 300~400km/h 로 대상에게 달라붙는다 (방향은 Items.step 이 대상 쪽으로 돌린다)
-  const boostMul = p.boostMul * (st.boostBlue ? BLUE_BOOST_EXTRA : 1);
-  const maxCur = p.maxSpeed * (boosting ? boostMul : mini ? MINI_MUL : 1) * (st.slipT > 0 ? 0.6 : 1) * (magnet ? 2.6 : 1);
-  const accel = p.accel * (boosting ? (st.boostBlue ? 5.5 : 4.5) : magnet ? 12 : mini ? 2.6 : 1);
+  const top = boosting ? BOOST_TOP : p.maxSpeed * (mini ? MINI_MUL : 1);
+  const maxCur = (magnet ? Math.max(top, p.maxSpeed * 2.6) : top) * (st.slipT > 0 ? 0.6 : 1);
+  // 부스트 가속: 켜진 순간엔 약하게 → 0.8초에 걸쳐 최대로 (저속에서 급발진하지 않고 점점 빨라진다)
+  const ramp = Math.min(1, st.boostAge / BOOST_RAMP_TIME);
+  const rampMul = BOOST_RAMP_START + (1 - BOOST_RAMP_START) * ramp * ramp * (3 - 2 * ramp);
+  const boostAccel = BOOST_ACCEL * p.boostAccel * (st.boostBlue ? BLUE_BOOST_ACCEL : 1) * rampMul;
+  // 드리프트 중엔 (부스트가 아니면) 엔진 가속이 절반 — 드리프트가 공짜 가속이 되지 않게
+  const driftAccel = st.drifting && !boosting ? 0.5 : 1;
+  const accel = boosting ? Math.max(p.accel, boostAccel) : p.accel * (magnet ? 12 : mini ? 2.6 : 1);
 
   // ---- 종방향
   if (inp.throttle > 0) {
-    if (st.speed < maxCur) st.speed = Math.min(maxCur, st.speed + accel * inp.throttle * dt);
+    if (st.speed < maxCur) st.speed = Math.min(maxCur, st.speed + accel * driftAccel * inp.throttle * dt);
   } else if (inp.brake > 0) {
     st.speed = Math.max(-p.maxSpeed * 0.3, st.speed - accel * 1.5 * inp.brake * dt);
   } else if (st.speed > 0) {
@@ -363,16 +388,24 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
 
   // ---- 드리프트 판정 (Shift 를 누르고 있는 동안만 드리프트)
   const gaugeBefore = st.gauge;
-  // 진입은 중속 이상. 일단 들어가면 헤어핀에서 느려져도 Shift 를 놓기 전까진 풀리지 않는다 (유턴)
-  const canStart = st.speed > p.maxSpeed * 0.4;
-  const keep = st.drifting && st.speed > p.maxSpeed * 0.12;
-  const wantDrift = !st.finished && inp.drift && (keep || (canStart && Math.abs(inp.steer) > 0.2));
+  // 진입은 중속 이상 + 조향. 일단 들어가면 헤어핀에서 느려져도 Shift·조향을 유지하는 동안 풀리지 않는다 (유턴)
+  // 조향을 풀거나 역조향하면 드리프트가 끝나고, Shift 를 한 번 뗐다 눌러야 다시 들어간다 (Shift 꾹 + 직진 = 드리프트 아님)
+  if (!inp.drift) st.driftLock = false;
+  const steerIn = st.drifting ? inp.steer * st.driftDir : 0; // 드리프트 방향으로 꺾는 정도 (음수 = 역조향)
+  if (st.drifting) st.counterT = steerIn > 0.2 ? 0 : st.counterT + (steerIn < -0.2 ? 2 : 1) * dt;
+  const straightened = st.drifting && st.counterT >= DRIFT_RELEASE_TIME;
+  const canStart = !st.driftLock && st.speed > p.maxSpeed * 0.4 && Math.abs(inp.steer) > 0.2;
+  const keep = st.drifting && !straightened && st.speed > p.maxSpeed * 0.12;
+  const wantDrift = !st.finished && inp.drift && (st.drifting ? keep : canStart);
   if (st.drifting && !wantDrift) {
     // 드리프트 종료 → 순간부스터 입력 창 (너무 짧은 드리프트는 제외)
     if (st.driftTime >= MINI_MIN_DRIFT) st.miniWindow = MINI_WINDOW;
     st.driftTime = 0;
+    if (inp.drift) st.driftLock = true;
   } else if (!st.drifting && wantDrift) {
     st.gaugeAtDriftStart = st.gauge;
+    st.driftDir = Math.sign(inp.steer);
+    st.counterT = 0;
   }
   st.drifting = wantDrift;
   if (st.drifting) st.driftTime += dt;
@@ -394,13 +427,14 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   // ---- 슬립 (드리프트 시 옆으로 미끄러짐)
   if (st.drifting) {
     const slideMul = (0.55 + 0.45 * deep) * (1 - 0.45 * easing); // ↑ 떼면 슬립 절반
-    const target = Math.abs(inp.steer) > 0.2 ? Math.sign(inp.steer) * MAX_SLIP * slideMul : st.slip * Math.max(0, 1 - dt);
+    const engage = Math.max(0, Math.min(1, inp.steer * st.driftDir)); // 드리프트 방향으로 꺾는 만큼만 미끄러지고 충전된다
+    const target = st.driftDir * MAX_SLIP * slideMul * engage;
     st.slip += (target - st.slip) * Math.min(1, (5 + 4 * easing) * dt);
-    st.speed *= Math.max(0, 1 - (0.2 + 0.4 * deep + 0.25 * easing) * dt); // 깊을수록·↑ 뗄수록 속도 손실
+    st.speed *= Math.max(0, 1 - (0.25 + 0.35 * deep + 0.25 * easing) * dt); // 깊을수록·↑ 뗄수록 속도 손실
     if (!(st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS)) {
       // 부스터 중 드리프트는 1.6배 (카트라이더의 부스터 드리프트 충전 보너스). 얕은 드리프트가 충전 효율이 좋다
       const bonus = (boosting ? 1.6 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep);
-      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * bonus * dt;
+      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * engage * speedFrac * p.gaugeRate * bonus * dt;
       if (st.gauge >= 1) {
         // 칸이 비어 있으면 일반 부스터, 다 찼으면 한 칸씩 파란 부스터로 승격
         if (st.boosts < MAX_BOOSTS) st.boosts++;

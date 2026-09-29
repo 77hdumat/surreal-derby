@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { TrackGeometry } from '../track/TrackGeometry';
-import { BOOST_DURATION, LAPS, createKartState, finishDistance, resolveKartCollision, stepKart, syncKartToTrack, type KartInput, type KartParams } from './KartPhysics';
+import { BOOST_DURATION, BOOST_TOP, LAPS, createKartState, finishDistance, resolveKartCollision, stepKart, syncKartToTrack, type KartInput, type KartParams } from './KartPhysics';
 
 const track = new TrackGeometry();
-const P: KartParams = { maxSpeed: 20, accel: 8, handling: 1, mass: 100, gaugeRate: 0.55, boostMul: 1.35, radius: 1.3, boostReach: 0 };
+const P: KartParams = { maxSpeed: 20, accel: 8, handling: 1, mass: 100, gaugeRate: 0.55, boostAccel: 1, radius: 1.3, boostReach: 0 };
 const inp = (o: Partial<KartInput>): KartInput => ({ steer: 0, throttle: 0, brake: 0, drift: false, boost: false, ...o });
 const DT = 1 / 60;
 
@@ -48,9 +48,77 @@ describe('stepKart', () => {
     expect(st.boostT).toBeCloseTo(BOOST_DURATION - DT, 6);
     for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.2);
-    for (let i = 0; i < 600; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT); // 관성이 오래 남는다
+    for (let i = 0; i < 120; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    expect(st.speed).toBeLessThanOrEqual(BOOST_TOP + 1e-6);
+  });
+
+  it('부스트 최고속은 말 스탯과 무관하게 350km/h 로 같다', () => {
+    const tops = [20, 38, 41].map((maxSpeed) => {
+      const st = spawn();
+      st.speed = maxSpeed;
+      st.boosts = 1;
+      const Q = { ...P, maxSpeed };
+      for (let i = 0; i < 170; i++) stepKart(st, inp({ throttle: 1, boost: i === 0 }), Q, track, DT);
+      return st.speed;
+    });
+    for (const t of tops) expect(t).toBeCloseTo(BOOST_TOP, 3);
+  });
+
+  it('부스트는 점화 순간 속도가 튀지 않고 점점 가속된다', () => {
+    const st = spawn();
+    st.speed = 5;
+    st.boosts = 1;
+    const v: number[] = [st.speed];
+    for (let i = 0; i < 60; i++) {
+      stepKart(st, inp({ throttle: 1, boost: i === 0 }), P, track, DT);
+      v.push(st.speed);
+    }
+    expect(v[1] - v[0]).toBeLessThan(0.5); // 첫 프레임 점프 없음
+    const early = v[10] - v[0];
+    const late = v[60] - v[50];
+    expect(late).toBeGreaterThan(early * 1.5); // 가속이 뒤로 갈수록 붙는다
+  });
+
+  it('부스트가 끝나면 최고속 초과분이 서서히 빠진다', () => {
+    const st = spawn();
+    st.speed = P.maxSpeed * 1.5;
+    stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.45);
+    for (let i = 0; i < 600; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeLessThan(P.maxSpeed * 1.01);
     expect(st.speed).toBeGreaterThanOrEqual(P.maxSpeed);
+  });
+
+  it('Shift 만 누르고 직진하면 드리프트·게이지 충전이 안 된다', () => {
+    const st = spawn();
+    for (let i = 0; i < 180; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1, drift: true }), P, track, DT);
+    expect(st.drifting).toBe(false);
+    expect(st.gauge).toBe(0);
+  });
+
+  it('드리프트 중 조향을 풀면 끝나고, Shift 를 뗐다 눌러야 다시 들어간다', () => {
+    const st = spawn();
+    for (let i = 0; i < 180; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    expect(st.drifting).toBe(true);
+    const g = st.gauge;
+    for (let i = 0; i < 24; i++) stepKart(st, inp({ throttle: 1, drift: true }), P, track, DT); // 0.4s 조향 없이 Shift 만
+    expect(st.drifting).toBe(false);
+    expect(st.gauge).toBeLessThan(g + 0.02);
+    stepKart(st, inp({ throttle: 1, steer: -1, drift: true }), P, track, DT); // Shift 계속 누른 채 반대로 꺾어도
+    expect(st.drifting).toBe(false);
+    stepKart(st, inp({ throttle: 1, steer: -1 }), P, track, DT);
+    stepKart(st, inp({ throttle: 1, steer: -1, drift: true }), P, track, DT); // 다시 누르면 진입
+    expect(st.drifting).toBe(true);
+  });
+
+  it('드리프트는 가속을 눌러도 속도가 줄어든다', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    const v0 = st.speed;
+    for (let i = 0; i < 40; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    expect(st.speed).toBeLessThan(v0 * 0.9);
   });
 
   it('벽에 닿으면 lat 이 클램프되고 wall 이벤트 + 감속', () => {

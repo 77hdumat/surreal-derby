@@ -346,7 +346,6 @@ export class ItemSystem {
           } else {
             k.boostBlue = true;
             k.boostT = Math.max(k.boostT, BLUE_BOOST_DURATION);
-            k.speed = Math.max(k.speed, k.speed * 1.15);
           }
         }
         break;

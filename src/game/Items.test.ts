@@ -82,7 +82,7 @@ describe('물방울 탈출·착지 부스터', () => {
   it('좌우 연타로 물방울이 빨리 터지고, 떨어지는 순간 ↑ 면 부스터', () => {
     const st = kartAt(20, 0);
     st.bubbleT = 2;
-    const P = { maxSpeed: 40, accel: 10, handling: 1, mass: 100, gaugeRate: 0.8, boostMul: 1.57, radius: 1.3, boostReach: 0 };
+    const P = { maxSpeed: 40, accel: 10, handling: 1, mass: 100, gaugeRate: 0.8, boostAccel: 1, radius: 1.3, boostReach: 0 };
     const mash = (steer: number) => stepKart(st, { steer, throttle: 0, brake: 0, drift: false, boost: false }, P, track, 1 / 60);
     for (let i = 0; i < 7; i++) {
       mash(i % 2 === 0 ? 1 : -1);
@@ -108,7 +108,7 @@ describe('자석 추월', () => {
     me.item = 'magnet';
     sys.use(0, [me, ahead], [1, 0]);
     expect(me.magnetT).toBeGreaterThan(0);
-    const P = { maxSpeed: 40, accel: 10, handling: 1, mass: 100, gaugeRate: 0.8, boostMul: 1.57, radius: 1.3, boostReach: 0 };
+    const P = { maxSpeed: 40, accel: 10, handling: 1, mass: 100, gaugeRate: 0.8, boostAccel: 1, radius: 1.3, boostReach: 0 };
     for (let i = 0; i < 180 && me.magnetT > 0; i++) {
       sys.step(1 / 60, i / 60, [me, ahead], [true, false], [1, 0]);
       stepKart(me, { steer: 0, throttle: 1, brake: 0, drift: false, boost: false }, P, track, 1 / 60);
