@@ -90,6 +90,46 @@ export const CIRCUIT_POINTS: [number, number][] = [
   [-240, 60],
 ];
 
+/**
+ * 빌리지 고가의 질주 (카트라이더 오마주) — 원작 미니맵을 따라 그렸다. 평면 물리라 고가 입체 교차는 없다.
+ * 하단 대로 출발(+x) → 우측 오르막 → 우측 U자 굴곡 → 상단 고가 직선과 턱 → 좌상단 코너 → 좌측 나선 램프 → 좌하단 대각선 → 대로.
+ * 미니맵 격자 (col,row) 1칸 = 10m (한 바퀴 ≈3.3km)
+ */
+const HIGHWAY_POINTS: [number, number][] = (
+  [
+    [35, 77], [60, 77], [85, 77], // 출발: 하단 대로 (+x)
+    [92, 73], [93, 60], [92, 43], [92, 25], // 우측 오르막
+    [90, 19.5], [86, 18.5], [82, 20], // 우측 언덕 꼭대기
+    [80, 24], [80, 31], [78, 35], [72, 36], [68, 34], [66, 30], [66, 15], // U자 굴곡
+    [64, 10.5], [55, 9.5], [42, 9.5], [35, 9.5], // 상단 고가 직선
+    [32, 8], [27, 5.5], [22, 5.5], // 턱
+    [20.5, 8], [20.5, 15], [20.5, 28], // 좌상단 코너 → 내려오기
+    [19.5, 33], [17, 34.5], [14.5, 31.5], [12, 27], [7, 26.5], [3, 29.5], [2.5, 34], [4.5, 38], [8.5, 39.8], [12.5, 42], // 나선 램프
+    [12.5, 50], [12.5, 60], [15, 66], [20, 72], [26, 76.5], // 좌하단 대각선 → 대로
+  ] as [number, number][]
+).map(([c, r]) => [(c - 50) * 10, (r - 40) * 10] as [number, number]);
+
+export interface TrackLayout {
+  id: string;
+  name: string;
+  /** 대기실 버튼 한 줄 설명 */
+  desc: string;
+  emoji: string;
+  /** 주변 풍경: 동화책 자연(나무·산) / 도시(건물·가로등·아스팔트) */
+  theme: 'nature' | 'city';
+  points: [number, number][];
+}
+
+/** 대기실에서 고르는 맵 목록. 첫 번째가 기본 */
+export const TRACK_LAYOUTS: TrackLayout[] = [
+  { id: 'circuit', name: '사파리 서킷', desc: '빙글빙글 나선 + 헤어핀', emoji: '🌀', theme: 'nature', points: CIRCUIT_POINTS },
+  { id: 'highway', name: '빌리지 고가의 질주', desc: '도심 대로 → 고가 → 나선 램프', emoji: '🌉', theme: 'city', points: HIGHWAY_POINTS },
+];
+
+export function trackLayoutById(id: string | undefined): TrackLayout {
+  return TRACK_LAYOUTS.find((l) => l.id === id) ?? TRACK_LAYOUTS[0];
+}
+
 
 
 interface Sample {
@@ -107,11 +147,12 @@ interface Sample {
 export class TrackGeometry {
   readonly width = 36;
   readonly laneCount = 8;
-  readonly length: number;
+  /** 레이아웃을 바꾸면(setPoints) 아래 값들이 다시 계산된다 — 같은 객체를 쓰는 곳은 그대로 새 맵을 본다 */
+  length = 0;
   /** 출발선 = 결승선 (s=0). 출발 그리드는 선 바로 앞(s>0)이라 첫 통과가 실제 1바퀴 뒤 */
   readonly finishS = 0;
   /** 관람 모드 호환용: 1바퀴 + 결승선 */
-  readonly raceDistance: number;
+  raceDistance = 0;
   readonly samples: Sample[] = [];
   readonly bounds = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
   private cell = 20;
@@ -124,6 +165,13 @@ export class TrackGeometry {
   };
 
   constructor(points: [number, number][] = CIRCUIT_POINTS) {
+    this.setPoints(points);
+  }
+
+  /** 중심선 제어점으로 기하 전체를 다시 만든다 */
+  protected setPoints(points: [number, number][]): void {
+    this.samples.length = 0;
+    this.grid.clear();
     const curve = new THREE.CatmullRomCurve3(
       points.map(([x, z]) => new THREE.Vector3(x, 0, z)),
       true,

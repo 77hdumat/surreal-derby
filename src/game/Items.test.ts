@@ -79,7 +79,7 @@ describe('Items', () => {
 });
 
 describe('물방울 탈출·착지 부스터', () => {
-  it('좌우 연타로 물방울이 빨리 터지고, 떨어지는 순간 ↑ 면 부스터', () => {
+  it('좌우 연타로 물방울이 빨리 터지고, 떨어지는 순간 ↑ 면 순간부스터', () => {
     const st = kartAt(20, 0);
     st.bubbleT = 2;
     const P = { maxSpeed: 40, accel: 10, handling: 1, mass: 100, gaugeRate: 0.8, boostAccel: 1, radius: 1.3, boostReach: 0 };
@@ -92,8 +92,9 @@ describe('물방울 탈출·착지 부스터', () => {
     for (let i = 0; i < 25; i++) stepKart(st, { steer: 0, throttle: 0, brake: 0, drift: false, boost: false }, P, track, 1 / 60);
     expect(st.bubbleT).toBe(0);
     const ev = stepKart(st, { steer: 0, throttle: 1, brake: 0, drift: false, boost: false }, P, track, 1 / 60);
-    expect(ev.some((e) => e.k === 'boost')).toBe(true);
-    expect(st.boostT).toBeGreaterThan(1);
+    expect(ev.some((e) => e.k === 'mini')).toBe(true); // 진짜 부스터가 아니라 순간부스터
+    expect(st.boostT).toBe(0);
+    expect(st.miniT).toBeGreaterThan(0.5);
   });
 });
 

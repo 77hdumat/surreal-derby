@@ -1,7 +1,7 @@
 import type { RacerDefinition } from './Racer';
 
 /**
- * 제1회 초현실 경마 그랑프리 출전 선수 명단.
+ * 제1회 사파리런 그랑프리 출전 선수 명단.
  * 새 캐릭터 추가: 여기에 정의 + RacerFactory 에 placeholder 빌더 + RaceEngine 의 능력 분기.
  */
 export const RACER_DEFINITIONS: RacerDefinition[] = [

@@ -23,9 +23,9 @@ export type NetMsg =
   | { t: 'name'; name: string }
   | { t: 'pick'; mountId: string; jockeyId: string }
   | { t: 'ready'; v: boolean }
-  | { t: 'lobby'; slots: LobbySlot[]; raceMode?: RaceMode }
+  | { t: 'lobby'; slots: LobbySlot[]; raceMode?: RaceMode; trackId?: string }
   | { t: 'full'; why: 'slots' | 'playing' }
-  | { t: 'start'; slots: SlotConfig[]; seed: number; raceMode?: RaceMode }
+  | { t: 'start'; slots: SlotConfig[]; seed: number; raceMode?: RaceMode; trackId?: string }
   /** 클라 → 호스트: 레이스 모델 세팅 끝남 (호스트는 전원 준비 후 카운트다운) */
   | { t: 'loaded'; seed: number }
   | { t: 'count'; n: number }

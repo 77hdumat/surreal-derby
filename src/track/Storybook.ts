@@ -150,7 +150,7 @@ export interface StorybookWorld {
 /**
  * 서킷 주변을 채운다. project() 로 트랙에서의 거리를 재서 트랙 위에는 아무것도 두지 않는다.
  */
-export async function loadStorybookWorld(track: TrackGeometry, rnd: () => number = Math.random): Promise<StorybookWorld> {
+export async function loadStorybookWorld(track: TrackGeometry, rnd: () => number = Math.random, nature = true): Promise<StorybookWorld> {
   const group = new THREE.Group();
   const [treeA, treeC, bush, flowers, rock, mountains, mountainGroup, cloudA, cloudC] = await Promise.all([
     proto('tree_a', 11),
@@ -185,26 +185,30 @@ export async function loadStorybookWorld(track: TrackGeometry, rnd: () => number
       placed++;
     }
   };
-  // 나무: 트랙에서 12~120m
-  scatter(treeA, 70, halfW + 12, 120, 0.8, 1.4);
-  scatter(treeC, 50, halfW + 14, 120, 0.8, 1.3);
-  // 덤불·꽃·바위: 트랙 가장자리 가까이 (펜스 바로 바깥)
-  scatter(bush, 90, halfW + 5, 30, 0.8, 1.6);
-  scatter(flowers, 140, halfW + 5, 26, 0.8, 1.4);
-  scatter(rock, 40, halfW + 5, 60, 0.6, 1.5);
-  // 먼 산: 서킷을 둘러싼 링
-  const cx = (b.minX + b.maxX) / 2;
-  const cz = (b.minZ + b.maxZ) / 2;
-  const ring = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) * 0.5 + 520;
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2 + rnd() * 0.2;
-    const r = ring + rnd() * 160;
-    const m = (i % 2 ? mountainGroup : mountains).clone(true);
-    m.position.set(cx + Math.cos(a) * r, -2, cz + Math.sin(a) * r);
-    m.rotation.y = -a + Math.PI / 2 + rnd() * 0.6;
-    m.scale.multiplyScalar(0.9 + rnd() * 0.7);
-    freeze(m);
-    group.add(m);
+  // 도시 맵은 건물이 대신한다 — 구름만
+  if (nature) scatterNature();
+  function scatterNature(): void {
+    // 나무: 트랙에서 12~120m
+    scatter(treeA, 70, halfW + 12, 120, 0.8, 1.4);
+    scatter(treeC, 50, halfW + 14, 120, 0.8, 1.3);
+    // 덤불·꽃·바위: 트랙 가장자리 가까이 (펜스 바로 바깥)
+    scatter(bush, 90, halfW + 5, 30, 0.8, 1.6);
+    scatter(flowers, 140, halfW + 5, 26, 0.8, 1.4);
+    scatter(rock, 40, halfW + 5, 60, 0.6, 1.5);
+    // 먼 산: 서킷을 둘러싼 링
+    const cx = (b.minX + b.maxX) / 2;
+    const cz = (b.minZ + b.maxZ) / 2;
+    const ring = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) * 0.5 + 520;
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + rnd() * 0.2;
+      const r = ring + rnd() * 160;
+      const m = (i % 2 ? mountainGroup : mountains).clone(true);
+      m.position.set(cx + Math.cos(a) * r, -2, cz + Math.sin(a) * r);
+      m.rotation.y = -a + Math.PI / 2 + rnd() * 0.6;
+      m.scale.multiplyScalar(0.9 + rnd() * 0.7);
+      freeze(m);
+      group.add(m);
+    }
   }
   // 구름: 하늘에 떠서 천천히 흐른다
   const clouds: THREE.Object3D[] = [];

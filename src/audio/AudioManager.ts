@@ -492,6 +492,73 @@ export class AudioManager {
   }
 
   private boostLoops = new Map<string, { src: AudioBufferSourceNode; gain: GainNode }>();
+  private skids = new Map<string, { src: AudioBufferSourceNode; lfo: OscillatorNode; bp: BiquadFilterNode; bp2: BiquadFilterNode; gain: GainNode }>();
+
+  /**
+   * 드리프트 타이어 스퀼 "끼이익" — 노이즈를 좁은 대역(2.2kHz·4.4kHz)으로 걸러 음정이 들리게, 12Hz 로 살짝 떨게.
+   * amount 0..1 (슬립·속도). 끌리는 동안만 켜고, 0 이면 짧게 페이드아웃. 노드는 말마다 하나 만들어 재사용한다.
+   */
+  updateSkid(id: string, pos: THREE.Vector3, amount: number, own: boolean): void {
+    if (!this.ctx) return;
+    const vol = amount > 0.05 ? amount * 0.3 * (own ? 1 : this.distGain(pos)) : 0;
+    let n = this.skids.get(id);
+    if (!n) {
+      if (vol <= 0) return;
+      const ctx = this.ctx;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise();
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 2200;
+      bp.Q.value = 16;
+      const bp2 = ctx.createBiquadFilter();
+      bp2.type = 'bandpass';
+      bp2.frequency.value = 4400;
+      bp2.Q.value = 14;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 12;
+      const depth = ctx.createGain();
+      depth.gain.value = 70;
+      lfo.connect(depth);
+      depth.connect(bp.frequency);
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.45;
+      const makeup = ctx.createGain();
+      makeup.gain.value = 7; // 좁은 대역이라 에너지가 작다
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(bp);
+      src.connect(bp2);
+      bp.connect(makeup);
+      bp2.connect(g2);
+      g2.connect(makeup);
+      makeup.connect(gain);
+      gain.connect(this.sfx);
+      src.start();
+      lfo.start();
+      n = { src, lfo, bp, bp2, gain };
+      this.skids.set(id, n);
+    }
+    const t = this.ctx.currentTime;
+    n.gain.gain.setTargetAtTime(vol, t, vol > 0 ? 0.03 : 0.08);
+    // 깊게 끌릴수록 더 날카롭게
+    n.bp.frequency.setTargetAtTime(1900 + 700 * amount, t, 0.08);
+    n.bp2.frequency.setTargetAtTime(3800 + 1400 * amount, t, 0.08);
+  }
+
+  private stopSkids(): void {
+    for (const n of this.skids.values()) {
+      try {
+        n.src.stop();
+        n.lfo.stop();
+      } catch {
+        /* ignore */
+      }
+      n.gain.disconnect();
+    }
+    this.skids.clear();
+  }
 
   /** 부스트를 쓰는 동안만 울리는 루프 (얼룩말 부족 북). 부스트가 시작되면 처음부터, 끝나면 짧게 페이드아웃 */
   updateBoostLoop(id: string, name: SfxName, pos: THREE.Vector3, on: boolean, own: boolean, volume = 1): void {
@@ -532,6 +599,7 @@ export class AudioManager {
 
   stopRacerLoops(): void {
     for (const id of [...this.boostLoops.keys()]) this.stopBoostLoop(id);
+    this.stopSkids();
     this.bgmDuck = 1;
     for (const [id, n] of this.racerLoops) {
       try {

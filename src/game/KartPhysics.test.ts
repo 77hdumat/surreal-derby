@@ -102,10 +102,8 @@ describe('stepKart', () => {
     for (let i = 0; i < 180; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
     expect(st.drifting).toBe(true);
-    const g = st.gauge;
-    for (let i = 0; i < 24; i++) stepKart(st, inp({ throttle: 1, drift: true }), P, track, DT); // 0.4s 조향 없이 Shift 만
+    for (let i = 0; i < 45; i++) stepKart(st, inp({ throttle: 1, drift: true }), P, track, DT); // 0.75s 조향 없이 Shift 만
     expect(st.drifting).toBe(false);
-    expect(st.gauge).toBeLessThan(g + 0.02);
     stepKart(st, inp({ throttle: 1, steer: -1, drift: true }), P, track, DT); // Shift 계속 누른 채 반대로 꺾어도
     expect(st.drifting).toBe(false);
     stepKart(st, inp({ throttle: 1, steer: -1 }), P, track, DT);
@@ -133,6 +131,25 @@ describe('stepKart', () => {
     for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     expect(st.speed).toBeLessThanOrEqual(P.maxSpeed * MINI_MUL + 1e-6);
     expect(st.speed).toBeGreaterThan(P.accel * 1.2); // 일반 출발(1초에 accel)보다 빠르다
+  });
+
+  it('부스터 중 드리프트는 게이지가 훨씬 잘 차고 속도도 덜 잃는다', () => {
+    const run = (boost: boolean) => {
+      const st = spawn();
+      for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+      if (boost) {
+        st.boostT = 3;
+        st.boostAge = 1;
+        st.speed = BOOST_TOP * 0.9;
+      }
+      const v0 = st.speed;
+      for (let i = 0; i < 18; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+      return { gauge: st.gauge, keep: st.speed / v0 };
+    };
+    const plain = run(false);
+    const boosted = run(true);
+    expect(boosted.gauge).toBeGreaterThan(plain.gauge * 1.7);
+    expect(boosted.keep).toBeGreaterThan(plain.keep);
   });
 
   it('드리프트는 가속을 눌러도 속도가 줄어든다', () => {
@@ -253,24 +270,42 @@ describe('순간부스터', () => {
     for (let rep = 0; rep < 3; rep++) {
       const steer = rep % 2 ? -1 : 1; // 좌우 번갈아 (벽에 안 가게)
       for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer, drift: true }), P, track, DT); // 0.2s 드리프트
-      for (let i = 0; i < 6; i++) for (const e of stepKart(st, inp({ throttle: 1, steer: -steer * 0.5 }), P, track, DT)) if (e.k === 'mini') minis++;
+      // 반대로 꺾어 펴면 드리프트가 끝나고 ↑ 로 순간부스터
+      let got = false;
+      for (let i = 0; i < 24 && !got; i++) for (const e of stepKart(st, inp({ throttle: 1, steer: -steer }), P, track, DT)) if (e.k === 'mini') got = true;
+      if (got) minis++;
       expect(st.miniT).toBeGreaterThan(0);
-      for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer: -steer * 0.5 }), P, track, DT);
-      expect(st.speed).toBeGreaterThan(P.maxSpeed * 1.05);
+      const v0 = st.speed;
+      for (let i = 0; i < 12; i++) stepKart(st, inp({ throttle: 1, steer: -steer * 0.3 }), P, track, DT);
+      expect(st.speed).toBeGreaterThan(Math.min(v0 + 2, P.maxSpeed * 1.05)); // 순간부스터로 확 붙는다 (최고속 위까지)
       expect(Math.abs(st.lat)).toBeLessThan(13);
     }
     expect(minis).toBe(3);
   });
-  it('창이 지나면 ↑ 를 눌러도 안 나간다 / 너무 짧은 드리프트는 무시', () => {
+  it('창이 지나면 ↑ 를 눌러도 안 나간다', () => {
     const st = spawn();
     for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
     for (let i = 0; i < 20; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
-    for (let i = 0; i < 30; i++) stepKart(st, inp({}), P, track, DT); // 0.5s 아무것도 안 누름
+    for (let i = 0; i < 180; i++) stepKart(st, inp({}), P, track, DT); // 3s 아무것도 안 누름 (쭉 끌리다 풀리고 창도 지남)
+    expect(st.drifting).toBe(false);
     expect(st.miniWindow).toBe(0);
     expect(stepKart(st, inp({ throttle: 1 }), P, track, DT)).toEqual([]);
-    for (let i = 0; i < 4; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT); // 0.07s
-    expect(stepKart(st, inp({ throttle: 1 }), P, track, DT)).toEqual([]);
     expect(st.miniT).toBe(0);
+  });
+  it('Shift 를 톡 치고 방향키만 잡고 있어도 쭉 밀리며 게이지가 차고, 관성이 빠지면 끝난다', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT); // 한 프레임 톡
+    let frames = 0;
+    let maxGauge = 0;
+    for (let i = 0; i < 180 && st.drifting; i++, frames++) {
+      stepKart(st, inp({ throttle: 1, steer: 1 }), P, track, DT);
+      maxGauge = Math.max(maxGauge, st.gauge);
+    }
+    expect(frames).toBeGreaterThan(40); // 0.7s 이상 밀린다
+    expect(frames).toBeLessThan(150); // 영원히 밀리진 않는다
+    expect(maxGauge).toBeGreaterThan(0.08); // (테스트 직선이 짧아 끝에 벽에 닿으면 이번 드리프트 몫은 잃는다)
+    expect(st.miniWindow > 0 || st.bumpT > 0).toBe(true); // 끝나면 순간부스터 창 (벽에 닿아 끊긴 게 아니라면)
   });
 });
 

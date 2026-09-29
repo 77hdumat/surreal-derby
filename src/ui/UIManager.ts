@@ -8,7 +8,7 @@ import type { LobbySlot } from '../net/Protocol';
 import type { RaceResult, SlotConfig } from '../game/KartRace';
 import { LAPS } from '../game/KartPhysics';
 import { Minimap, type MinimapRacer } from './Minimap';
-import type { TrackGeometry } from '../track/TrackGeometry';
+import { TRACK_LAYOUTS, trackLayoutById, type TrackGeometry } from '../track/TrackGeometry';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 
@@ -92,6 +92,8 @@ export class UIManager {
   mountId: string;
   jockeyId: string;
   raceMode: 'speed' | 'item';
+  /** 고른 맵 id (TRACK_LAYOUTS) */
+  trackId: string;
   nick = '';
   private pickLocked = false;
 
@@ -118,6 +120,7 @@ export class UIManager {
   onChat: ((text: string) => void) | null = null;
   onNick: ((name: string) => void) | null = null;
   onMode: ((mode: 'speed' | 'item') => void) | null = null;
+  onTrack: ((id: string) => void) | null = null;
   onToggleMute: (() => boolean) | null = null;
   onToggleQuality: (() => boolean) | null = null;
 
@@ -137,6 +140,22 @@ export class UIManager {
         this.onMode?.(this.raceMode);
       });
     });
+    // 맵 선택 버튼 (TRACK_LAYOUTS 에서 생성)
+    this.trackId = trackLayoutById(this.load('surreal-derby-track', TRACK_LAYOUTS[0].id)).id;
+    const mapList = $('map-list');
+    for (const l of TRACK_LAYOUTS) {
+      const b = document.createElement('button');
+      b.className = 'mode-btn';
+      b.dataset.map = l.id;
+      b.innerHTML = `<b>${l.emoji} ${l.name}</b><span>${l.desc}</span>`;
+      b.addEventListener('click', () => {
+        this.trackId = l.id;
+        this.save('surreal-derby-track', this.trackId);
+        this.renderMode();
+        this.onTrack?.(this.trackId);
+      });
+      mapList.appendChild(b);
+    }
     const nick = $('nick') as HTMLInputElement;
     const lobbyNick = $('lobby-nick') as HTMLInputElement;
     nick.value = this.nick;
@@ -321,14 +340,16 @@ export class UIManager {
     this.minimap?.draw(racers, boxes);
   }
 
-  /** 경기 방식 버튼 표시 갱신 */
+  /** 경기 방식·맵 버튼 표시 갱신 */
   renderMode(): void {
     $('mode-list').querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.classList.toggle('active', b.dataset.mode === this.raceMode));
+    $('map-list').querySelectorAll<HTMLElement>('[data-map]').forEach((b) => b.classList.toggle('active', b.dataset.map === this.trackId));
   }
 
   /** 방장만 바꿀 수 있다 */
   setModeEditable(on: boolean): void {
     $('mode-list').classList.toggle('readonly', !on);
+    $('map-list').classList.toggle('readonly', !on);
   }
 
   /** 누적 1등 횟수 (브라우저 저장) */
@@ -584,15 +605,27 @@ export class UIManager {
     g.classList.toggle('boosting', h.boosting);
     // 아이템 칸: 아이콘만 크게 (이름은 툴팁)
     const slot = $('item-slot');
-    if (slot.textContent !== h.item) {
+    const slot2 = $('item-slot2');
+    const prev1 = slot.textContent ?? '';
+    const prev2 = slot2.textContent ?? '';
+    // 순서만 바뀌었으면 (C) 두 칸이 자리를 바꾸는 애니메이션
+    const swapped = !!h.item && !!h.item2 && h.item !== prev1 && h.item === prev2 && h.item2 === prev1;
+    if (prev1 !== h.item) {
       slot.textContent = h.item;
       slot.title = h.itemName;
+      slot.dataset.name = h.itemName; // 다음에 쓸 아이템 이름 (슬롯 아래 라벨)
       slot.classList.toggle('has', !!h.item);
     }
-    const slot2 = $('item-slot2');
-    if (slot2.textContent !== h.item2) {
+    if (prev2 !== h.item2) {
       slot2.textContent = h.item2;
       slot2.classList.toggle('has', !!h.item2);
+    }
+    if (swapped) {
+      for (const [el, cls] of [[slot, 'swap-in-l'], [slot2, 'swap-in-r']] as const) {
+        el.classList.remove('swap-in-l', 'swap-in-r');
+        void el.offsetWidth; // 애니메이션 다시 시작
+        el.classList.add(cls);
+      }
     }
     for (let i = 0; i < 2; i++) {
       const pip = $(`pip-${i}`);

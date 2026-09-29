@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TrackGeometry } from '../track/TrackGeometry';
+import { TRACK_LAYOUTS, TrackGeometry } from '../track/TrackGeometry';
 import { RACER_DEFINITIONS } from '../racers/RacerDefinitions';
 import { KartRace, type SlotConfig } from './KartRace';
 
@@ -37,6 +37,15 @@ describe('KartRace', () => {
     s.karts[0].item = 'missile';
     s.karts[0].item2 = 'banana';
     expect(s.swapItems(0)).toBe(false);
+  });
+
+  it.each(TRACK_LAYOUTS.slice(1))('CPU 4명이 $name 맵을 완주한다', (layout) => {
+    const r = new KartRace(new TrackGeometry(layout.points), RACER_DEFINITIONS);
+    r.setup(slots);
+    r.startCountdown();
+    for (let i = 0; i < 60 * 600 && r.phase !== 'OVER'; i++) r.step(DT);
+    expect(r.phase).toBe('OVER');
+    expect(r.karts.filter((k) => k.finished).length).toBeGreaterThanOrEqual(1);
   });
 
   it('그리드는 서로 겹치지 않고 게이트 뒤에서 출발', () => {

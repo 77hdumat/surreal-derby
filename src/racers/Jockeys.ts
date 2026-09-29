@@ -82,7 +82,7 @@ export function kartParamsFor(def: RacerDefinition, j: Jockey): KartParams {
   const k = MOUNT_KART[def.id] ?? { top: def.speed * 2.4 * 3.6, accel: def.acceleration * 2.8, handling: 0.85 + def.cornering * 0.6, mass: 50 + Math.pow(def.weight, 0.6) };
   return {
     maxSpeed: (k.top / 3.6) * m.maxSpeed,
-    accel: k.accel * m.accel,
+    accel: k.accel * m.accel * 0.8, // 가속은 쉽게 주지 않는다 — 속도를 잃으면 되찾는 데 오래 걸린다
     handling: k.handling * m.handling,
     mass: k.mass * m.mass,
     gaugeRate: 0.8 * (k.gauge ?? 1) * m.gaugeRate,

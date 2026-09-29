@@ -1,4 +1,4 @@
-# 초현실 경마 그랑프리 — 대결 모드 (Surreal Derby Kart Battle)
+# 사파리런 (Safari Run) — 대결 모드
 
 브라우저에서 바로 실행되는 3D 엽기 경마 레이싱. 말 9종 × 기수 6명 조합을 골라 3.9km 굴곡 서킷(코너 35개 + 이중 나선 구간)에서 최대 4인이 2바퀴 대결한다.
 Vite + TypeScript + Three.js, 멀티플레이는 PeerJS(WebRTC) P2P — 별도 서버 없음.

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { TrackGeometry } from './TrackGeometry';
+import { TRACK_LAYOUTS, TrackGeometry } from './TrackGeometry';
 
-describe('TrackGeometry (spline circuit)', () => {
-  const t = new TrackGeometry();
+describe.each(TRACK_LAYOUTS)('TrackGeometry ($name)', (layout) => {
+  const t = new TrackGeometry(layout.points);
   const sDiff = (a: number, b: number) => {
     const d = Math.abs(t.wrap(a) - t.wrap(b));
     return Math.min(d, t.length - d);

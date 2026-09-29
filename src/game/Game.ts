@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RaceTrack } from '../track/RaceTrack';
+import { TRACK_LAYOUTS } from '../track/TrackGeometry';
 import { RacerManager } from '../racers/RacerManager';
 import { RACER_DEFINITIONS } from '../racers/RacerDefinitions';
 import { GameCamera } from '../camera/GameCamera';
@@ -20,7 +21,7 @@ import { ItemVisuals } from '../effects/ItemVisuals';
 import { ITEM_INFO, type ItemEvent, type ItemKind } from './Items';
 import { encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
 import { RemoteKart } from '../net/RemoteKart';
-import { LAPS, START_BOOST_LATE, START_BOOST_WINDOW, applyStartBoost, currentLap } from './KartPhysics';
+import { LAPS, START_BOOST_LATE, START_BOOST_WINDOW, applyStartBoost, MAX_SLIP, currentLap } from './KartPhysics';
 import { JOCKEYS, jockeyById } from '../racers/Jockeys';
 
 type Mode = 'none' | 'solo' | 'host' | 'client';
@@ -58,6 +59,8 @@ export class Game {
   lobbySlot = 0;
   /** 경기 방식 (방장이 정한다) */
   raceMode: RaceMode = 'item';
+  /** 이번 판 맵 id — 방장이 대기실에서 고른다 */
+  trackId = TRACK_LAYOUTS[0].id;
   /** 로비 슬롯 → 레이스 슬롯 (-1 = 출전 안 함) */
   private netToRace: number[] = [];
   private lobby: LobbySlot[] = [];
@@ -217,6 +220,11 @@ export class Game {
     this.ui.onMode = (mode) => {
       if (this.mode === 'client') return; // 방장만 정한다
       this.raceMode = mode;
+      this.broadcastLobby();
+    };
+    this.ui.onTrack = (id) => {
+      if (this.mode === 'client') return; // 방장만 정한다
+      this.trackId = id;
       this.broadcastLobby();
     };
     // 대기실·결과 화면은 자유, 레이스 중엔 골인한 사람만
@@ -487,7 +495,7 @@ export class Game {
   }
 
   private broadcastLobby(): void {
-    this.net?.broadcast({ t: 'lobby', slots: this.lobby, raceMode: this.raceMode });
+    this.net?.broadcast({ t: 'lobby', slots: this.lobby, raceMode: this.raceMode, trackId: this.trackId });
   }
 
   private renderLobby(): void {
@@ -561,8 +569,12 @@ export class Game {
         if (m.raceMode) {
           this.raceMode = m.raceMode;
           this.ui.raceMode = m.raceMode;
-          this.ui.renderMode();
         }
+        if (m.trackId) {
+          this.trackId = m.trackId;
+          this.ui.trackId = m.trackId;
+        }
+        this.ui.renderMode();
         if (this.screen === 'LOBBY') this.renderLobby();
         break;
       case 'full':
@@ -570,6 +582,7 @@ export class Game {
         break;
       case 'start':
         if (m.raceMode) this.raceMode = m.raceMode;
+        if (m.trackId) this.trackId = m.trackId;
         void this.beginRace(m.slots, m.seed);
         break;
       case 'count':
@@ -730,7 +743,8 @@ export class Game {
     this.pendingSeed = seed;
     this.loadedSlots.clear();
     this.raceMode = this.ui.raceMode;
-    this.net?.broadcast({ t: 'start', slots, seed, raceMode: this.raceMode });
+    this.trackId = this.ui.trackId;
+    this.net?.broadcast({ t: 'start', slots, seed, raceMode: this.raceMode, trackId: this.trackId });
     void this.beginRace(slots, seed);
   }
 
@@ -750,6 +764,9 @@ export class Game {
     this.mySlot = Math.max(0, this.netToRace[this.lobbySlot] ?? 0);
     await this.racers.setLineup(slots);
     if (gen !== this.raceGen) return; // 세팅 중 나감
+    // 맵 교체 (같은 맵이면 그대로) — 레이스 세팅(그리드·장애물·아이템 상자) 전에
+    await this.track.setLayout(this.trackId);
+    if (gen !== this.raceGen) return;
     const me = this.mySlot;
     const mode = this.mode;
     this.race.authority = mode !== 'client';
@@ -1367,6 +1384,9 @@ export class Game {
       const active = Math.abs(k.speed) > 1.5;
       const own = i === this.mySlot;
       const ab = def.specialAbility;
+      // 드리프트로 끌리는 동안만 끼이익 (슬립이 클수록·빠를수록 크게)
+      const skid = k.drifting && !k.finished ? THREE.MathUtils.clamp(Math.abs(k.slip) / MAX_SLIP, 0, 1) * THREE.MathUtils.clamp((Math.abs(k.speed) - 6) / 18, 0, 1) : 0;
+      this.audio.updateSkid(String(i), pos, skid, own);
       if (ab === 'TROJAN') {
         // 나무 목마라 말발굽 소리는 없다 (루프는 무음으로). 나무 바퀴 굴러가는 소리는 부스트 동안만 (아래)
         this.audio.updateRacerLoop(String(i), 'gallop', pos, 0, { active: false, own });
@@ -1472,7 +1492,7 @@ export class Game {
     if (this.finishTimer > 0.3) {
       this.finishTimer = 0;
       const lines = this.race.ranking.slice(0, 4).map((slot, i) => `${i + 1}. ${this.race.slots[slot].name}`);
-      this.track.updateBigScreen('초현실 경마 그랑프리 · 대결', lines, this.race.time);
+      this.track.updateBigScreen('사파리런 · 대결', lines, this.race.time);
     }
   }
 
