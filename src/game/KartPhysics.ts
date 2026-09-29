@@ -137,24 +137,35 @@ export const BOOST_RAMP_TIME = 0.8;
 /** 파란 부스터: 최고속은 같고 가속이 더 세다 */
 export const BLUE_BOOST_ACCEL = 1.2;
 /** 드리프트 중 강하게 역조향을 이만큼(초) 유지하면 슬립이 남아 있어도 바로 탈출 */
-export const DRIFT_COUNTER_EXIT = 0.35;
+export const DRIFT_COUNTER_EXIT = 0.14;
 /** Shift 를 톡 치고 방향키를 잡고 있으면 이 시간(초) 동안 관성으로 밀린다. 방향키를 풀면 더 빨리 멈춘다 */
 export const DRIFT_TAP_SLIDE = 1.1;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
-export const MINI_DURATION = 0.55;
-export const MINI_MUL = 1.18;
+export const MINI_DURATION = 0.4;
+export const MINI_MUL = 1.28;
+/** 순간부스터 가속 배수 (엔진 가속 대비) · 발동 순간 속도 킥 (m/s) — 짧고 굵게 */
+export const MINI_ACCEL = 4.5;
+export const MINI_KICK = 3;
 export const MINI_WINDOW = 0.35;
 export const MINI_MIN_DRIFT = 0.12;
 /** 출발 부스터(순간부스터): GO 전 이 시간(초) 안에 ↑ 를 누르기 시작했거나, GO 뒤 START_BOOST_LATE 안에 누르면 */
 export const START_BOOST_WINDOW = 0.9;
 export const START_BOOST_LATE = 0.35;
 /** 출발 순간부스터 지속 — 정지 상태에서 시작하니 드리프트 뒤 순간부스터보다 조금 길게 */
-export const START_BOOST_DURATION = 0.9;
+export const START_BOOST_DURATION = 0.6;
 /** 물방울 착지 부스터(순간부스터): 풀린 뒤 이 시간(초) 안에 ↑ */
 export const LAND_BOOST_WINDOW = 0.5;
-export const LAND_BOOST_DURATION = 0.9;
+export const LAND_BOOST_DURATION = 0.6;
 /** 엔진 가속은 최고속에 가까울수록 둔해진다 (최고속에서 1-ACCEL_TAPER 배) — 속도를 잃으면 되찾기 어렵다 */
 export const ACCEL_TAPER = 0.55;
+/** 드리프트 진입 킥: 이 시간(초) 동안 꼬리가 확 빠지며 슬립이 최소 DRIFT_KICK_SLIP 배까지 붙는다 (카트라이더식 칼 진입) */
+export const DRIFT_KICK_TIME = 0.16;
+export const DRIFT_KICK_SLIP = 0.75;
+/** 슬립 변화 중 코(yaw)가 같이 돌아가는 비율 — 진입 땐 코만 안쪽으로 꺾이고 진행 방향은 유지, 끊으면 코가 제자리로 (제자리 끊기) */
+export const DRIFT_NOSE_FOLLOW = 0.6;
+/** 짧은 드리프트(끊기) 게이지 보너스 — 이 시간(초) 안의 드리프트 구간 */
+export const DRIFT_CUT_TIME = 0.4;
+export const DRIFT_CUT_BONUS = 1.5;
 
 /** 출발 부스터 부여 — 진짜 부스터가 아니라 순간부스터 (드리프트 뒤 ↑ 와 같은 가속) */
 export function applyStartBoost(st: KartState): void {
@@ -363,7 +374,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     if (!st.finished && inp.throttle > 0) {
       st.miniWindow = 0;
       st.miniT = MINI_DURATION;
-      st.speed = Math.max(st.speed, Math.min(p.maxSpeed * MINI_MUL, st.speed + 1.5));
+      st.speed = Math.max(st.speed, Math.min(p.maxSpeed * MINI_MUL, st.speed + MINI_KICK));
       events.push({ k: 'mini' });
     }
   }
@@ -382,7 +393,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   // 엔진 가속만 최고속에 가까울수록 둔해진다 (부스터·순간부스터는 그대로 확 붙는다)
   const sf = Math.max(0, Math.min(1, st.speed / p.maxSpeed));
   const taper = boosting || mini || magnet ? 1 : 1 - ACCEL_TAPER * sf * sf;
-  const accel = boosting ? Math.max(p.accel, boostAccel) : p.accel * (magnet ? 12 : mini ? 2.6 : 1);
+  const accel = boosting ? Math.max(p.accel, boostAccel) : p.accel * (magnet ? 12 : mini ? MINI_ACCEL : 1);
 
   // ---- 종방향
   if (inp.throttle > 0) {
@@ -447,23 +458,30 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   st.yaw -= yawRate * dt;
 
   // ---- 슬립 (드리프트 시 옆으로 미끄러짐)
+  const slipBefore = st.slip;
   if (st.drifting) {
     const slideMul = (0.55 + 0.45 * deep) * (1 - 0.45 * easing); // ↑ 떼면 슬립 절반
-    const engage = Math.max(0, Math.min(1, steerIn)); // 드리프트 방향으로 꺾는 만큼 깊어진다
-    const target = st.driftDir * MAX_SLIP * slideMul * engage * push;
-    // 슬립 변화 속도 = 완급 조절: 꺾으면 빨리 깊어지고, 놓으면 천천히 끌리며 펴지고, 반대로 꺾으면 빨리 편다
+    // 진입 킥: 처음 잠깐은 방향키를 얼마나 꺾었든 꼬리가 확 빠진다 (톡 쳐도 각이 선다)
+    const kicking = st.driftTime < DRIFT_KICK_TIME && steerIn > -0.2;
+    const engage = Math.max(kicking ? DRIFT_KICK_SLIP : 0, Math.min(1, steerIn)); // 드리프트 방향으로 꺾는 만큼 깊어진다
+    const target = st.driftDir * MAX_SLIP * Math.max(slideMul, kicking ? DRIFT_KICK_SLIP : 0) * engage * push;
+    // 슬립 변화 속도 = 완급 조절: 꺾으면 빨리 깊어지고, 놓으면 천천히 끌리며 펴지고, 반대로 꺾으면 탁 끊긴다
     const follow =
-      Math.abs(target) >= Math.abs(st.slip) ? 2.1 + 1.6 * easing
-      : steerIn < -0.2 ? 1.5 + 3 * -steerIn
+      kicking ? 11
+      : Math.abs(target) >= Math.abs(st.slip) ? 2.4 + 1.6 * easing
+      : steerIn < -0.2 ? 3 + 6 * -steerIn // 역조향: 제자리에서 끊기
       : inp.drift && engage < 0.2 ? 3 // Shift 만 누르고 직진: 오래 못 버틴다
       : 1.2; // 방향키를 놓으면 쭉 끌린다
-    st.slip += (target - st.slip) * Math.min(1, follow * dt);
+    // 부드럽게 붙고 풀리도록 지수 보간 (프레임레이트 무관)
+    st.slip += (target - st.slip) * (1 - Math.exp(-follow * dt));
     // 깊을수록·↑ 뗄수록 속도 손실 (관성 슬라이드는 덜, 부스터 중엔 절반 — 부스터 드리프트로 속도를 이어 간다)
     st.speed *= Math.max(0, 1 - (0.3 + 0.4 * deep + 0.25 * easing) * (0.4 + 0.6 * push) * (boosting ? 0.5 : 1) * dt);
     if (driftBoosts && !(st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS)) {
       // 부스터 중 드리프트는 2배 (카트라이더의 부스터 드리프트 충전 보너스) — 잘 이으면 부스터가 끊기지 않는다. 얕은 드리프트가 충전 효율이 좋다
       // 슬립만큼 찬다: 끌리는 동안에도 차고, 펴지면 멈춘다
-      const bonus = (boosting ? 2 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep);
+      // 짧게 끊는 드리프트(톡톡이)도 게이지가 쏠쏠히 찬다 — 직선에서 끊어 치며 게이지를 모으는 기술
+      const cut = st.driftTime < DRIFT_CUT_TIME ? DRIFT_CUT_BONUS : 1;
+      const bonus = (boosting ? 2 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep) * cut;
       st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * bonus * dt;
       if (st.gauge >= 1) {
         // 칸이 비어 있으면 일반 부스터, 다 찼으면 한 칸씩 파란 부스터로 승격
@@ -475,9 +493,12 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       }
     }
   } else {
-    st.slip += (0 - st.slip) * Math.min(1, 6 * dt);
+    st.slip += (0 - st.slip) * (1 - Math.exp(-6 * dt));
     if (Math.abs(st.slip) < 1e-3) st.slip = 0;
   }
+  // 슬립이 변한 만큼 코도 같이 돈다: 진입 땐 코가 안쪽으로 꺾이며 꼬리가 빠지고(진행 방향은 거의 그대로),
+  // 끊으면 코가 제자리로 돌아온다 — 그래서 직선에서 톡톡 끊어 쳐도 라인이 안 흔들린다
+  st.yaw -= (st.slip - slipBefore) * DRIFT_NOSE_FOLLOW;
 
   // ---- 이동
   const h = st.yaw + st.slip;

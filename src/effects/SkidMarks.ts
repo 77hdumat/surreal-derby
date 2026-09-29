@@ -56,8 +56,8 @@ export class SkidMarks {
         varying float vA;
         void main(){
           if (vA <= 0.0) discard;
-          // 흙이 긁힌 짙은 갈색 (동화책 톤이라 새까맣지 않게)
-          gl_FragColor = vec4(0.32, 0.2, 0.12, 0.5 * vA);
+          // 타이어가 긁고 간 진한 자국 — 처음엔 선명하고 끝에서 빠르게 옅어진다
+          gl_FragColor = vec4(0.1, 0.07, 0.05, 0.85 * sqrt(vA));
         }`,
     });
     this.mesh = new THREE.Mesh(geo, this.mat);

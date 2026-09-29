@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TrackGeometry } from '../track/TrackGeometry';
-import { BOOST_DURATION, BOOST_TOP, MINI_MUL, applyStartBoost, LAPS, createKartState, finishDistance, resolveKartCollision, stepKart, syncKartToTrack, type KartInput, type KartParams } from './KartPhysics';
+import { angleDelta, BOOST_DURATION, BOOST_TOP, MINI_MUL, applyStartBoost, LAPS, createKartState, finishDistance, resolveKartCollision, stepKart, syncKartToTrack, type KartInput, type KartParams } from './KartPhysics';
 
 const track = new TrackGeometry();
 const P: KartParams = { maxSpeed: 20, accel: 8, handling: 1, mass: 100, gaugeRate: 0.55, boostAccel: 1, radius: 1.3, boostReach: 0 };
@@ -306,6 +306,24 @@ describe('순간부스터', () => {
     expect(frames).toBeLessThan(150); // 영원히 밀리진 않는다
     expect(maxGauge).toBeGreaterThan(0.08); // (테스트 직선이 짧아 끝에 벽에 닿으면 이번 드리프트 몫은 잃는다)
     expect(st.miniWindow > 0 || st.bumpT > 0).toBe(true); // 끝나면 순간부스터 창 (벽에 닿아 끊긴 게 아니라면)
+  });
+  it('직선에서 짧게 드리프트 → 역조향으로 끊으면 진행 방향은 거의 그대로, 게이지는 찬다 (끊기)', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    const h0 = st.yaw + st.slip;
+    let gauge = 0;
+    for (let rep = 0; rep < 4; rep++) {
+      const steer = rep % 2 ? -1 : 1;
+      for (let i = 0; i < 9; i++) stepKart(st, inp({ throttle: 1, steer, drift: true }), P, track, DT); // 0.15s 칼 진입
+      expect(Math.abs(st.slip)).toBeGreaterThan(0.18); // 꼬리가 확 빠진다
+      let frames = 0;
+      for (; frames < 40 && st.drifting; frames++) stepKart(st, inp({ throttle: 1, steer: -steer }), P, track, DT);
+      expect(frames).toBeLessThan(16); // 탁 끊긴다
+      gauge = Math.max(gauge, st.gauge);
+      for (let i = 0; i < 6; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    }
+    expect(Math.abs(angleDelta(st.yaw + st.slip - h0))).toBeLessThan(0.35); // 좌우로 끊어 쳐도 라인 유지
+    expect(gauge).toBeGreaterThan(0.1);
   });
 });
 

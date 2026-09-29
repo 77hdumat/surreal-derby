@@ -257,7 +257,7 @@ export class RacerManager {
           }
           this.tmpFoot.set(-v.height * 0.3, 0, side * Math.max(0.3, v.height * 0.14)).applyMatrix4(v.root.matrixWorld);
           const h = k.yaw + k.slip;
-          this.skids.add(key, this.tmpFoot.x, this.tmpFoot.z, Math.cos(h), -Math.sin(h), 0.4, time);
+          this.skids.add(key, this.tmpFoot.x, this.tmpFoot.z, Math.cos(h), -Math.sin(h), 0.5, time);
         }
       }
 
