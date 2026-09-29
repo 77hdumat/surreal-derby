@@ -23,6 +23,22 @@ describe('KartRace', () => {
     expect(r.phase).toBe('RACING');
   });
 
+  it('아이템 순서 바꾸기: 두 칸이 다 차 있을 때만, 아이템전에서만', () => {
+    const r = new KartRace(new TrackGeometry(), RACER_DEFINITIONS);
+    r.setup(slots);
+    const k = r.karts[0];
+    k.item = 'missile';
+    expect(r.swapItems(0)).toBe(false);
+    k.item2 = 'banana';
+    expect(r.swapItems(0)).toBe(true);
+    expect([k.item, k.item2]).toEqual(['banana', 'missile']);
+    const s = new KartRace(new TrackGeometry(), RACER_DEFINITIONS);
+    s.setup(slots, undefined, 1, 'speed');
+    s.karts[0].item = 'missile';
+    s.karts[0].item2 = 'banana';
+    expect(s.swapItems(0)).toBe(false);
+  });
+
   it('그리드는 서로 겹치지 않고 게이트 뒤에서 출발', () => {
     const r = new KartRace(new TrackGeometry(), RACER_DEFINITIONS);
     r.setup(slots);

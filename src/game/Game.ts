@@ -1256,6 +1256,11 @@ export class Game {
     }
     for (const e of this.race.events) this.onRaceEvent(e);
     this.race.events = [];
+    // 아이템 순서 바꾸기 (C) — 두 칸이 다 차 있을 때만
+    if (this.input.swapPressed) {
+      this.input.swapPressed = false;
+      this.race.swapItems(this.mySlot);
+    }
     // 아이템 사용 (내 말)
     if (this.input.itemPressed) {
       this.input.itemPressed = false;
@@ -1485,7 +1490,7 @@ export class Game {
     if (this.throttleSince >= 0 && this.throttleSince >= this.goAt - START_BOOST_WINDOW * 1000) {
       this.startBoostDone = true;
       applyStartBoost(my);
-      this.onRaceEvent({ k: 'boost', slot: this.mySlot });
+      this.onRaceEvent({ k: 'mini', slot: this.mySlot });
       this.ui.showToast('출발 부스터!', 1200);
       return;
     }

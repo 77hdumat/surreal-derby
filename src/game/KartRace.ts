@@ -170,7 +170,7 @@ export class KartRace {
         this.slots.forEach((s, i) => {
           if (s.cpu && this.owned[i] && this.profiles[i].skill > 0.94) {
             applyStartBoost(this.karts[i]);
-            this.events.push({ k: 'boost', slot: i });
+            this.events.push({ k: 'mini', slot: i });
           }
         });
       }
@@ -183,7 +183,7 @@ export class KartRace {
       if (!this.owned[i]) continue;
       const st = this.karts[i];
       const inp = this.slots[i].cpu ? cpuInput(st, this.params[i], this.track, this.karts, this.profiles[i], this.cpuScratch[i], this.obstacles, dt) : this.inputs[i];
-      for (const e of stepKart(st, inp, this.params[i], this.track, dt, this.time, this.obstacles)) this.events.push({ ...e, slot: i });
+      for (const e of stepKart(st, inp, this.params[i], this.track, dt, this.time, this.obstacles, this.raceMode === 'speed')) this.events.push({ ...e, slot: i });
     }
     // 충돌: 내가 돌리는 말만 밀린다 (상대는 자기 쪽에서 자기 말을 민다)
     for (let a = 0; a < this.karts.length; a++) {
@@ -231,6 +231,14 @@ export class KartRace {
   useItem(slot: number): ItemEvent | null {
     if (this.phase !== 'RACING' || this.raceMode !== 'item') return null;
     return this.items.use(slot, this.karts, this.ranking);
+  }
+
+  /** 내 말의 아이템 두 칸 순서를 바꾼다 (다음에 쓸 아이템 선택). 바뀌었으면 true */
+  swapItems(slot: number): boolean {
+    const k = this.karts[slot];
+    if (this.raceMode !== 'item' || !k || k.finished || !k.item || !k.item2) return false;
+    [k.item, k.item2] = [k.item2, k.item];
+    return true;
   }
 
   /** 1등 골인 뒤 남은 시간 (초). 아직 아무도 안 들어왔으면 null */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TrackGeometry } from '../track/TrackGeometry';
-import { BOOST_DURATION, BOOST_TOP, LAPS, createKartState, finishDistance, resolveKartCollision, stepKart, syncKartToTrack, type KartInput, type KartParams } from './KartPhysics';
+import { BOOST_DURATION, BOOST_TOP, MINI_MUL, applyStartBoost, LAPS, createKartState, finishDistance, resolveKartCollision, stepKart, syncKartToTrack, type KartInput, type KartParams } from './KartPhysics';
 
 const track = new TrackGeometry();
 const P: KartParams = { maxSpeed: 20, accel: 8, handling: 1, mass: 100, gaugeRate: 0.55, boostAccel: 1, radius: 1.3, boostReach: 0 };
@@ -111,6 +111,28 @@ describe('stepKart', () => {
     stepKart(st, inp({ throttle: 1, steer: -1 }), P, track, DT);
     stepKart(st, inp({ throttle: 1, steer: -1, drift: true }), P, track, DT); // 다시 누르면 진입
     expect(st.drifting).toBe(true);
+  });
+
+  it('아이템전(driftBoosts=false)은 드리프트해도 게이지가 안 차고 부스터 키도 안 먹는다', () => {
+    const st = spawn();
+    for (let i = 0; i < 180; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT, 0, [], false);
+    for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT, 0, [], false);
+    expect(st.drifting).toBe(true);
+    expect(st.gauge).toBe(0);
+    st.boosts = 1;
+    expect(stepKart(st, inp({ throttle: 1, boost: true }), P, track, DT, 0, [], false)).toEqual([]);
+    expect(st.boostT).toBe(0);
+    expect(st.boosts).toBe(1);
+  });
+
+  it('출발 부스터는 진짜 부스터가 아니라 순간부스터', () => {
+    const st = spawn();
+    applyStartBoost(st);
+    expect(st.boostT).toBe(0);
+    expect(st.miniT).toBeGreaterThan(0);
+    for (let i = 0; i < 60; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    expect(st.speed).toBeLessThanOrEqual(P.maxSpeed * MINI_MUL + 1e-6);
+    expect(st.speed).toBeGreaterThan(P.accel * 1.2); // 일반 출발(1초에 accel)보다 빠르다
   });
 
   it('드리프트는 가속을 눌러도 속도가 줄어든다', () => {

@@ -141,17 +141,18 @@ export const MINI_DURATION = 0.55;
 export const MINI_MUL = 1.18;
 export const MINI_WINDOW = 0.35;
 export const MINI_MIN_DRIFT = 0.12;
-/** 출발 부스터: GO 전 이 시간(초) 안에 ↑ 를 누르기 시작했거나, GO 뒤 START_BOOST_LATE 안에 누르면 */
+/** 출발 부스터(순간부스터): GO 전 이 시간(초) 안에 ↑ 를 누르기 시작했거나, GO 뒤 START_BOOST_LATE 안에 누르면 */
 export const START_BOOST_WINDOW = 0.9;
 export const START_BOOST_LATE = 0.35;
-export const START_BOOST_DURATION = 1.1;
+/** 출발 순간부스터 지속 — 정지 상태에서 시작하니 드리프트 뒤 순간부스터보다 조금 길게 */
+export const START_BOOST_DURATION = 0.9;
 /** 물방울 착지 부스터: 풀린 뒤 이 시간(초) 안에 ↑ */
 export const LAND_BOOST_WINDOW = 0.5;
 export const LAND_BOOST_DURATION = 1.4;
 
-/** 출발 부스터 부여 */
+/** 출발 부스터 부여 — 진짜 부스터가 아니라 순간부스터 (드리프트 뒤 ↑ 와 같은 가속) */
 export function applyStartBoost(st: KartState): void {
-  st.boostT = START_BOOST_DURATION;
+  st.miniT = Math.max(st.miniT, START_BOOST_DURATION);
 }
 export const MAX_SLIP = 0.45;
 /** 벽 판정 여유 — 트랙 폭 절반에서 뺀다 */
@@ -275,8 +276,9 @@ export function hitDuringDrift(st: KartState): void {
 
 /**
  * 한 스텝 물리. 결정적(입력·dt 만 의존). 호스트와 게스트 예측이 같은 코드를 돈다.
+ * driftBoosts=false (아이템전): 드리프트 게이지·부스터가 없다. 부스트는 아이템으로만.
  */
-export function stepKart(st: KartState, input: KartInput, p: KartParams, track: TrackGeometry, dt: number, time = 0, obstacles: Obstacle[] = []): KartEvent[] {
+export function stepKart(st: KartState, input: KartInput, p: KartParams, track: TrackGeometry, dt: number, time = 0, obstacles: Obstacle[] = [], driftBoosts = true): KartEvent[] {
   const events: KartEvent[] = [];
   if (dt <= 0) return events;
   // ---- 아이템 효과 타이머
@@ -333,7 +335,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   }
   // ---- 부스트: 부스트 중엔 무시(소모 안 함). 끝나기 0.25초 전부터는 누르고 있으면 끊김 없이 바로 이어진다
   st.boostKeyWas = inp.boost;
-  if (!st.finished && inp.boost && st.boosts > 0 && st.boostT <= 0.25) {
+  if (driftBoosts && !st.finished && inp.boost && st.boosts > 0 && st.boostT <= 0.25) {
     st.boosts--;
     const blue = st.blueBoosts > 0;
     if (blue) st.blueBoosts--;
@@ -431,7 +433,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     const target = st.driftDir * MAX_SLIP * slideMul * engage;
     st.slip += (target - st.slip) * Math.min(1, (5 + 4 * easing) * dt);
     st.speed *= Math.max(0, 1 - (0.25 + 0.35 * deep + 0.25 * easing) * dt); // 깊을수록·↑ 뗄수록 속도 손실
-    if (!(st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS)) {
+    if (driftBoosts && !(st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS)) {
       // 부스터 중 드리프트는 1.6배 (카트라이더의 부스터 드리프트 충전 보너스). 얕은 드리프트가 충전 효율이 좋다
       const bonus = (boosting ? 1.6 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep);
       st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * engage * speedFrac * p.gaugeRate * bonus * dt;

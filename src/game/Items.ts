@@ -1,5 +1,5 @@
 import type { TrackGeometry } from '../track/TrackGeometry';
-import { BLUE_BOOST_DURATION, MAX_BOOSTS, type KartState } from './KartPhysics';
+import { BLUE_BOOST_DURATION, type KartState } from './KartPhysics';
 import { mulberry32 } from './Obstacles';
 
 export type ItemKind = 'missile' | 'waterfly' | 'banana' | 'mine' | 'boost' | 'shield' | 'magnet' | 'ufo' | 'gas';
@@ -339,14 +339,9 @@ export class ItemSystem {
       }
       case 'boost':
         if (mine && k) {
-          // 이미 부스트 중이면 파란 부스터로 쌓아 둔다 (키가 먹통이 되지 않게)
-          if (k.boostT > 0.25) {
-            k.boosts = Math.min(MAX_BOOSTS, k.boosts + 1);
-            k.blueBoosts = Math.min(k.boosts, k.blueBoosts + 1);
-          } else {
-            k.boostBlue = true;
-            k.boostT = Math.max(k.boostT, BLUE_BOOST_DURATION);
-          }
+          // 아이템전엔 부스터 칸이 없다 — 이미 부스트 중이면 남은 시간에 이어 붙인다
+          k.boostBlue = true;
+          k.boostT += BLUE_BOOST_DURATION;
         }
         break;
       case 'shield':

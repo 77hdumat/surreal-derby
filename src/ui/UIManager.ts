@@ -527,6 +527,11 @@ export class UIManager {
     // HUD 가 보인 뒤에야 캔버스 크기를 알 수 있다
     requestAnimationFrame(() => this.minimap?.build());
     $('item-box').classList.toggle('hidden', !showItems);
+    // 아이템전: 드리프트 게이지·부스터 칸 없음 (부스트는 아이템으로만)
+    document.querySelector('.boost-slots')?.classList.toggle('hidden', showItems);
+    document.querySelector('.gauge')?.classList.toggle('hidden', showItems);
+    document.querySelector('#touch [data-key="boost"]')?.classList.toggle('hidden', showItems);
+    document.querySelector('#touch [data-key="swap"]')?.classList.toggle('hidden', !showItems);
     this.menu.classList.add('hidden');
     this.lobby.classList.add('hidden');
     this.hud.classList.remove('hidden');
