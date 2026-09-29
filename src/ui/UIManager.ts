@@ -650,7 +650,7 @@ export class UIManager {
       const li = document.createElement('li');
       li.style.animationDelay = `${i * 0.08}s`;
       if (r.me) li.classList.add('me');
-      const t = r.time !== null ? r.time.toFixed(2) + 's' : '리타이어';
+      const t = r.time !== null ? r.time.toFixed(2) + 's' : 'DNF';
       li.innerHTML = `<span class="pos">${r.rank}위</span><span class="num">${r.slot + 1}</span><span class="name">${r.name}</span><span class="combo">${r.mountEmoji} ${r.mountName} · ${r.jockeyEmoji} ${r.jockeyName}</span><span class="time">${t}</span>`;
       list.appendChild(li);
     });

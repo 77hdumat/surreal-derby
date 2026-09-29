@@ -1437,7 +1437,7 @@ export class Game {
       const n = Math.ceil(fc);
       if (n !== this.lastFinishCount) {
         this.lastFinishCount = n;
-        this.ui.setCountdown(n > 0 ? String(n) : '리타이어');
+        this.ui.setCountdown(n > 0 ? String(n) : 'DNF');
         if (n > 0 && n <= 5) this.audio.play('bell', { gain: 0.4, rate: 1.6 });
       }
     } else if (this.lastFinishCount !== -1 && myKart.finished) {

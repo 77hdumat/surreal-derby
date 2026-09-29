@@ -42,7 +42,7 @@ export interface RaceResult {
 }
 
 export const COUNTDOWN_SECONDS = 3;
-/** 1등 골인 후 이 시간 안에 못 들어오면 리타이어 */
+/** 1등 골인 후 이 시간 안에 못 들어오면 DNF (Did Not Finish) */
 export const FINISH_GRACE = 10;
 export const MAX_SLOTS = 4;
 
