@@ -440,7 +440,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   // 드리프트 중 ↑ 를 떼면 덜 미끄러지고 더 꺾인다 (카트라이더 완급 조절)
   const easing = st.drifting && inp.throttle <= 0 ? 1 : 0;
   // 드리프트 중 브레이크(↓)를 같이 누르면 더 조인다 — 헤어핀 유턴용
-  if (st.drifting) yawRate *= (1.15 + 0.85 * deep) * (1 + 0.15 * easing) * (1 + 0.35 * Math.min(1, inp.brake));
+  if (st.drifting) yawRate *= (1.1 + 0.7 * deep) * (1 + 0.15 * easing) * (1 + 0.35 * Math.min(1, inp.brake));
   // 최고속을 넘으면(부스터) 선회력도 같이 올라간다 — 350km/h 에서도 실력으로 코너를 돌 수 있게
   yawRate *= Math.pow(Math.max(1, Math.abs(st.speed) / p.maxSpeed), 0.75);
   if (st.speed < 0) yawRate = -yawRate;
@@ -453,7 +453,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
     const target = st.driftDir * MAX_SLIP * slideMul * engage * push;
     // 슬립 변화 속도 = 완급 조절: 꺾으면 빨리 깊어지고, 놓으면 천천히 끌리며 펴지고, 반대로 꺾으면 빨리 편다
     const follow =
-      Math.abs(target) >= Math.abs(st.slip) ? 2.6 + 2 * easing
+      Math.abs(target) >= Math.abs(st.slip) ? 2.1 + 1.6 * easing
       : steerIn < -0.2 ? 1.5 + 3 * -steerIn
       : inp.drift && engage < 0.2 ? 3 // Shift 만 누르고 직진: 오래 못 버틴다
       : 1.2; // 방향키를 놓으면 쭉 끌린다
