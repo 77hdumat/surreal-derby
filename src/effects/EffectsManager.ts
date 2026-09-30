@@ -67,7 +67,7 @@ export class EffectsManager {
     this.composer.addPass(new OutputPass());
     this.fxCanvas = fxCanvas;
     this.fxCtx = fxCanvas.getContext('2d')!;
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < 40; i++) {
       this.lines.push({ a: Math.random() * Math.PI * 2, len: 0.2 + Math.random() * 0.5, w: 1 + Math.random() * 2.5, off: Math.random() });
     }
     this.resize(size.x, size.y);
@@ -150,13 +150,13 @@ export class EffectsManager {
       ctx.lineCap = 'round';
       for (const l of this.lines) {
         l.off = (l.off + dt * (3 + s * 6)) % 1;
-        const inner = R * (0.35 + (1 - s) * 0.3 + l.off * 0.2);
+        const inner = R * (0.5 + (1 - s) * 0.25 + l.off * 0.2); // 가운데(트랙)는 비워 둔다
         const outer = inner + R * l.len * s;
         const x1 = cx + Math.cos(l.a) * inner;
         const y1 = cy + Math.sin(l.a) * inner;
         const x2 = cx + Math.cos(l.a) * outer;
         const y2 = cy + Math.sin(l.a) * outer;
-        ctx.strokeStyle = `rgba(255,255,255,${0.18 * s})`;
+        ctx.strokeStyle = `rgba(255,255,255,${0.1 * s})`;
         ctx.lineWidth = l.w * s;
         ctx.beginPath();
         ctx.moveTo(x1, y1);

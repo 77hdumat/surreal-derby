@@ -1417,8 +1417,8 @@ export class Game {
     this.camera.update(dt, myKart, boost);
     // 속도감: 부스트 잔상·스피드라인 강하게, 고속 주행 자체도 살짝
     const speedK = THREE.MathUtils.clamp((Math.abs(myKart.speed) - 28) / 25, 0, 1);
-    this.effects.setAfterimage(Math.max(this.camera.boostNearby * 0.8, speedK * 0.25));
-    this.effects.setSpeedLines(Math.max(this.camera.boostNearby * 1.9, speedK * 0.4));
+    this.effects.setAfterimage(Math.max(this.camera.boostNearby * 0.45, speedK * 0.2));
+    this.effects.setSpeedLines(Math.max(this.camera.boostNearby * 0.8, speedK * 0.3));
     this.effects.setBoostBlur(this.camera.boostNearby);
     this.effects.setSlowMo(0);
     if (myKart.drifting) this.camera.shake(dt * 0.08);

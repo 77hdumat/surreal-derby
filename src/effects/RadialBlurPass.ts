@@ -24,7 +24,7 @@ export const RadialBlurShader = {
       vec2 d = vUv - uCenter;
       float r = length(d * vec2(1.3, 1.0));
       // 가운데는 선명, 바깥으로 갈수록 강하게
-      float mask = smoothstep(0.12, 0.62, r);
+      float mask = smoothstep(0.25, 0.75, r);
       float amt = uStrength * mask;
       vec3 col = vec3(0.0);
       // 샘플 시작점을 픽셀마다 살짝 흔들어 계단 무늬 대신 부드러운 번짐
@@ -32,11 +32,11 @@ export const RadialBlurShader = {
       const int N = 8;
       for (int i = 0; i < N; i++) {
         float t = (float(i) + jitter) / float(N);
-        col += texture2D(tDiffuse, vUv - d * t * amt * 0.22).rgb;
+        col += texture2D(tDiffuse, vUv - d * t * amt * 0.14).rgb;
       }
       col /= float(N);
       // 공기가 뿌얘지는 헤이즈 (바깥일수록)
-      col = mix(col, uHaze, uStrength * mask * mask * 0.32);
+      col = mix(col, uHaze, uStrength * mask * mask * 0.1);
       gl_FragColor = vec4(col, 1.0);
     }`,
 };

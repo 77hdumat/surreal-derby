@@ -215,7 +215,7 @@ export class WindSplit {
       const on = si < active ? 1 : 0;
       // 머리는 수명 동안 경로를 따라 전진, 꼬리는 len 만큼 뒤
       const head = s.t * (1 + s.len);
-      const fade = Math.sin(Math.PI * Math.min(1, s.t)) * on * k * (s.spark ? 1 : 0.75);
+      const fade = Math.sin(Math.PI * Math.min(1, s.t)) * on * k * (s.spark ? 0.8 : 0.45);
       for (let j = 0; j < SEG; j++) {
         const u = j / (SEG - 1); // 0 = 머리, 1 = 꼬리
         const q = head - u * s.len;
