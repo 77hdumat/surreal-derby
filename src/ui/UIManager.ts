@@ -595,7 +595,7 @@ export class UIManager {
     $('hud-pos-total').textContent = `/${h.total}`;
     const kmh = Math.round(Math.abs(h.speed) * 3.6);
     $('hud-speed').textContent = String(kmh);
-    ($('speed-bar') as HTMLElement).style.width = `${Math.min(100, (kmh / 350) * 100)}%`;
+    ($('speed-bar') as HTMLElement).style.width = `${Math.min(100, (kmh / 320) * 100)}%`;
     $('race-time').textContent = fmtTime(h.time);
     $('lap-time').textContent = fmtTime(Math.max(0, h.time - this.lapStart));
     const fill = $('gauge-fill');

@@ -52,7 +52,7 @@ describe('stepKart', () => {
     expect(st.speed).toBeLessThanOrEqual(BOOST_TOP + 1e-6);
   });
 
-  it('부스트 최고속은 말 스탯과 무관하게 350km/h 로 같다', () => {
+  it('부스트 최고속은 말 스탯과 무관하게 320km/h 로 같다', () => {
     const tops = [20, 38, 41].map((maxSpeed) => {
       const st = spawn();
       st.speed = maxSpeed;
@@ -306,6 +306,23 @@ describe('순간부스터', () => {
     expect(frames).toBeLessThan(150); // 영원히 밀리진 않는다
     expect(maxGauge).toBeGreaterThan(0.08); // (테스트 직선이 짧아 끝에 벽에 닿으면 이번 드리프트 몫은 잃는다)
     expect(st.miniWindow > 0 || st.bumpT > 0).toBe(true); // 끝나면 순간부스터 창 (벽에 닿아 끊긴 게 아니라면)
+  });
+  it('드리프트 중 미끄러지는 반대쪽 방향키를 누르면 즉시 끊긴다', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    expect(st.drifting).toBe(true);
+    let frames = 0;
+    for (; frames < 10 && st.drifting; frames++) stepKart(st, inp({ throttle: 1, steer: -1, drift: true }), P, track, DT);
+    expect(frames).toBeLessThanOrEqual(3);
+  });
+  it('속도가 떨어지면 드리프트가 저절로 끊긴다 (Shift 를 떼고 있으면 더 일찍)', () => {
+    const st = spawn();
+    for (let i = 0; i < 300; i++) stepKart(st, inp({ throttle: 1 }), P, track, DT);
+    stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
+    for (let i = 0; i < 300 && st.drifting; i++) stepKart(st, inp({ brake: 1, steer: 1 }), P, track, DT);
+    expect(st.drifting).toBe(false);
+    expect(st.speed).toBeGreaterThan(P.maxSpeed * 0.2); // 멈추기 한참 전에 끊긴다
   });
   it('직선에서 짧게 드리프트 → 역조향으로 끊으면 진행 방향은 거의 그대로, 게이지는 찬다 (끊기)', () => {
     const st = spawn();

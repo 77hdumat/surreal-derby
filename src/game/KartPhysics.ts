@@ -128,16 +128,21 @@ export const MAX_BOOSTS = 2;
 export const BOOST_DURATION = 3.0;
 /** 파란 부스터: 1.5배 길고 더 빠르다 */
 export const BLUE_BOOST_DURATION = BOOST_DURATION * 1.5;
-/** 부스트 최고속 — 말·기수와 무관하게 전원 동일 (350km/h) */
-export const BOOST_TOP = 350 / 3.6;
+/** 부스트 최고속 — 말·기수와 무관하게 전원 동일 (320km/h) */
+export const BOOST_TOP = 320 / 3.6;
 /** 부스트 가속 (m/s²). 켜진 순간엔 BOOST_RAMP_START 배에서 시작해 BOOST_RAMP_TIME 동안 점점 붙는다 */
 export const BOOST_ACCEL = 38;
 export const BOOST_RAMP_START = 0.3;
 export const BOOST_RAMP_TIME = 0.8;
 /** 파란 부스터: 최고속은 같고 가속이 더 세다 */
 export const BLUE_BOOST_ACCEL = 1.2;
-/** 드리프트 중 강하게 역조향을 이만큼(초) 유지하면 슬립이 남아 있어도 바로 탈출 */
-export const DRIFT_COUNTER_EXIT = 0.14;
+/** 드리프트 중 미끄러지는 반대쪽 방향키를 이만큼(초) 누르면 슬립이 남아 있어도 바로 끊긴다 (2프레임 — 오입력만 거른다) */
+export const DRIFT_COUNTER_EXIT = 0.03;
+/** 이 속도(최고속 비율) 밑으로 떨어지면 드리프트가 저절로 끊긴다. Shift 를 누르고 있으면 더 버틴다 (헤어핀 유턴) */
+export const DRIFT_MIN_SPEED = 0.3;
+export const DRIFT_MIN_SPEED_HELD = 0.15;
+/** 드리프트 게이지 충전 배수 */
+export const DRIFT_GAUGE_MUL = 1.4;
 /** Shift 를 톡 치고 방향키를 잡고 있으면 이 시간(초) 동안 관성으로 밀린다. 방향키를 풀면 더 빨리 멈춘다 */
 export const DRIFT_TAP_SLIDE = 1.1;
 /** 순간부스터: 지속·최고속 배수·입력 창·최소 드리프트 시간 */
@@ -423,7 +428,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   // 슬립이 거의 풀렸으면 그립 복귀 (Shift 를 누르고 꺾고 있으면 계속, 관성이 다 빠졌으면 꺾고 있어도 끝)
   const settled = st.drifting && st.driftTime > 0.15 && (steerIn < 0.3 || st.driftPush <= 0) && Math.abs(st.slip) < MAX_SLIP * 0.12;
   const canStart = inp.drift && !st.driftLock && st.speed > p.maxSpeed * 0.4 && Math.abs(inp.steer) > 0.35;
-  const keep = st.drifting && !straightened && !settled && st.speed > p.maxSpeed * 0.12;
+  const keep = st.drifting && !straightened && !settled && st.speed > p.maxSpeed * (inp.drift ? DRIFT_MIN_SPEED_HELD : DRIFT_MIN_SPEED);
   const wantDrift = !st.finished && (st.drifting ? keep : canStart);
   if (st.drifting && !wantDrift) {
     // 드리프트 종료 → 순간부스터 입력 창 (너무 짧은 드리프트는 제외)
@@ -452,7 +457,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   const easing = st.drifting && inp.throttle <= 0 ? 1 : 0;
   // 드리프트 중 브레이크(↓)를 같이 누르면 더 조인다 — 헤어핀 유턴용
   if (st.drifting) yawRate *= (1.1 + 0.7 * deep) * (1 + 0.15 * easing) * (1 + 0.35 * Math.min(1, inp.brake));
-  // 최고속을 넘으면(부스터) 선회력도 같이 올라간다 — 350km/h 에서도 실력으로 코너를 돌 수 있게
+  // 최고속을 넘으면(부스터) 선회력도 같이 올라간다 — 320km/h 에서도 실력으로 코너를 돌 수 있게
   yawRate *= Math.pow(Math.max(1, Math.abs(st.speed) / p.maxSpeed), 0.75);
   if (st.speed < 0) yawRate = -yawRate;
   st.yaw -= yawRate * dt;
@@ -471,7 +476,8 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       : Math.abs(target) >= Math.abs(st.slip) ? 2.4 + 1.6 * easing
       : steerIn < -0.2 ? 3 + 6 * -steerIn // 역조향: 제자리에서 끊기
       : inp.drift && engage < 0.2 ? 3 // Shift 만 누르고 직진: 오래 못 버틴다
-      : 1.2; // 방향키를 놓으면 쭉 끌린다
+      : inp.drift ? 2 + 2 * (1 - engage) // 조향을 덜 꺾으면 그만큼 빨리 그립이 돌아온다
+      : 1.6 + 1.6 * (1 - engage); // Shift 를 떼면 관성으로 끌리되, 방향키까지 놓으면 금방 잡힌다
     // 부드럽게 붙고 풀리도록 지수 보간 (프레임레이트 무관)
     st.slip += (target - st.slip) * (1 - Math.exp(-follow * dt));
     // 깊을수록·↑ 뗄수록 속도 손실 (관성 슬라이드는 덜, 부스터 중엔 절반 — 부스터 드리프트로 속도를 이어 간다)
@@ -482,7 +488,7 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       // 짧게 끊는 드리프트(톡톡이)도 게이지가 쏠쏠히 찬다 — 직선에서 끊어 치며 게이지를 모으는 기술
       const cut = st.driftTime < DRIFT_CUT_TIME ? DRIFT_CUT_BONUS : 1;
       const bonus = (boosting ? 2 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep) * cut;
-      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * bonus * dt;
+      st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * DRIFT_GAUGE_MUL * bonus * dt;
       if (st.gauge >= 1) {
         // 칸이 비어 있으면 일반 부스터, 다 찼으면 한 칸씩 파란 부스터로 승격
         if (st.boosts < MAX_BOOSTS) st.boosts++;
@@ -498,7 +504,9 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
   }
   // 슬립이 변한 만큼 코도 같이 돈다: 진입 땐 코가 안쪽으로 꺾이며 꼬리가 빠지고(진행 방향은 거의 그대로),
   // 끊으면 코가 제자리로 돌아온다 — 그래서 직선에서 톡톡 끊어 쳐도 라인이 안 흔들린다
-  st.yaw -= (st.slip - slipBefore) * DRIFT_NOSE_FOLLOW;
+  // 단, 드리프트 중 조향을 풀어 슬립이 줄 때는 코를 두고 진행 방향이 코 쪽으로 붙는다 (그립 회복 = 계속 돈다, 바깥으로 흘러나가지 않음)
+  const recovering = st.drifting && Math.abs(st.slip) < Math.abs(slipBefore) && steerIn > -0.2;
+  st.yaw -= (st.slip - slipBefore) * (recovering ? 0 : DRIFT_NOSE_FOLLOW);
 
   // ---- 이동
   const h = st.yaw + st.slip;
