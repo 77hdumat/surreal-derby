@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { makeGradePass } from './GradePass';
+import { makeRadialBlurPass } from './RadialBlurPass';
 import { N8AOPass } from 'n8ao';
 
 /**
@@ -16,6 +17,10 @@ export class EffectsManager {
   private afterimage: AfterimagePass;
   private bloom: UnrealBloomPass;
   private grade: ShaderPass;
+  private radial: ShaderPass;
+  private blurTarget = 0;
+  private blurCurrent = 0;
+  private time = 0;
   private ao: N8AOPass;
   private fxCanvas: HTMLCanvasElement;
   private fxCtx: CanvasRenderingContext2D;
@@ -52,6 +57,9 @@ export class EffectsManager {
     this.grade.uniforms.uOverlayAmount.value = 0.1;
     this.grade.uniforms.uOverlay.value = new THREE.Color('#fff4e0');
     this.composer.addPass(this.grade);
+    // 부스트 줌 블러 + 헤이즈 (부스트 중에만 켜진다)
+    this.radial = makeRadialBlurPass();
+    this.composer.addPass(this.radial);
     this.afterimage = new AfterimagePass(0.1);
     this.composer.addPass(this.afterimage);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.15, 0.5, 0.95);
@@ -101,6 +109,11 @@ export class EffectsManager {
     this.speedLinesTarget = THREE.MathUtils.clamp(intensity, 0, 1);
   }
 
+  /** 부스트 줌 블러·헤이즈 0..1 */
+  setBoostBlur(intensity: number): void {
+    this.blurTarget = THREE.MathUtils.clamp(intensity, 0, 1);
+  }
+
   setSlowMo(v: number): void {
     this.slowMoTint = v;
   }
@@ -115,6 +128,12 @@ export class EffectsManager {
     this.bloom.strength = 0.22 + this.speedLines * 0.15;
     this.speedLines = THREE.MathUtils.lerp(this.speedLines, this.speedLinesTarget, Math.min(1, dt * 5));
     this.flash = Math.max(0, this.flash - dt * 3);
+    // 켜질 땐 확, 꺼질 땐 스르르
+    this.blurCurrent = THREE.MathUtils.lerp(this.blurCurrent, this.blurTarget, Math.min(1, dt * (this.blurTarget > this.blurCurrent ? 8 : 3)));
+    this.time += dt;
+    this.radial.enabled = this.blurCurrent > 0.01;
+    this.radial.uniforms.uStrength.value = this.blurCurrent;
+    this.radial.uniforms.uTime.value = this.time % 10;
     this.drawOverlay(dt, cameraVelocity);
   }
 

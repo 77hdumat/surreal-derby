@@ -1365,6 +1365,7 @@ export class Game {
     const speedK = THREE.MathUtils.clamp((Math.abs(myKart.speed) - 28) / 25, 0, 1);
     this.effects.setAfterimage(Math.max(this.camera.boostNearby * 0.8, speedK * 0.25));
     this.effects.setSpeedLines(Math.max(this.camera.boostNearby * 1.9, speedK * 0.4));
+    this.effects.setBoostBlur(this.camera.boostNearby);
     this.effects.setSlowMo(0);
     if (myKart.drifting) this.camera.shake(dt * 0.08);
 
