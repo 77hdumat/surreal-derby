@@ -41,7 +41,7 @@ export interface RiderAssetConfig {
   helmetOffset?: [number, number, number];
 }
 
-export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'pull' | 'lie' | 'flail' | 'matador';
+export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'pull' | 'lie' | 'flail' | 'matador' | 'peek';
 
 export interface RiderColors {
   silks: number;
@@ -481,6 +481,17 @@ uniform float sideCenter;`,
         const wave = Math.sin(time * 5.2);
         arm(1, 1.9 + wave * 0.5, 0.35, 0.95 + wave * 0.15);
         arm(0, 0.45, 1.9, 0.3);
+        break;
+      }
+      case 'peek': {
+        // 뚜껑 밖으로 상체만 내밀고 두리번거리며 손을 흔든다 (ph 0..1 = 등장 동안의 진행도)
+        torso(0.05 + Math.sin(time * 1.1) * 0.04);
+        R(B.head, AXIS_Y, Math.sin(ph * Math.PI * 3) * 0.7);
+        R(B.head, AXIS_Z, 0.08);
+        for (let s = 0; s < 2; s++) leg(s, 0, 0.1, 0.08);
+        const wave = Math.sin(time * 9);
+        arm(1, 2.6, 0.35, 0.7 + wave * 0.35);
+        arm(0, 0.35, 0.9, 0.3);
         break;
       }
       case 'crawl': {

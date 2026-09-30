@@ -429,6 +429,35 @@ export class ElephantRig extends AnimalVisual {
     for (const [ear, s] of [['earL', -1], ['earR', 1]] as const) {
       this.rot(ear, AXIS_Y, s * Math.sin(time * 8 + s) * (0.1 + c * 0.3 + sp * 0.25) * (0.3 + speedNorm));
     }
+    if (this.idle > 0.01) this.idleElephant(time);
+  }
+
+  /** 대기: 큰 귀를 부채처럼 팔랑, 코는 느리게 말았다 풀고, 가끔 코를 치켜들며 몸을 좌우로 흔든다 */
+  private idleElephant(time: number): void {
+    const k = this.idle;
+    // 귀: 몸 쪽으로 붙였다가 활짝 — 부채질 (가끔 두세 번 세게)
+    const burst = this.idleEvent(5.5, 1.6, 0.15);
+    const flapAmp = 0.35 + (burst >= 0 ? Math.sin(Math.PI * burst) * 0.55 : 0);
+    const flapHz = burst >= 0 ? 7.5 : 3.2;
+    for (const [ear, s, lag] of [['earL', -1, 0], ['earR', 1, 0.35]] as const) {
+      const open = 0.5 + 0.5 * Math.sin(time * flapHz + lag + this.seed);
+      this.rot(ear, AXIS_Y, s * (open - 0.3) * flapAmp * 1.6 * k);
+    }
+    // 코: 뿌리부터 끝으로 물결치듯 천천히 흔들림
+    const trunk: ['trunk0', 'trunk1', 'trunk2'] = ['trunk0', 'trunk1', 'trunk2'];
+    const raise = this.idleEvent(8.1, 1.6, 1.2);
+    const up = raise >= 0 ? Math.sin(Math.PI * raise) ** 2 : 0;
+    trunk.forEach((b, i) => {
+      this.rot(b, AXIS_Z, (Math.sin(time * 1.3 - i * 0.8 + this.seed) * (0.1 + i * 0.05) + up * [0.7, 0.45, 0.5][i]) * k);
+      this.rot(b, AXIS_X, Math.sin(time * 0.9 - i * 0.9 + this.seed) * (0.08 + i * 0.05) * k);
+    });
+    if (up > 0) {
+      // 코를 치켜들 때 머리와 앞몸도 번쩍 — 뒤 카메라에서도 보이게
+      this.rot('head', AXIS_Z, up * 0.3 * k);
+      this.body.rotation.z += up * 0.06 * k;
+    }
+    // 체중 옮기며 좌우로 느릿느릿
+    this.body.rotation.x += Math.sin(time * 0.9 + this.seed) * 0.018 * k;
   }
 
   /** 코 끝 월드 좌표 (물대포 파티클) */
@@ -526,6 +555,41 @@ export class CowRig extends AnimalVisual {
         this.cape.scale.setScalar(THREE.MathUtils.clamp(st * 1.8, 0.001, 1.45)); // 큰 천, 멀리서도 보이게
         this.flapCape(time, speedNorm);
       }
+    }
+    if (this.idle > 0.01) this.idleCow(time);
+  }
+
+  /** 대기: 앞뒤로 몸을 흔들흔들, 가끔 파리 쫓듯 머리를 부르르 털고, 앞발로 땅을 긁는다 */
+  private idleCow(time: number): void {
+    const k = this.idle;
+    // 몸 앞뒤로 흔들 (무게중심을 앞발↔뒷발로 옮기듯)
+    const rock = Math.sin(time * 1.5 + this.seed);
+    this.body.position.x += rock * 0.07 * k;
+    this.body.rotation.z += Math.sin(time * 1.5 + this.seed + 0.6) * 0.025 * k;
+    this.rot('neck0', AXIS_Z, -rock * 0.06 * k);
+    // 머리 털기: 좌우로 빠르게 도리도리 + 비틀기, 끝나면 잠잠
+    const shake = this.idleEvent(4.3, 1.1, 0.15);
+    if (shake >= 0) {
+      const env = Math.sin(Math.PI * shake) * k;
+      this.rot('neck1', AXIS_Z, -0.12 * env);
+      this.rot('head', AXIS_Y, Math.sin(shake * Math.PI * 9) * 0.6 * env);
+      this.rot('head', AXIS_X, Math.sin(shake * Math.PI * 9 + 1.2) * 0.45 * env);
+      // 뒤 카메라에서도 보이게 목·어깨까지 같이 부르르
+      this.rot('neck0', AXIS_X, Math.sin(shake * Math.PI * 9 + 0.6) * 0.15 * env);
+      this.body.rotation.x += Math.sin(shake * Math.PI * 9 + 0.3) * 0.035 * env;
+    }
+    // 앞발 긁기: 오른 앞발을 들었다가 뒤로 쓱쓱 (투우 소처럼)
+    const paw = this.idleEvent(6.7, 1.4, 1.4);
+    if (paw >= 0) {
+      const env = Math.sin(Math.PI * paw) * k;
+      const scrape = Math.sin(paw * Math.PI * 6);
+      this.rot('legFR_upper', AXIS_Z, (0.45 + scrape * 0.35) * env);
+      this.rot('legFR_lower', AXIS_Z, -(0.9 + Math.max(0, scrape) * 0.4) * env);
+      this.rot('head', AXIS_Z, -0.2 * env);
+      // 긁을 때마다 몸이 들썩이고 긁는 쪽으로 기운다 (뒤에서 보이는 신호)
+      this.body.rotation.x += 0.06 * env;
+      this.body.position.y += Math.max(0, scrape) * 0.06 * env;
+      this.body.rotation.z += -Math.max(0, scrape) * 0.03 * env;
     }
   }
 

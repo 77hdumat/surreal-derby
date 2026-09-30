@@ -134,6 +134,10 @@ export abstract class AnimalVisual implements RacerVisual {
   protected impactAge = 10;
   protected impactStrength = 0;
   protected impactSide = 1;
+  /** 제자리에 서 있을 때 0→1. 캐릭터별 대기 동작(꼬리·귀·두리번)의 세기 */
+  protected idle = 0;
+  /** 이번에 멈춰 선 뒤 흐른 시간(s). 카운트다운 3·2·1 동안 큰 동작이 먼저 나오도록 대기 동작 박자의 기준 */
+  protected idleTime = 0;
   protected reinSegments: THREE.Mesh[][] = [];
   protected reinBit = new THREE.Vector3();
   protected sleepZ?: THREE.Sprite;
@@ -522,6 +526,9 @@ export abstract class AnimalVisual implements RacerVisual {
       this.body.position.y = 1.35 * p * (this.height / 2.4);
     }
     this.stumble = Math.max(0, this.stumble - dt * 1.2);
+    const idleTarget = (st === 'IDLE' || st === 'FINISHED') && Math.abs(ctx.speed) < 0.4 ? 1 : 0;
+    this.idle = THREE.MathUtils.lerp(this.idle, idleTarget, 1 - Math.exp(-(idleTarget ? 5 : 6) * dt));
+    this.idleTime = idleTarget ? this.idleTime + dt : 0;
 
     // ---- 뼈 additive 레이어 (클립 위에 얹음). 부모→자식 순서.
     this.body.updateWorldMatrix(true, true);
@@ -546,6 +553,7 @@ export abstract class AnimalVisual implements RacerVisual {
       const legs: RigBone[] = ['legFL_upper', 'legFR_upper', 'legBL_upper', 'legBR_upper'];
       legs.forEach((l, i) => this.rot(l, AXIS_Z, Math.sin(time * 7 + i * 1.4) * 0.5 * this.planted));
     }
+    if (this.idle > 0.01 && !this.cfg.rigid) this.idleFidget(time);
     this.updateSpecial(ctx, ph);
 
     // ---- 소켓·기수·고삐
@@ -579,6 +587,34 @@ export abstract class AnimalVisual implements RacerVisual {
       b.getWorldPosition(p);
       this.root.worldToLocal(p);
     }
+  }
+
+  /**
+   * 대기 동작의 진행도. 멈춘 뒤 first 초에 처음 시작하고, 그 뒤로 period 초마다 dur 초 동안 0→1 (그 밖에는 -1).
+   * 첫 회는 모두 같은 박자(카운트다운에 맞춤), 이후엔 seed 로 주기를 조금씩 흩어 서로 어긋나게 한다.
+   */
+  protected idleEvent(period: number, dur: number, first: number): number {
+    const t = this.idleTime - first;
+    if (t < 0) return -1;
+    if (t < dur) return t / dur;
+    const p = period * (0.9 + 0.2 * ((this.seed * 0.137) % 1));
+    const u = (t - dur) % p;
+    return u >= p - dur ? (u - (p - dur)) / dur : -1;
+  }
+
+  /** 공통 대기 동작: 꼬리 휘휘, 가끔 귀 쫑긋, 가끔 고개 돌려 두리번 */
+  protected idleFidget(time: number): void {
+    const k = this.idle;
+    this.rot('tail0', AXIS_Y, Math.sin(time * 2.3 + this.seed) * 0.35 * k);
+    this.rot('tail1', AXIS_Y, Math.sin(time * 2.3 + this.seed - 0.8) * 0.3 * k);
+    const flick = this.idleEvent(3.7, 0.35, 0.2);
+    if (flick >= 0) {
+      const f = Math.sin(Math.PI * flick) * 0.35 * k;
+      this.rot('earL', AXIS_Z, -f);
+      this.rot('earR', AXIS_Z, -f * 0.4);
+    }
+    const look = this.idleEvent(6.3, 2.4, 1.2);
+    if (look >= 0) this.rot('head', AXIS_Y, Math.sin(Math.PI * look) ** 2 * (this.seed % 2 < 1 ? 1 : -1) * 0.35 * k);
   }
 
   /**
@@ -713,6 +749,7 @@ export abstract class AnimalVisual implements RacerVisual {
       this.fallenRider = null;
     }
     this.stumble = 0;
+    this.idle = this.idleTime = 0;
     this.downPose = this.grazePose = this.planted = this.stridePhase = 0;
     this.impactAge = 10;
     this.mixer?.setTime(0);

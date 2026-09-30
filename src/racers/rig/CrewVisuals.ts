@@ -548,6 +548,14 @@ export class HumanRig extends CrewVisualBase {
 }
 
 const WHEEL_R = 0.85;
+/** 등 뚜껑 한 변(m), 엉덩이→가슴 뼈 선 위 위치(0..1)와 등 표면까지 높이, 병사가 숨어 있는 깊이·올라오는 높이 */
+const PEEK_LID = 0.95;
+const PEEK_ALONG = 0.3;
+const PEEK_UP = 0.85;
+const PEEK_DEPTH = -1.95;
+const PEEK_RISE = 1.2;
+const PEEK_PERIOD = 9;
+const PEEK_DUR = 2.9;
 
 // ================================================================ 10. 트로이 목마
 /**
@@ -568,6 +576,12 @@ export class TrojanRig extends AnimalVisual {
   private ropeA = new THREE.Vector3();
   private ropeB = new THREE.Vector3();
   private sword?: THREE.Group;
+  /** 등 뚜껑 + 정지 중에 가끔 빼꼼 나와 두리번거리는 병사 */
+  private lid?: THREE.Mesh;
+  private hole?: THREE.Group;
+  private peeker?: RiderRig;
+  private peekQ = new THREE.Quaternion();
+  private peekV = new THREE.Vector3();
 
   constructor(def: RacerDefinition, fallback: RacerVisual) {
     super(
@@ -628,6 +642,19 @@ export class TrojanRig extends AnimalVisual {
     const hinge = new THREE.Group();
     hinge.add(hatch);
     this.socket('spine', hinge, [1.1, -1.3, 0]);
+    // 등 뚜껑 (경첩: 뒤쪽, 앞 모서리가 위로 들린다)
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(PEEK_LID, 0.09, PEEK_LID * 0.85), woodMaterial(17));
+    lid.geometry.translate(PEEK_LID / 2, 0, 0);
+    lid.castShadow = true;
+    this.lid = lid;
+    const hole = new THREE.Group();
+    hole.add(lid);
+    this.hole = hole;
+    this.body.add(hole);
+    const peeker = new RiderRig(RIDER_ASSET_CFG, { silks: 0xb08d57, sleeves: 0xd9b27a, helmet: 0xb08d57, breeches: 0x8b1a1a, boots: 0x5a3a1e }, 'feet');
+    peeker.group.visible = false;
+    hole.add(peeker.group);
+    this.peeker = peeker;
     // 지휘관 검
     const sword = new THREE.Group();
     const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.75, 0.08), new THREE.MeshStandardMaterial({ color: 0xe6eaee, roughness: 0.25, metalness: 0.7, emissive: 0x334455, emissiveIntensity: 0.25 }));
@@ -762,11 +789,53 @@ export class TrojanRig extends AnimalVisual {
       rope.scale.set(1, len, 1);
       rope.quaternion.setFromUnitVectors(AXIS_Y, this.footTmp.subVectors(this.ropeB, this.ropeA).normalize());
     });
+    this.updatePeek(time);
     // 나무 덜컹거림
     const rattle = ctx.speedNorm * (0.6 + a * 0.6);
     this.body.position.y += Math.sin(time * 23) * 0.012 * rattle + Math.sin(time * 37 + 1) * 0.006 * rattle;
     this.body.rotation.x += Math.sin(time * 19) * 0.01 * rattle;
     this.body.rotation.z += -a * 0.04 + Math.sin(time * 29) * 0.006 * rattle;
+  }
+
+  /**
+   * 정지 중에만: 뚜껑이 열리고 병사가 쑥 올라와 두리번·손 흔들기, 다시 쏙 들어가고 뚜껑이 닫힌다.
+   * 0~0.35s 열림 · ~0.8s 올라옴 · ~2.2s 구경 · ~2.6s 내려감 · ~2.9s 닫힘 (카운트다운 3초 안에 끝남)
+   */
+  private updatePeek(time: number): void {
+    if (!this.lid || !this.hole || !this.peeker) return;
+    const ramp = (t: number, a: number, b: number) => THREE.MathUtils.smoothstep(t, a, b);
+    const e = this.idleEvent(PEEK_PERIOD, PEEK_DUR, 0.1);
+    const t = e >= 0 ? e * PEEK_DUR : PEEK_DUR;
+    const k = this.idle;
+    const open = (ramp(t, 0, 0.35) - ramp(t, 2.6, 2.9)) * k;
+    const rise = (ramp(t, 0.35, 0.8) - ramp(t, 2.2, 2.6)) * k;
+    this.lid.rotation.z = open * 1.5;
+    // 뚜껑은 목마 등(엉덩이→가슴 뼈 선에서 등 쪽으로 PEEK_UP)에 붙여, 등의 기울기를 따라 눕힌다
+    const hips = this.bones.hips;
+    const chest = this.bones.chest;
+    if (hips && chest) {
+      const a = this.body.worldToLocal(hips.getWorldPosition(this.ropeA));
+      const b = this.body.worldToLocal(chest.getWorldPosition(this.ropeB));
+      const dir = b.sub(a);
+      const len = dir.length();
+      dir.divideScalar(len);
+      this.hole.position.copy(a).addScaledVector(dir, PEEK_ALONG * len);
+      this.hole.position.add(this.peekV.set(-dir.y, dir.x, 0).multiplyScalar(PEEK_UP));
+      this.hole.rotation.set(0, 0, Math.atan2(dir.y, dir.x));
+    }
+    const s = this.peeker;
+    s.group.visible = s.loaded && rise > 0.02;
+    if (!s.group.visible) return;
+    if (!s.group.userData.noCull) {
+      // 스킨 메쉬 컬링 구가 몸통 속에 숨은 자세로 잡히면 올라와도 잘려 보인다
+      s.group.traverse((o) => (o.frustumCulled = false));
+      s.group.userData.noCull = true;
+    }
+    // hole 은 목마 등(뒷발 서기로 기울어짐)을 따라 기울어 있으므로, 병사는 body 기준으로 똑바로 세운다
+    this.peekQ.copy(this.hole.quaternion).invert();
+    s.group.quaternion.copy(this.peekQ);
+    s.group.position.set(PEEK_LID * 0.5, 0, 0).add(this.peekV.set(0, PEEK_DEPTH + rise * PEEK_RISE, 0).applyQuaternion(this.peekQ));
+    s.animate({ mode: 'peek', ph: THREE.MathUtils.clamp((t - 0.8) / 1.4, 0, 1), energy: 0, time });
   }
 
   onEvent(type: RaceEventType, ctx: VisualContext): void {
@@ -813,5 +882,7 @@ export class TrojanRig extends AnimalVisual {
     for (const s of this.soldiers) s.group.visible = false;
     for (const s of this.pullers) s.group.visible = false;
     for (const r of this.ropes) r.visible = false;
+    if (this.peeker) this.peeker.group.visible = false;
+    if (this.lid) this.lid.rotation.z = 0;
   }
 }
