@@ -21,7 +21,7 @@ import { ItemVisuals } from '../effects/ItemVisuals';
 import { ITEM_INFO, type ItemEvent, type ItemKind } from './Items';
 import { encodeKart, type LobbySlot, type NetMsg } from '../net/Protocol';
 import { RemoteKart } from '../net/RemoteKart';
-import { LAPS, START_BOOST_LATE, START_BOOST_WINDOW, applyStartBoost, MAX_SLIP, currentLap } from './KartPhysics';
+import { LAPS, START_BOOST_LATE, START_BOOST_WINDOW, applyStartBoost, MAX_SLIP, currentLap, angleDelta } from './KartPhysics';
 import { JOCKEYS, jockeyById } from '../racers/Jockeys';
 
 type Mode = 'none' | 'solo' | 'host' | 'client';
@@ -80,7 +80,11 @@ export class Game {
   /** 트로이 목마 삐걱임 · 말탈 브라더스 박스 버석임까지 남은 시간 (선수별) */
   private creakT: number[] = [];
   private boostTotal = 1;
-  private highQuality = false;
+  /** 렌더 보간: 고정 60Hz 물리 사이를 화면 주사율에 맞춰 부드럽게 (내 말·CPU). [x,z,yaw,slip] × 선수 */
+  private ipPrev: number[] = [];
+  private ipCur: number[] = [];
+  private ipValid: boolean[] = [];
+  private ipActive = false;
   private sun: THREE.DirectionalLight;
   private footprints: Footprints;
   private skids: SkidMarks;
@@ -234,19 +238,12 @@ export class Game {
       this.audio.setMuted(!this.audio.muted);
       return this.audio.muted;
     };
-    this.ui.onToggleQuality = () => this.setHighQuality(!this.highQuality);
     window.addEventListener('resize', () => this.resize());
     const prime = () => this.audio.init();
     window.addEventListener('pointerdown', prime, { once: true });
     window.addEventListener('keydown', prime, { once: true });
     window.addEventListener('beforeunload', () => this.net?.close());
-    let savedQuality: string | null = null;
-    try {
-      savedQuality = localStorage.getItem('surreal-derby-quality');
-    } catch {
-      /* private browsing */
-    }
-    this.setHighQuality(savedQuality === 'high');
+    this.applyQuality();
     void Net.fetchTurn();
   }
 
@@ -308,27 +305,77 @@ export class Game {
     this.effects.resize(w, h);
   }
 
-  private setHighQuality(high: boolean): boolean {
-    this.highQuality = high;
-    const pixelBudget = high ? 2_600_000 : 1_700_000;
+  /** 렌더링 품질은 하나로 고정 (HD): 픽셀 수 예산 안에서 해상도, 그림자맵 1024 */
+  private applyQuality(): void {
+    const pixelBudget = 1_700_000;
     const budgetRatio = Math.sqrt(pixelBudget / Math.max(1, window.innerWidth * window.innerHeight));
-    const ratio = Math.min(window.devicePixelRatio, high ? 1.25 : 1.0, Math.max(0.7, budgetRatio));
+    const ratio = Math.min(window.devicePixelRatio, 1.0, Math.max(0.7, budgetRatio));
     this.renderer.setPixelRatio(ratio);
-    const shadowSize = high ? 2048 : 1024;
+    const shadowSize = 1024;
     if (this.sun.shadow.mapSize.x !== shadowSize) {
       this.sun.shadow.mapSize.set(shadowSize, shadowSize);
       this.sun.shadow.map?.dispose();
       this.sun.shadow.map = null;
     }
-    this.effects.setHighQuality(high, this.renderer.getPixelRatio());
+    this.effects.setHighQuality(false, this.renderer.getPixelRatio());
     this.resize();
-    this.ui.setQuality(high);
-    try {
-      localStorage.setItem('surreal-derby-quality', high ? 'high' : 'balanced');
-    } catch {
-      /* 저장 불가 환경 */
+  }
+
+  /** 물리 한 스텝 전: 소유한 말들의 위치를 보간 시작점으로 */
+  private ipSnapshot(): void {
+    const ks = this.race.karts;
+    for (let i = 0; i < ks.length; i++) {
+      if (!this.race.owned[i]) {
+        this.ipValid[i] = false;
+        continue;
+      }
+      const k = ks[i];
+      const o = i * 4;
+      this.ipPrev[o] = k.x;
+      this.ipPrev[o + 1] = k.z;
+      this.ipPrev[o + 2] = k.yaw;
+      this.ipPrev[o + 3] = k.slip;
+      this.ipValid[i] = true;
     }
-    return high;
+  }
+
+  /** 그리기 직전: 소유한 말을 (직전 스텝 → 현재 스텝) 사이 비율만큼 보간한 자리로 잠깐 옮긴다. ipRestore 로 되돌린다 */
+  private ipApply(): void {
+    const alpha = Math.min(1, this.accum / STEP);
+    const ks = this.race.karts;
+    for (let i = 0; i < ks.length; i++) {
+      if (!this.ipValid[i] || !this.race.owned[i]) continue;
+      const k = ks[i];
+      const o = i * 4;
+      this.ipCur[o] = k.x;
+      this.ipCur[o + 1] = k.z;
+      this.ipCur[o + 2] = k.yaw;
+      this.ipCur[o + 3] = k.slip;
+      const px = this.ipPrev[o];
+      const pz = this.ipPrev[o + 1];
+      if (Math.hypot(k.x - px, k.z - pz) > 8) continue; // 순간이동(리스폰)은 보간 안 함
+      const b = 1 - alpha; // 현재에서 이만큼 뒤로
+      k.x -= (k.x - px) * b;
+      k.z -= (k.z - pz) * b;
+      k.yaw -= angleDelta(k.yaw - this.ipPrev[o + 2]) * b;
+      k.slip -= (k.slip - this.ipPrev[o + 3]) * b;
+    }
+    this.ipActive = true;
+  }
+
+  private ipRestore(): void {
+    if (!this.ipActive) return;
+    this.ipActive = false;
+    const ks = this.race.karts;
+    for (let i = 0; i < ks.length; i++) {
+      if (!this.ipValid[i] || !this.race.owned[i]) continue;
+      const k = ks[i];
+      const o = i * 4;
+      k.x = this.ipCur[o];
+      k.z = this.ipCur[o + 1];
+      k.yaw = this.ipCur[o + 2];
+      k.slip = this.ipCur[o + 3];
+    }
   }
 
   // ---------------------------------------------------------------- lobby
@@ -796,6 +843,8 @@ export class Game {
     this.finishTimer = 0;
     this.excitement = 0.3;
     this.accum = 0;
+    this.ipValid = [];
+    this.ipActive = false;
     this.throttleSince = -1;
     this.startBoostDone = false;
     this.goAt = -1;
@@ -1165,6 +1214,7 @@ export class Game {
     this.effects.update(dt, this.camera.velocity);
     this.effects.render();
     this.renderRearPip();
+    this.ipRestore();
   }
 
   /**
@@ -1264,9 +1314,11 @@ export class Game {
    * @returns 이번 틱에 발생한 내(소유) 말 이벤트
    */
   private stepSim(dt: number): void {
+    this.ipRestore();
     this.accum += dt;
     let steps = 0;
     while (this.accum >= STEP && steps < 6) {
+      this.ipSnapshot();
       this.race.step(STEP);
       this.accum -= STEP;
       steps++;
@@ -1319,6 +1371,8 @@ export class Game {
         }
       }
     }
+    // 여기부터 이번 프레임을 그릴 때까지 소유한 말은 보간 위치 (loop 끝에서 되돌린다)
+    this.ipApply();
   }
 
   private updateRace(dt: number): void {

@@ -122,7 +122,6 @@ export class UIManager {
   onMode: ((mode: 'speed' | 'item') => void) | null = null;
   onTrack: ((id: string) => void) | null = null;
   onToggleMute: (() => boolean) | null = null;
-  onToggleQuality: (() => boolean) | null = null;
 
   constructor(defs: RacerDefinition[]) {
     this.defs = defs;
@@ -226,9 +225,6 @@ export class UIManager {
       const muted = this.onToggleMute?.() ?? false;
       (e.currentTarget as HTMLElement).textContent = muted ? '🔇' : '🔊';
       (e.currentTarget as HTMLElement).classList.toggle('off', muted);
-    });
-    $('btn-quality').addEventListener('click', () => {
-      this.onToggleQuality?.();
     });
     // 터치 기기면 터치 버튼 표시
     if (window.matchMedia('(pointer: coarse)').matches) $('touch').classList.remove('hidden');
@@ -692,12 +688,6 @@ export class UIManager {
 
   hideResult(): void {
     this.result.classList.add('hidden');
-  }
-
-  setQuality(high: boolean): void {
-    const b = $('btn-quality');
-    b.textContent = high ? '고급' : 'HD';
-    b.classList.toggle('high', high);
   }
 
   /** 결과 화면용 행 생성 도우미 */

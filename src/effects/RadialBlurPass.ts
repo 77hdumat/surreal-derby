@@ -29,7 +29,7 @@ export const RadialBlurShader = {
       vec3 col = vec3(0.0);
       // 샘플 시작점을 픽셀마다 살짝 흔들어 계단 무늬 대신 부드러운 번짐
       float jitter = hash(vUv * 731.0 + uTime) ;
-      const int N = 12;
+      const int N = 8;
       for (int i = 0; i < N; i++) {
         float t = (float(i) + jitter) / float(N);
         col += texture2D(tDiffuse, vUv - d * t * amt * 0.22).rgb;

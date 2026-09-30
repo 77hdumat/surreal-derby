@@ -94,8 +94,6 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 
 .controls { position: absolute; left: 22px; bottom: 20px; display: flex; gap: 8px; pointer-events: auto; }
 .controls button { background: rgba(0,0,0,0.6); border: 2px solid #fff; color: #fff; font-size: 18px; width: 40px; height: 40px; border-radius: 6px; cursor: pointer; }
-.controls button.quality { width: auto; min-width: 54px; padding: 0 9px; font-size: 13px; font-weight: 900; letter-spacing: 0.5px; }
-.controls button.quality.high { border-color: var(--yellow); color: var(--yellow); box-shadow: 0 0 12px rgba(255,230,0,0.3); }
 .controls button.off { opacity: 0.4; }
 
 /* ---------- 패널 (메뉴/로비: 닌텐도 스타일 흰 배경) ---------- */
@@ -445,8 +443,6 @@ button, input { font-family: var(--font); }
 #rear-pip .pip-label { background: var(--coral); border-radius: 999px; font-family: var(--num); font-weight: 700; padding: 1px 10px; }
 #rear-pip .pip-gap { color: #fff; -webkit-text-stroke: 3px var(--cocoa); paint-order: stroke fill; }
 .controls button { background: var(--cream); border: 3px solid var(--cocoa); color: var(--cocoa); border-radius: 999px; box-shadow: 0 3px 0 var(--cocoa); }
-.controls button.quality { font-family: var(--num); font-weight: 700; }
-.controls button.quality.high { border-color: var(--cocoa); color: var(--coral); box-shadow: 0 3px 0 var(--cocoa), 0 0 12px rgba(255, 209, 102, 0.6); }
 #net-info { color: #fff; text-shadow: 0 1px 2px rgba(90, 59, 46, 0.8); }
 
 /* 채팅: 말풍선 */
