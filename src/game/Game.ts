@@ -6,7 +6,7 @@ import { RACER_DEFINITIONS } from '../racers/RacerDefinitions';
 import { GameCamera } from '../camera/GameCamera';
 import { EffectsManager } from '../effects/EffectsManager';
 import { ParticleManager } from '../effects/ParticleManager';
-import { AudioManager } from '../audio/AudioManager';
+import { AudioManager, type SfxName } from '../audio/AudioManager';
 import { UIManager } from '../ui/UIManager';
 import { updateWind } from '../track/Vegetation';
 import { loadSky } from '../track/Environment';
@@ -80,6 +80,8 @@ export class Game {
   private stepPhase: number[] = [];
   /** 트로이 목마 삐걱임 · 말탈 브라더스 박스 버석임까지 남은 시간 (선수별) */
   private creakT: number[] = [];
+  /** 몽키 군단: 다음 원숭이 울음까지 남은 시간 (선수별) */
+  private monkeyT: number[] = [];
   private boostTotal = 1;
   /** 렌더 보간: 고정 60Hz 물리 사이를 화면 주사율에 맞춰 부드럽게 (내 말·CPU). [x,z,yaw,slip] × 선수 */
   private ipPrev: number[] = [];
@@ -920,6 +922,8 @@ export class Game {
         return 1.35;
       case 'LONGBODY':
         return 1.2;
+      case 'MONKEY':
+        return 1.35; // 무리 전체가 화면에 들어오게
       default:
         return 1;
     }
@@ -1127,9 +1131,35 @@ export class Game {
         a.play('whooshEpic', { pos, minGain: near * 0.7, gain: 1.0 * g, rate: 0.8 });
         a.play('neigh', { pos, minGain: near * 0.4, gain: 0.5 * g, rate: 0.8 });
         break;
+      case 'MONKEY': // 열두 마리가 한꺼번에 우끼끼 — 목소리마다 소리·높낮이·타이밍이 제각각
+        a.play('whoosh', { pos, minGain: near * 0.5, gain: 0.6 * g });
+        for (let n = 0; n < 12; n++) {
+          const p = pos.clone();
+          setTimeout(() => this.monkeyVoice(p, me, n % 3 === 0 ? 'monkeyLaugh' : undefined), n * 45 + Math.random() * 500);
+        }
+        break;
       default: // 얼룩말: 슈퍼 스프린트
         a.play('whooshEpic', { pos, minGain: near, gain: 0.9 * g });
     }
+  }
+
+  /** 원숭이 한 마리 울음: 녹음 다섯 개 중 하나의 아무 대목을, 마리마다 다른 높이·길이로 */
+  private monkeyVoice(pos: THREE.Vector3, own: boolean, clip?: SfxName): void {
+    const clips: [SfxName, number][] = [
+      ['monkeyKiki', 2.44],
+      ['monkeyLaugh', 3.6],
+      ['monkeyHoot', 8.9],
+      ['monkeyChatter', 4.6],
+      ['monkeyChatter2', 8.04],
+    ];
+    const [name, total] = clip ? clips.find((c) => c[0] === clip)! : clips[Math.floor(Math.random() * clips.length)];
+    const len = 0.35 + Math.random() * 0.9;
+    this.audio.playSegment(name, Math.random() * Math.max(0, total - len), len, {
+      pos,
+      minGain: own ? 0.3 : 0,
+      gain: 0.32 + Math.random() * 0.25,
+      rate: 0.85 + Math.random() * 0.55,
+    });
   }
 
   /** 1등이 사람이면 승수 +1. 내 승수는 브라우저에 저장, 호스트는 로비 슬롯에도 반영해 전원에게 보여준다 */
@@ -1466,7 +1496,7 @@ export class Game {
             rate: 0.85 + Math.random() * 0.25,
           });
         }
-      } else if (ab === 'ELEPHANT' || ab === 'HUMAN' || ab === 'COSTUME') {
+      } else if (ab === 'ELEPHANT' || ab === 'HUMAN' || ab === 'COSTUME' || ab === 'MONKEY') {
         // 발자국마다 한 번씩: 코끼리는 쿵, 사람(말탈 브라더스·휴먼 러너)은 눈 밟는 소리
         const elephant = ab === 'ELEPHANT';
         const hz = active ? Math.min(elephant ? 3.2 : 7, Math.abs(k.speed) / (elephant ? 4.5 : 2.2)) : 0;
@@ -1476,6 +1506,15 @@ export class Game {
         }
         this.stepPhase[i] = ph % 1;
         this.audio.updateRacerLoop(String(i), 'gallop', pos, 0, { active: false, own });
+        // 몽키 군단: 달리는 내내 누군가는 우끼끼 (겹쳐 들려 무리 소리가 된다, 부스트 중엔 더 시끄럽게)
+        if (ab === 'MONKEY') {
+          this.monkeyT[i] = (this.monkeyT[i] ?? Math.random()) - dt;
+          if (active && !k.finished && this.monkeyT[i] <= 0) {
+            const loud = k.boostT > 0;
+            this.monkeyT[i] = (loud ? 0.08 : 0.22) + Math.random() * (loud ? 0.2 : 0.6);
+            this.monkeyVoice(pos, own);
+          }
+        }
         // 말탈 브라더스: 뒤집어쓴 골판지 탈이 중간중간 버석거린다 (박스 소리의 짧은 대목, 들쭉날쭉한 간격)
         if (ab === 'COSTUME') {
           this.creakT[i] = (this.creakT[i] ?? Math.random() * 2) - dt;

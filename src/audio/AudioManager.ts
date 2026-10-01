@@ -39,6 +39,11 @@ const SFX = {
   humanAhh: 'human-ahh.mp3',
   africaLoop: 'africa-loop.mp3',
   woodCreakRun: 'wood-creak-run.mp3',
+  monkeyKiki: 'monkey-kiki.mp3',
+  monkeyLaugh: 'monkey-laugh.mp3',
+  monkeyHoot: 'monkey-hoot.mp3',
+  monkeyChatter: 'monkey-chatter.mp3',
+  monkeyChatter2: 'monkey-chatter2.mp3',
 } as const;
 
 export type SfxName = keyof typeof SFX;

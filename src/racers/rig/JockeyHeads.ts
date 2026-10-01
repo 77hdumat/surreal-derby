@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { furShellMaterial } from './Fur';
 
-export type JockeyHead = 'skull' | 'pig' | 'cat' | 'robot' | 'alien' | 'pumpkin';
+export type JockeyHead = 'skull' | 'pig' | 'cat' | 'robot' | 'alien' | 'pumpkin' | 'gibbon';
 
 const std = (color: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
 const R = 0.16; // 사람 머리(≈0.12)를 덮는 크기
@@ -184,6 +185,43 @@ export function makeJockeyHead(kind: JockeyHead): THREE.Group {
       g.add(mouth);
       break;
     }
+    case 'gibbon': {
+      // 긴팔원숭이 (크레용 신짱): 크림색 머리, 납작한 검은 얼굴판을 밝은 털 테두리가 감싼다, 작은 눈·콧구멍
+      const fur = std(GIBBON_FUR, { roughness: 0.95 });
+      const head = sphere(R * 0.95, fur);
+      head.scale.set(0.95, 1.05, 0.95);
+      g.add(head);
+      // 북슬북슬: 머리에도 털 껍질 (얼굴판 쪽은 비운다)
+      const furOpts = { color: GIBBON_FUR, shells: 5, length: 0.03, freq: 170, mask: 'normalize(vFurP).x > 0.5' };
+      for (let k = 0; k < furOpts.shells; k++) {
+        const shell = new THREE.Mesh(head.geometry, furShellMaterial(furOpts, k));
+        shell.scale.copy(head.scale);
+        shell.position.copy(head.position);
+        g.add(shell);
+      }
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.024, 10, 28), std(0xfaf3e6, { roughness: 1 }));
+      rim.rotation.y = Math.PI / 2;
+      rim.scale.set(1, 1.25, 1);
+      rim.position.set(R * 0.72, -0.01, 0);
+      g.add(rim);
+      const face = new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 14), std(0x2a2522, { roughness: 0.7 }));
+      face.scale.set(0.45, 1.2, 0.95);
+      face.position.set(R * 0.74, -0.01, 0);
+      g.add(face);
+      // 주둥이: 아래로 살짝 튀어나온 검은 입
+      const muzzle = sphere(0.045, std(0x1e1a18, { roughness: 0.6 }), R * 0.86, -0.06, 0);
+      muzzle.scale.set(0.8, 0.75, 1.2);
+      g.add(muzzle);
+      for (const z of [-0.032, 0.032]) {
+        g.add(sphere(0.014, std(0xf4efe6, { roughness: 0.3 }), R * 0.88, 0.035, z)); // 흰자
+        g.add(sphere(0.008, black, R * 0.88 + 0.008, 0.035, z)); // 눈동자
+        g.add(sphere(0.006, black, R * 0.93, -0.035, z * 0.4)); // 콧구멍
+      }
+      break;
+    }
   }
   return g;
 }
+
+/** 긴팔원숭이 털색 (머리·몸 공통) */
+export const GIBBON_FUR = 0xcfb38f;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeJockeyHead, type JockeyHead } from './JockeyHeads';
 import { instantiate, findBone } from './Assets';
 import { rotateBoneModelSpace, aimBoneModelSpace, BoneSocket, AXIS_Y, AXIS_Z } from './BoneTools';
+import { addSkinnedFur } from './Fur';
 
 /**
  * 리깅된 인체 GLB 로 만든 기수.
@@ -41,7 +42,10 @@ export interface RiderAssetConfig {
   helmetOffset?: [number, number, number];
 }
 
-export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'pull' | 'lie' | 'flail' | 'matador' | 'peek';
+export type HumanMode = 'ride' | 'run' | 'crawl' | 'lift' | 'push' | 'pull' | 'lie' | 'flail' | 'matador' | 'peek' | 'gibbon';
+
+/** 긴팔원숭이 동작 (늘 두 발): 대기 · 팔 들고 통통 달리기 · 팔 벌려 전력질주 · 팔그네처럼 크게 도약(부스트) · 승리 춤 */
+export type GibbonMove = 'idle' | 'run' | 'sprint' | 'leap' | 'victory';
 
 export interface RiderColors {
   silks: number;
@@ -146,6 +150,9 @@ export class RiderRig {
   private tmpV = new THREE.Vector3();
   private dirTmp = new THREE.Vector3();
   private flail = 0;
+  private armScale = 1;
+  private legScale = 1;
+  private furColor: number | null = null;
 
   /**
    * @param pivot 그룹 원점 기준: 'hips' = 골반(안장에 앉히기), 'feet' = 발바닥(땅에 세우기)
@@ -168,6 +175,46 @@ export class RiderRig {
 
   setPose(p: RiderPose): void {
     this.pose = p;
+  }
+
+  /** 팔 길이 배율 (상완 뼈 스케일 — 전완·손까지 같이 커진다) */
+  setArmScale(s: number): void {
+    this.armScale = s;
+    if (this.bones) for (const b of this.bones.upperArm) b.scale.setScalar(s);
+  }
+
+  /** 다리 길이 배율 (허벅지 뼈 스케일) */
+  setLegScale(s: number): void {
+    this.legScale = s;
+    if (this.bones) for (const b of this.bones.thigh) b.scale.setScalar(s);
+  }
+
+  /** 온몸에 셸 털 (손·발·머리는 빼고). 로드 전에 불러야 한다 */
+  setFur(color: number): void {
+    this.furColor = color;
+  }
+
+  private buildFur(model: THREE.Object3D): void {
+    if (this.furColor === null) return;
+    const u = this.uniforms;
+    const t = '((dot(vFurP, upAxis) - bodyMin) / bodyHeight)';
+    const lat = '(abs(dot(vFurP, sideAxis) - sideCenter) / bodyHeight)';
+    const H = u.bodyHeight.value;
+    const opts = {
+      color: this.furColor,
+      shells: 5,
+      length: H * 0.024,
+      freq: 260 / H,
+      // 발(부츠 밴드)·손(장갑 밴드)·머리는 맨살
+      mask: `${t} < bands.x || (${t} > 0.62 && ${t} < bands.z && ${lat} > bands.w) || ${t} > 0.9`,
+      uniforms: { bands: u.bands, bodyMin: u.bodyMin, bodyHeight: u.bodyHeight, upAxis: u.upAxis, sideAxis: u.sideAxis, sideCenter: u.sideCenter },
+    };
+    const skins: THREE.SkinnedMesh[] = [];
+    model.traverse((o) => {
+      const sm = o as THREE.SkinnedMesh;
+      if (sm.isSkinnedMesh && sm.visible) skins.push(sm);
+    });
+    for (const sm of skins) addSkinnedFur(sm, opts);
   }
 
   private async load(): Promise<void> {
@@ -264,8 +311,11 @@ export class RiderRig {
         sm.frustumCulled = true;
       }
     });
+    this.buildFur(model);
     this.model = model;
     this.group.add(model);
+    this.setArmScale(this.armScale);
+    this.setLegScale(this.legScale);
     this.buildHelmet();
     this.loaded = true;
   }
@@ -373,7 +423,7 @@ uniform float sideCenter;`,
    *  lift  탈을 머리 위로 들고 달리기   push  앞으로 밀며 달리기   lie   널브러짐   flail 낙마 허우적
    * 반환값: 골반 높이 보정(m) — 호출자가 group.position.y 에 더한다.
    */
-  animate(o: { mode: HumanMode; ph: number; energy: number; time: number; lean?: number; armRaise?: number }): number {
+  animate(o: { mode: HumanMode; ph: number; energy: number; time: number; lean?: number; armRaise?: number; move?: GibbonMove; tuck?: number; drift?: number; flail?: number }): number {
     if (!this.bones || !this.model) return 0;
     const B = this.bones;
     const root = this.group;
@@ -492,6 +542,57 @@ uniform float sideCenter;`,
         const wave = Math.sin(time * 9);
         arm(1, 2.6, 0.35, 0.7 + wave * 0.35);
         arm(0, 0.35, 0.9, 0.3);
+        break;
+      }
+      case 'gibbon': {
+        // 긴팔원숭이: 늘 두 발. 팔이 실루엣과 리듬을 이끈다. tuck = 공중에서 무릎 접기,
+        // drift = 드리프트 안쪽 (-1 왼쪽 … +1 오른쪽, 안쪽 팔로 땅을 짚는다), flail = 부딪혀 허우적
+        const e = Math.max(0.2, energy);
+        const move = o.move ?? 'run';
+        const tuck = o.tuck ?? 0;
+        const drift = o.drift ?? 0;
+        const flail = o.flail ?? 0;
+        const sg = (s: number) => (s === 0 ? -1 : 1);
+        if (move === 'idle' || move === 'victory') {
+          // 무릎 살짝 굽히고 서서 체중을 좌우로 옮기며 팔을 시계추처럼 (승리: 두 팔 머리 위로 흔들기)
+          const sway = Math.sin(time * 4.2);
+          torso(0.12 + Math.sin(time * 2.1) * 0.03);
+          R(B.head, AXIS_Z, 0.05);
+          R(B.head, AXIS_Y, Math.sin(time * 0.9) * 0.45 + (Math.sin(time * 0.37) > 0.92 ? Math.sin(time * 18) * 0.4 : 0));
+          for (let s = 0; s < 2; s++) {
+            leg(s, 0.15 + tuck * 0.9, 0.35 + tuck * 1.2, 0.3, 0.1);
+            if (move === 'victory') arm(s, 2.8 + Math.sin(time * 10 + s * Math.PI) * 0.25, 0.25, 0.5 + Math.sin(time * 10 + s) * 0.3);
+            else arm(s, 0.05 - sway * 0.12 * sg(s), 0.1, 0.18);
+          }
+          break;
+        }
+        const sprint = move === 'sprint';
+        const leap = move === 'leap';
+        const lean = leap ? 0.3 : sprint ? 0.35 : 0.17;
+        torso(lean + flail * 0.5);
+        R(B.head, AXIS_Z, lean * 0.9);
+        R(B.head, AXIS_Y, Math.sin(time * 1.3) * 0.15);
+        // 걸음마다 통통: 한 주기 = 두 걸음, 걸음 가운데서 두 발이 다 뜬다
+        const step = (ph * 2) % 1;
+        lift = Math.sin(Math.PI * step) * (sprint ? 0.16 : 0.12) * e;
+        const legTuck = leap ? 0.8 : tuck;
+        for (let s = 0; s < 2; s++) {
+          const p = ph + s * 0.5;
+          const thigh = 0.2 + (sprint ? 0.55 : 0.4) * e * Math.cos(Math.PI * 2 * p);
+          const fold = 0.5 + 0.9 * e * Math.max(0, Math.sin(Math.PI * 2 * p + 0.5));
+          leg(s, thigh + legTuck * 0.9, fold + legTuck * 1.2, 0.3, 0.3);
+        }
+        // 팔: 드리프트 안쪽 팔은 땅을 쓸고 바깥 팔은 위로 / 허우적 / 동작별
+        const swayLR = Math.sin(Math.PI * 2 * ph); // 걸음마다 좌우로 기우뚱
+        const inner = Math.abs(drift) > 0.2 ? (drift < 0 ? 0 : 1) : -1;
+        for (let s = 0; s < 2; s++) {
+          if (flail > 0.3) arm(s, -0.6 + Math.sin(time * 14 + s * 2) * 0.9, 0.6, 0.7);
+          else if (s === inner) arm(s, 0.45 + Math.sin(time * 9) * 0.05, 0.05, 1.05); // 손바닥으로 지면을 스치며 축을 잡는다
+          else if (inner >= 0) arm(s, 2.7 + Math.sin(time * 7) * 0.1, 0.2, 0.75);
+          else if (leap) arm(s, 2.3 + 0.6 * Math.cos(Math.PI * 2 * (ph + s * 0.5)), 0.1, 0.3); // 번갈아 앞으로 뻗어 낚아채기
+          else if (sprint) arm(s, 1.2 + Math.sin(time * 11 + s) * 0.06, 0.2, 1.35); // 비행기 날개처럼 넓게, 뒤로 살짝 끌림
+          else arm(s, 2.55 + Math.sin(Math.PI * 4 * ph) * 0.1, 0.35, 0.4 + sg(s) * swayLR * 0.3); // 머리 위로 들고 좌우로 균형
+        }
         break;
       }
       case 'crawl': {

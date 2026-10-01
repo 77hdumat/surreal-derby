@@ -74,6 +74,7 @@ export const MOUNT_KART: Record<string, MountKart> = {
   giraffe: { top: 137, accel: 8.5, handling: 1.15, mass: 120, reach: 5.5 },
   circus: { top: 136, accel: 10, handling: 1.3, mass: 91, gauge: 1.2 }, // 드리프트 충전 빠름
   trojan: { top: 139, accel: 6.5, handling: 1.05, mass: 162, boost: 1.05 }, // 무겁고 부스트 강함
+  monkey: { top: 138, accel: 11.5, handling: 1.22, mass: 78, gauge: 1.08 }, // 날쌔고 충전 빠름, 가벼워 잘 밀림
 };
 
 /** 말 정의 × 기수 → 주행 파라미터 */

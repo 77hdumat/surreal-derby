@@ -31,3 +31,4 @@
 | tribal-drums.mp3 | 배경 음악 (메뉴·대기실·레이스 반복) | https://pixabay.com/sound-effects/musical-tribal-drums-526712/ |
 | africa-loop.mp3 | 제브라 다니오 부스터 노래 | https://pixabay.com/sound-effects/musical-quot-africa-loop-quot-467023/ |
 | wood-creak-run.mp3 | 트로이 목마 주행 중 나무 삐걱임 | https://pixabay.com/sound-effects/household-wood-creaking-30692/ |
+| monkey-kiki.mp3 / monkey-laugh.mp3 / monkey-hoot.mp3 / monkey-chatter.mp3 / monkey-chatter2.mp3 | 몽키 군단 울음 (12마리 목소리를 대목·높이·타이밍을 섞어 겹친다) | https://pixabay.com/sound-effects/nature-monkey-128368/ , https://pixabay.com/sound-effects/nature-monkey-laugh-454462/ , https://pixabay.com/sound-effects/nature-chimp-monkey-hq-sound-wav-247599/ , https://pixabay.com/sound-effects/nature-monkey-411859/ , https://pixabay.com/sound-effects/nature-monkey-chattering-494429/ |

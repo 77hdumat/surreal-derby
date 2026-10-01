@@ -4,7 +4,8 @@ import type { RacerVisual, VisualContext } from '../RacerVisual';
 import type { RaceEventType } from '../../events/RaceEvent';
 import { AnimalVisual } from './AnimalVisual';
 import { BoneSocket, AXIS_Y, AXIS_Z } from './BoneTools';
-import { RiderRig, type RiderColors, type RiderPose } from './RiderRig';
+import { RiderRig, type RiderColors, type RiderPose, type GibbonMove } from './RiderRig';
+import { GIBBON_FUR } from './JockeyHeads';
 import { HORSE_ASSET, RIDER_ASSET_CFG } from './AssetConfigs';
 
 const damp = (cur: number, target: number, k: number, dt: number) => THREE.MathUtils.lerp(cur, target, 1 - Math.exp(-k * dt));
@@ -884,5 +885,113 @@ export class TrojanRig extends AnimalVisual {
     for (const r of this.ropes) r.visible = false;
     if (this.peeker) this.peeker.group.visible = false;
     if (this.lid) this.lid.rotation.z = 0;
+  }
+}
+
+// ================================================================ 11. 몽키 군단
+const MONKEY_COUNT = 12;
+
+interface Monkey {
+  rig: RiderRig;
+  /** 무리 안 기본 자리 (m, +x 전방, +z 오른쪽) */
+  home: THREE.Vector2;
+  /** 보폭 위상·속도 배율 — 제각각 다른 박자로 달린다 */
+  ph: number;
+  rate: number;
+  /** 자리 흔들림 위상 (우루루 섞인다) */
+  drift: number;
+  /** 빨라지면 팔을 넓게 벌려 전력질주하는 녀석 */
+  sprinter: boolean;
+  /** 가끔 껑충: 남은 대기 시간, 진행도(0..1, 음수 = 땅), 길이·높이 */
+  hopWait: number;
+  hopT: number;
+  hopDur: number;
+  hopH: number;
+  yaw: number;
+}
+
+/**
+ * 크레용 신짱의 긴팔원숭이 떼 12마리가 기수 없이 다닥다닥 붙어 우루루 달린다. 늘 두 발.
+ * 인체 리그에 셸 털·긴팔원숭이 머리·긴 팔·짧은 다리. 평소엔 팔을 머리 위로 들고 통통, 빨라지면 팔을 넓게 벌리고,
+ * 부스트 땐 팔그네처럼 번갈아 뻗으며 크게 도약, 드리프트 땐 안쪽 팔로 땅을 짚는다. 박자·점프는 원숭이마다 제각각.
+ */
+export class MonkeyRig extends CrewVisualBase {
+  private monkeys: Monkey[] = [];
+
+  constructor(def: RacerDefinition, fallback: RacerVisual) {
+    super(def, fallback, 1.2);
+    const rnd = Math.random;
+    for (let i = 0; i < MONKEY_COUNT; i++) {
+      // 4줄 × 3마리, 엇갈려 빽빽하게
+      const row = Math.floor(i / 3);
+      const home = new THREE.Vector2(1.0 - row * 0.75 + (rnd() - 0.5) * 0.3, ((i % 3) - 1) * 0.6 + (row % 2 ? 0.3 : 0) + (rnd() - 0.5) * 0.2);
+      // 털 아래 맨살은 조금 어둡게 (털 사이로 비치는 속털)
+      const under = new THREE.Color(GIBBON_FUR).multiplyScalar(0.72).getHex();
+      const rig = this.addCrew({ silks: under, sleeves: under, breeches: under, boots: 0x2a2420, helmet: 0, head: 'gibbon' }, new THREE.Vector3(home.x, 0, home.y), 'hips');
+      rig.setFur(GIBBON_FUR);
+      rig.setArmScale(1.4);
+      rig.setLegScale(0.85);
+      rig.group.scale.setScalar((0.82 + rnd() * 0.22) * 0.74);
+      this.monkeys.push({
+        rig,
+        home,
+        ph: rnd(),
+        rate: 0.9 + rnd() * 0.25,
+        drift: rnd() * 100,
+        sprinter: i % 2 === 1,
+        hopWait: 0.5 + rnd() * 3,
+        hopT: -1,
+        hopDur: 0.5,
+        hopH: 0.4,
+        yaw: 0,
+      });
+    }
+  }
+
+  protected updateCrew(ctx: VisualContext, _ph: number, grounded: boolean): void {
+    const { dt, time } = ctx;
+    const moving = !grounded && ctx.speed > 0.8;
+    const boosting = ctx.state === 'BOOSTING';
+    const finished = ctx.state === 'FINISHED';
+    const energy = grounded ? 0 : Math.min(1.2, ctx.speedNorm * (boosting ? 1.25 : 1));
+    // 드리프트: 옆으로 미끄러지는 반대쪽이 안쪽 (-1 왼쪽 … +1 오른쪽)
+    const slide = THREE.MathUtils.clamp((Math.abs(ctx.lateralVel) - 1) / 3, 0, 1) * (ctx.cornerWeight > 0.5 ? 1 : 0);
+    const drift = -Math.sign(ctx.lateralVel) * slide;
+    const flail = this.stumble;
+    for (const m of this.monkeys) {
+      const move: GibbonMove = finished ? 'victory' : !moving ? 'idle' : boosting ? 'leap' : m.sprinter && ctx.speedNorm > 0.75 ? 'sprint' : 'run';
+      // 짧은 보폭·빠른 리듬 (부스트 도약은 크고 느긋하게)
+      const hz = moving ? (ctx.speed / Math.max(1, this.def.strideLength)) * m.rate * (boosting ? 0.55 : 1) : 0;
+      m.ph = (m.ph + hz * dt) % 1;
+      // 가끔 혼자 껑충 (승리 땐 제자리 점프 반복)
+      if (m.hopT < 0) {
+        m.hopWait -= dt;
+        if ((moving && !boosting) || finished ? m.hopWait <= 0 : false) {
+          m.hopT = 0;
+          m.hopDur = 0.4 + Math.random() * 0.2;
+          m.hopH = finished ? 0.3 + Math.random() * 0.3 : 0.25 + Math.random() * 0.35;
+          m.hopWait = finished ? 0.1 + Math.random() * 0.5 : 2 + Math.random() * 4;
+        }
+      } else {
+        m.hopT += dt / m.hopDur;
+        if (m.hopT >= 1) m.hopT = -1;
+      }
+      const hop = m.hopT >= 0 ? 4 * m.hopT * (1 - m.hopT) : 0;
+      // 부스트 도약: 걸음마다 진자처럼 크게 날아오른다
+      const leapAir = move === 'leap' ? Math.sin(Math.PI * ((m.ph * 2) % 1)) * 0.55 : 0;
+      const air = Math.max(hop * m.hopH, leapAir);
+      const rig = m.rig;
+      const lift = rig.animate({ mode: 'gibbon', ph: m.ph, energy, time: time + m.drift, move, tuck: hop * 0.8, drift, flail });
+      const s = rig.group.scale.x;
+      const feet = Math.min(rig.footL.y, rig.footR.y);
+      // 걸음마다 좌우로 기우뚱 (대기 중엔 체중 이동), 드리프트 땐 안쪽으로 크게 기운다
+      const wob = move === 'idle' ? Math.sin(time * 2.1 + m.drift) * 0.06 : Math.sin(Math.PI * 2 * m.ph) * 0.1;
+      const d = m.drift;
+      const x = m.home.x + Math.sin(time * 0.9 + d) * 0.18;
+      const z = m.home.y + Math.sin(time * 0.7 + d * 1.3) * 0.12 + wob * 0.5;
+      rig.group.position.set(x, -feet * s + 0.04 + lift * s + air, z);
+      m.yaw = damp(m.yaw, Math.sin(time * 1.1 + d) * 0.15, 3, dt);
+      rig.group.rotation.set(wob + drift * 0.35, m.yaw, 0);
+    }
   }
 }

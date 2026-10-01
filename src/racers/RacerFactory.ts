@@ -20,7 +20,7 @@ import {
 import { RIDER_ASSET } from './rig/AnimalVisual';
 import { RIDER_ASSET_CFG } from './rig/AssetConfigs';
 import { CircusRig, MotorRig, LongbodyRig, ElephantRig, CowRig, GiraffeRig, ZebraRig } from './rig/RigVisuals';
-import { CostumeRig, HumanRig, TrojanRig } from './rig/CrewVisuals';
+import { CostumeRig, HumanRig, TrojanRig, MonkeyRig } from './rig/CrewVisuals';
 
 /** 리깅 GLB 캐릭터 사용 (false 면 절차 생성 placeholder 만) */
 export const USE_RIG_ASSETS = true;
@@ -2139,6 +2139,7 @@ export class RacerFactory {
         placeholder = new MotorcycleVisual(def);
         break;
       case 'HUMAN':
+      case 'MONKEY':
         placeholder = new HumanVisual(def);
         break;
       case 'GIRAFFE':
@@ -2175,6 +2176,8 @@ export class RacerFactory {
         return new CostumeRig(def, placeholder);
       case 'HUMAN':
         return new HumanRig(def, placeholder);
+      case 'MONKEY':
+        return new MonkeyRig(def, placeholder);
       case 'TROJAN':
         return new TrojanRig(def, placeholder);
       default:

@@ -11,6 +11,7 @@ export type SpecialAbility =
   | 'GIRAFFE'
   | 'CIRCUS'
   | 'TROJAN'
+  | 'MONKEY'
   | 'CLASSIC';
 
 export interface RacerDefinition {

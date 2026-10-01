@@ -292,7 +292,7 @@ export class RacerManager {
       }
       // 발자국
       if (this.footprints && distToCam < 120) {
-        const size = def.specialAbility === 'ELEPHANT' ? 2.6 : def.specialAbility === 'TROJAN' ? 0 : def.specialAbility === 'HUMAN' || def.specialAbility === 'COSTUME' ? 0.9 : def.specialAbility === 'GIRAFFE' ? 1.3 : 1;
+        const size = def.specialAbility === 'ELEPHANT' ? 2.6 : def.specialAbility === 'TROJAN' ? 0 : def.specialAbility === 'HUMAN' || def.specialAbility === 'COSTUME' || def.specialAbility === 'MONKEY' ? 0.9 : def.specialAbility === 'GIRAFFE' ? 1.3 : 1;
         if (size > 0) {
           v.hoofPoints.forEach((hp, hi) => {
             this.tmpFoot.copy(hp).applyMatrix4(v.root.matrixWorld);
