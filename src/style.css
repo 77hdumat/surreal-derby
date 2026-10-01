@@ -417,6 +417,11 @@ button, input { font-family: var(--font); }
 .boost-slots .pip { width: 40px; height: 20px; border: 3px solid var(--cocoa); border-radius: 999px; background: var(--cream); box-shadow: 0 3px 0 var(--cocoa); }
 .boost-slots .pip.on { background: linear-gradient(180deg, #fff3b0 0%, var(--sunny) 55%, #ffb347 100%); box-shadow: 0 3px 0 var(--cocoa), 0 0 14px rgba(255, 209, 102, 0.9); }
 .boost-slots .pip.on.blue { background: linear-gradient(180deg, #d8f6ff 0%, #6fd3ff 55%, #3aa7f0 100%); box-shadow: 0 3px 0 var(--cocoa), 0 0 16px rgba(111, 211, 255, 0.9); }
+.boost-slots .pip.on.blue.promote { animation: pipPromote 0.9s; }
+@keyframes pipPromote {
+  0%, 20%, 40%, 60% { background: linear-gradient(180deg, #fff3b0 0%, var(--sunny) 55%, #ffb347 100%); transform: scale(1.15); }
+  10%, 30%, 50%, 70%, 100% { background: linear-gradient(180deg, #d8f6ff 0%, #6fd3ff 55%, #3aa7f0 100%); transform: scale(1.25); }
+}
 
 /* 게이지: 광택 있는 캔디 바 */
 .gauge { height: 26px; border: 3px solid var(--cocoa); border-radius: 999px; background: var(--cream); box-shadow: 0 4px 0 var(--cocoa); }

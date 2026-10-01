@@ -490,9 +490,9 @@ export function stepKart(st: KartState, input: KartInput, p: KartParams, track: 
       const bonus = (boosting ? 2 : mini ? 1.25 : 1) * (1.25 - 0.35 * deep) * cut;
       st.gauge += Math.sqrt(Math.abs(st.slip) / MAX_SLIP) * speedFrac * p.gaugeRate * DRIFT_GAUGE_MUL * bonus * dt;
       if (st.gauge >= 1) {
-        // 칸이 비어 있으면 일반 부스터, 다 찼으면 한 칸씩 파란 부스터로 승격
+        // 칸이 비어 있으면 일반 부스터, 다 찼으면 갖고 있는 부스터가 한꺼번에 파란 부스터로 승격
         if (st.boosts < MAX_BOOSTS) st.boosts++;
-        else if (st.blueBoosts < st.boosts) st.blueBoosts++;
+        else st.blueBoosts = st.boosts;
         const full = st.boosts >= MAX_BOOSTS && st.blueBoosts >= MAX_BOOSTS;
         st.gauge = full ? 0 : st.gauge - 1;
         st.gaugeAtDriftStart = 0; // 이미 확보한 부스터는 부딪혀도 안 잃는다

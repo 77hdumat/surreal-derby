@@ -627,7 +627,14 @@ export class UIManager {
       const pip = $(`pip-${i}`);
       pip.classList.toggle('on', h.boosts >= i + 1);
       // 파란 부스터는 먼저 쓰이므로 왼쪽부터 파랗게
+      const wasRed = pip.classList.contains('on') && !pip.classList.contains('blue');
       pip.classList.toggle('blue', h.blueBoosts >= i + 1);
+      // 갖고 있던 부스터가 파랗게 승격되면 깜빡이며 바뀐다
+      if (wasRed && pip.classList.contains('blue')) {
+        pip.classList.remove('promote');
+        void pip.offsetWidth; // 애니메이션 다시 시작
+        pip.classList.add('promote');
+      }
     }
     g.classList.toggle('blue', h.boostBlue);
     const bt = $('boost-timer');
@@ -635,7 +642,7 @@ export class UIManager {
     bt.classList.toggle('blue', h.boostBlue);
     bt.classList.toggle('ending', h.boosting && h.boostLeft < 0.6);
     ($('boost-timer-fill') as HTMLElement).style.width = `${Math.round(Math.max(0, Math.min(1, h.boostFrac)) * 100)}%`;
-    $('gauge-label').textContent = h.boosting ? `${h.boostBlue ? 'BLUE BOOST' : 'BOOST'} ${h.boostLeft.toFixed(1)}s` : h.blueBoosts > 0 ? 'SPACE → BLUE BOOST' : h.boosts >= 2 ? 'MAX · 계속 드리프트 → 블루' : h.boosts >= 1 ? 'SPACE → BOOST' : 'DRIFT → 게이지';
+    $('gauge-label').textContent = h.boosting ? `${h.boostBlue ? 'BLUE BOOST' : 'BOOST'} ${h.boostLeft.toFixed(1)}s` : h.blueBoosts > 0 ? 'SPACE → BLUE BOOST' : h.boosts >= 2 ? 'MAX · 게이지 채우면 전부 블루' : h.boosts >= 1 ? 'SPACE → BOOST' : 'DRIFT → 게이지';
     const key = h.order.map((o) => o.name + (o.finished ? '!' : '')).join('|');
     if (key !== this.lastRankKey) {
       this.lastRankKey = key;

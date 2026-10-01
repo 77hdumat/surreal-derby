@@ -229,15 +229,14 @@ describe('게이지 규칙', () => {
     for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
     expect(st.boosts).toBe(1);
     expect(st.gauge).toBeLessThan(0.6);
-    // 2칸이 다 차면 다음 충전부터는 파란 부스터로 승급 (드리프트는 계속 잠겨 있다)
+    // 2칸이 다 차면 다음 충전 한 번에 둘 다 파란 부스터로 승급 (드리프트는 계속 잠겨 있다)
     st.boosts = 2;
     st.blueBoosts = 0;
     st.gauge = 0.99;
     for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
     expect(st.boosts).toBe(2);
-    expect(st.blueBoosts).toBe(1);
+    expect(st.blueBoosts).toBe(2);
     // 둘 다 파랑이면 더는 안 찬다
-    st.blueBoosts = 2;
     st.gauge = 0.99;
     for (let i = 0; i < 30; i++) stepKart(st, inp({ throttle: 1, steer: 1, drift: true }), P, track, DT);
     expect(st.gauge).toBeLessThanOrEqual(0.99); // 더는 안 찬다 (벽에 닿으면 줄 수는 있다)
