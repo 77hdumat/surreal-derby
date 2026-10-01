@@ -1532,6 +1532,12 @@ export class Game {
       } else {
         const heavy = ab === 'GIRAFFE' ? 1.2 : 1;
         this.audio.updateRacerLoop(String(i), 'gallop', pos, speedNorm, { heavy, active, own });
+        // 소: 걸음마다 워낭이 딸랑
+        if (ab === 'COW') {
+          const ph = (this.stepPhase[i] ?? Math.random()) + (active ? Math.abs(k.speed) / 5 : 0) * dt;
+          if (ph >= 1) this.audio.playSegment('bell', 0, 0.3, { pos, minGain: own ? 0.25 : 0, gain: 0.22, rate: 2.1 + Math.random() * 0.2 });
+          this.stepPhase[i] = ph % 1;
+        }
       }
       // 얼룩말: 부스트 쓰는 동안만 Africa 노래 (내 말이면 그동안 배경 북소리를 줄인다)
       if (ab === 'CLASSIC') {

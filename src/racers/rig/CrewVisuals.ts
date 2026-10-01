@@ -526,25 +526,28 @@ export class HumanRig extends CrewVisualBase {
   protected updateCrew(ctx: VisualContext, ph: number, grounded: boolean): void {
     const { dt, time, speedNorm } = ctx;
     const st = ctx.state;
+    // 업고 달리기: 업은 사람은 30~40° 숙여 두 팔로 업힌 사람 허벅지를 받친다. 부스트(BIPEDAL)는 이를 악물고 더 숙여 전력질주
     this.bipedal = damp(this.bipedal, st === 'BIPEDAL' ? 1 : 0, 5, dt);
     this.tired = damp(this.tired, st === 'EXHAUSTED' ? 1 : 0, 3, dt);
     this.kneel = damp(this.kneel, st === 'SHOELACE' ? 1 : 0, 6, dt);
-    const b = this.bipedal;
+    const sprint = this.bipedal;
     const energy = grounded ? 0 : speedNorm * (1 - this.tired * 0.5);
-    const mode = b > 0.5 ? 'run' : 'crawl';
-    // 기는 사람: 골반 높이 ~0.62m. 두 발 달리기: 서서.
-    const lift = this.runner.animate({ mode, ph, energy: this.kneel > 0.5 ? 0 : energy, time, lean: 0.35 + this.tired * 0.2 });
-    // 골반 높이: 네발 0.55m → 두 발 0.88m
-    this.runner.group.position.set(0, THREE.MathUtils.lerp(0.55, 0.88, b) + lift - this.kneel * 0.25, 0);
-    this.runner.group.rotation.set(0, 0, -this.kneel * 0.6 - this.tired * (1 - b) * 0.1);
-    // 기수: 기는 등 위에 앉음 → 두 발이면 업힌 자세(등 뒤 높이)
-    const seatY = THREE.MathUtils.lerp(0.74, 1.15, b) + lift;
-    const seatX = THREE.MathUtils.lerp(-0.22, -0.4, b);
-    this.jockey.group.position.set(seatX, seatY - this.kneel * 0.25, 0);
-    this.jockey.group.rotation.set(0, 0, THREE.MathUtils.lerp(0, 0.25, b));
-    this.jockey.animate({ mode: 'ride', ph, energy, time });
-    this.height = THREE.MathUtils.lerp(1.4, 2.2, b);
-    this.sweatPoint.set(0.6 + b * 0.1, THREE.MathUtils.lerp(1.0, 1.6, b), 0);
+    // 서 있을 땐 숨 고르며 들썩이고, 가끔 "영차" 하고 작게 뛰어 고쳐 업는다
+    const resting = energy < 0.05 && !grounded;
+    const hitchU = (time * 0.27 + this.seed) % 1;
+    const hitch = resting && hitchU > 0.9 ? Math.sin(((hitchU - 0.9) / 0.1) * Math.PI) * 0.08 : 0;
+    const breath = resting ? Math.sin(time * 3.2) * 0.012 : 0;
+    const lean = 0.6 + sprint * 0.18 + this.tired * 0.15;
+    const lift = this.runner.animate({ mode: 'carry', ph, energy: this.kneel > 0.5 ? 0 : energy * (1 + sprint * 0.2), time, lean });
+    this.runner.group.position.set(0, 0.86 + lift + hitch + breath - this.kneel * 0.25, 0);
+    this.runner.group.rotation.set(0, 0, -this.kneel * 0.6);
+    // 업힌 사람: 반동을 반 박자 늦게 받아 위아래로 튄다 (follow-through). 전력질주 땐 몸을 낮춘다
+    const lag = Math.abs(Math.sin(Math.PI * 2 * (ph - 0.25))) * 0.07 * energy;
+    this.jockey.group.position.set(-0.4 - sprint * 0.04, 1.15 + lag + hitch * 1.4 + breath - sprint * 0.06 - this.kneel * 0.25, 0);
+    this.jockey.group.rotation.set(0, 0, 0.25 + sprint * 0.12);
+    this.jockey.animate({ mode: 'ride', ph: ph - 0.25, energy: energy * (1 + sprint * 0.5), time });
+    this.height = 2.2;
+    this.sweatPoint.set(0.7, 1.6, 0);
   }
 }
 

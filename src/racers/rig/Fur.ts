@@ -17,11 +17,13 @@ export interface FurOptions {
   mask?: string;
   /** 마스크가 쓰는 uniform */
   uniforms?: Record<string, THREE.IUniform>;
+  /** 털 색을 원래 텍스처에서 (얼룩·줄무늬 유지). color 는 곱해진다 */
+  map?: THREE.Texture | null;
 }
 
 export function furShellMaterial(o: FurOptions, k: number): THREE.MeshStandardMaterial {
   const shell = (k + 1) / o.shells; // 0..1 (뿌리 → 끝)
-  const mat = new THREE.MeshStandardMaterial({ color: o.color, roughness: 1, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ color: o.color, map: o.map ?? null, roughness: 1, metalness: 0 });
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, o.uniforms ?? {});
     shader.uniforms.uFurOffset = { value: o.length * shell };
@@ -62,7 +64,7 @@ float furHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 437
 }`,
       );
   };
-  mat.customProgramCacheKey = () => `fur-${o.mask ?? ''}-${shell.toFixed(3)}`;
+  mat.customProgramCacheKey = () => `fur-${o.mask ?? ''}-${shell.toFixed(3)}-${o.map ? 'map' : ''}`;
   return mat;
 }
 
@@ -71,6 +73,8 @@ export function addSkinnedFur(src: THREE.SkinnedMesh, o: FurOptions): THREE.Skin
   const out: THREE.SkinnedMesh[] = [];
   for (let k = 0; k < o.shells; k++) {
     const m = new THREE.SkinnedMesh(src.geometry, furShellMaterial(o, k));
+    const srcMat = (Array.isArray(src.material) ? src.material[0] : src.material) as THREE.Material;
+    (m.material as THREE.Material).name = `fur:${srcMat.name}`;
     m.bind(src.skeleton, src.bindMatrix);
     m.position.copy(src.position);
     m.quaternion.copy(src.quaternion);

@@ -135,7 +135,7 @@ export const RACER_DEFINITIONS: RacerDefinition[] = [
     luck: 0.5,
     specialAbility: 'HUMAN',
     abilityName: '두 발 전력질주',
-    abilityDesc: '네 발로 뛰며 기수를 태운 사람. 스태미나가 매우 낮아 금방 지치지만, 가끔 일어나서 두 발로 전력질주한다.',
+    abilityDesc: '기수를 업고 달리는 사람. 업힌 기수는 반 박자 늦게 들썩이고, 부스트 땐 이를 악물고 더 숙여 전력질주한다.',
     description: '본인은 말이라고 주장한다. 기수는 무겁다.',
     bodyColor: 0xe8b894,
     clothColor: 0xb02a8f,

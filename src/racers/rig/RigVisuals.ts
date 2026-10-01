@@ -70,9 +70,10 @@ export class CircusRig extends HorseRig {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       const mat = m.material as THREE.MeshStandardMaterial;
-      if (mat.name === 'Horse' || mat.name === 'Hair') {
+      const base = mat.name.replace(/^fur:/, ''); // 털 껍질도 같이 흰 털로
+      if (base === 'Horse' || base === 'Hair') {
         mat.map = null;
-        mat.color.set(mat.name === 'Horse' ? 0xf3efe6 : 0xfaf7f0);
+        mat.color.set(base === 'Horse' ? 0xf3efe6 : 0xfaf7f0);
         mat.roughness = 0.75;
         mat.needsUpdate = true;
       }
@@ -176,11 +177,22 @@ export class MotorRig extends HorseRig {
   backfiring = false;
 
   constructor(def: RacerDefinition, fallback: RacerVisual) {
-    super(def, fallback, { ...HORSE_ASSET, hideMeshes: ['Saddle', 'Horseshoe'], tint: true, seat: { bone: 'chest', offset: [-0.45, 0.5, 0] } });
+    // 기계처럼 매끈한 흑마: 털 대신 광택, 드리프트 땐 오토바이처럼 깊게 눕는다 (45° 이상)
+    super(def, fallback, { ...HORSE_ASSET, fur: undefined, leanMul: 2.8, hideMeshes: ['Saddle', 'Horseshoe'], tint: true, seat: { bone: 'chest', offset: [-0.45, 0.5, 0] } });
     this.riderPose = CHOPPER_POSE;
   }
 
   protected buildDecor(): void {
+    // 칠흑 같은 메탈릭 털: 근육 윤곽에 하늘이 날카롭게 비친다
+    this.model!.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mat = m.material as THREE.MeshStandardMaterial;
+      if (mat.name !== 'Horse') return;
+      mat.roughness = 0.3;
+      mat.metalness = 0.45;
+      mat.envMapIntensity = 1.3;
+    });
     // 반사가 눈부시지 않게: 하이라이트 최고 밝기 ≈15% (GGX 피크 ∝ 1/α², α=거칠기²) + 환경 반사 15%
     const chrome = std(0xe8ecf2, { roughness: 0.32, metalness: 0.95, envMapIntensity: 0.15 });
     const hair = std(0x0a0a0c, { roughness: 0.35, metalness: 0.1 });
@@ -535,8 +547,13 @@ export class CowRig extends AnimalVisual {
     if (this.cape) this.cape.visible = false;
   }
 
-  protected updateSpecial(ctx: VisualContext, _ph: number): void {
+  protected updateSpecial(ctx: VisualContext, ph: number): void {
     const { time, dt, speedNorm } = ctx;
+    // 엉성한 갤럽: 통 같은 몸통이 시소처럼 앞뒤로 크게 흔들리고 머리도 같이 끄덕인다. 빨라지면 머리를 낮춰 뿔이 앞으로
+    const sway = Math.sin(Math.PI * 2 * (ph + 0.1));
+    this.body.rotation.z += sway * 0.07 * speedNorm;
+    const charge = THREE.MathUtils.clamp((speedNorm - 0.8) * 5, 0, 1);
+    this.rot('neck0', AXIS_Z, -sway * 0.14 * speedNorm - 0.3 * charge);
     // 부스트(RAGING) 동안 투우: 빠르게 일어서고, 끝나도 천천히 앉는다
     this.rage = damp(this.rage, ctx.state === 'RAGING' ? 1 : 0, ctx.state === 'RAGING' ? 9 : 2.5, dt);
     const r = this.rage;

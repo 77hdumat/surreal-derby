@@ -7,6 +7,7 @@ import type { RaceEventType } from '../../events/RaceEvent';
 import type { RacerVisual, VisualContext } from '../RacerVisual';
 import { instantiate, findBone, findClip, dumpSkeleton } from './Assets';
 import { rotateBoneModelSpace, translateBoneModelSpace, BoneSocket, AXIS_X, AXIS_Y, AXIS_Z } from './BoneTools';
+import { addSkinnedFur } from './Fur';
 import { RiderRig, JOCKEY_POSE, type RiderAssetConfig, type RiderPose, type RiderColors } from './RiderRig';
 
 /**
@@ -79,6 +80,10 @@ export interface AnimalAssetConfig {
   bit?: [number, number, number];
   /** 목 끄덕임 진폭 */
   neckBob?: number;
+  /** 셸 털: 재질 이름이 맞는 메시에만. length·density 는 메시 높이 대비 (털 길이 비율, 높이당 가닥 수) */
+  fur?: { materials: RegExp; length: number; density: number; shells?: number };
+  /** 코너·드리프트 때 안쪽으로 눕는 정도 배율 (오토바이 흑마는 크게) */
+  leanMul?: number;
   /** 사이드 라벨(번호천) 위치·크기 */
   numberCloth?: { bone: RigBone; offset: [number, number, number]; size: number; halfWidth: number };
 }
@@ -219,6 +224,7 @@ export abstract class AnimalVisual implements RacerVisual {
           for (const mat of mats) (mat as THREE.MeshStandardMaterial).color?.multiply(new THREE.Color(this.def.bodyColor));
         }
       });
+      if (this.cfg.fur) this.buildFur(model, this.cfg.fur);
       // 바인드 포즈 저장 — 클립에 트랙이 없는 뼈에 additive 회전이 누적되지 않도록 매 프레임 복원
       model.traverse((o) => {
         if (!(o as THREE.Bone).isBone) return;
@@ -496,7 +502,7 @@ export abstract class AnimalVisual implements RacerVisual {
     this.grazePose = THREE.MathUtils.lerp(this.grazePose, grazeTarget, 1 - Math.exp(-4 * dt));
     // 갤럽 바운스 (절차 보행일 때만 — 클립은 자체 바운스 포함)
     const bounce = procGait ? Math.max(0, Math.sin(Math.PI * 2 * (ph - 0.05))) * 0.06 * animSpeed : 0;
-    const lean = -ctx.cornerWeight * THREE.MathUtils.clamp((ctx.speed * ctx.speed) / (60 * 9.8), 0, 1) * 0.3;
+    const lean = -ctx.cornerWeight * THREE.MathUtils.clamp((ctx.speed * ctx.speed) / (60 * 9.8), 0, 1) * 0.3 * (this.cfg.leanMul ?? 1);
     const roll = lean + this.impactStrength * this.impactSide * Math.sin(this.impactAge * 12) * Math.exp(-this.impactAge * 7) * 0.13;
     const pitch = -THREE.MathUtils.clamp(ctx.accel, -8, 8) * 0.003 - this.stumble * 0.12;
     const dp = this.downPose;
@@ -579,6 +585,24 @@ export abstract class AnimalVisual implements RacerVisual {
       const p = this.hoofPoints[hi++];
       b.getWorldPosition(p);
       this.root.worldToLocal(p);
+    }
+  }
+
+  /** 털 껍질: 원래 텍스처를 그대로 써서 무늬가 털 끝까지 이어진다 */
+  private buildFur(model: THREE.Object3D, fur: NonNullable<AnimalAssetConfig['fur']>): void {
+    const skins: THREE.SkinnedMesh[] = [];
+    model.traverse((o) => {
+      const sm = o as THREE.SkinnedMesh;
+      if (!sm.isSkinnedMesh || !sm.visible) return;
+      const mat = (Array.isArray(sm.material) ? sm.material[0] : sm.material) as THREE.MeshStandardMaterial;
+      if (fur.materials.test(mat.name)) skins.push(sm);
+    });
+    for (const sm of skins) {
+      const mat = sm.material as THREE.MeshStandardMaterial;
+      sm.geometry.computeBoundingBox();
+      const h = sm.geometry.boundingBox!.getSize(new THREE.Vector3());
+      const H = Math.max(h.x, h.y, h.z);
+      addSkinnedFur(sm, { color: mat.color.getHex(), map: mat.map, shells: fur.shells ?? 4, length: H * fur.length, freq: fur.density / H });
     }
   }
 

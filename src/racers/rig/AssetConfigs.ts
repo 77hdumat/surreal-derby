@@ -57,6 +57,8 @@ export const HORSE_ASSET: AnimalAssetConfig = {
   bit: [0.42, -0.42, 0.12],
   neckBob: 0.05,
   numberCloth: { bone: 'spine', offset: [-0.2, -0.05, 0], size: 0.55, halfWidth: 0.5 },
+  fur: { materials: /^(Horse|Hair)$/, length: 0.012, density: 420 },
+  leanMul: 1.4,
 };
 
 /** "African Elephant" by jimmyho905 — Loco_Run/Sprint/WalkSlow, Stand, Roar, Attack, Lying. 모델 +z 전방 */
@@ -140,6 +142,7 @@ export const COW_ASSET: AnimalAssetConfig = {
   bit: [0.5, -0.05, 0.14],
   neckBob: 0.04,
   numberCloth: { bone: 'spine', offset: [0, -0.15, 0], size: 0.5, halfWidth: 0.42 },
+  fur: { materials: /^material$/, length: 0.014, density: 380 },
 };
 
 /** "Giraffe" by Amx360 — 달리기 클립 1개. 모델 +z 전방 */
@@ -176,8 +179,10 @@ export const GIRAFFE_ASSET: AnimalAssetConfig = {
   feetTips: ['Bone010_23', 'Bone018_27', 'Bone014_15', 'Bone022_19'],
   height: 5.6,
   seat: { bone: 'chest', offset: [-0.15, 0.45, 0] },
-  neckBob: 0.03,
+  // 기린 갤럽: 목이 몸의 균형추처럼 크게 펌프질
+  neckBob: 0.14,
   numberCloth: { bone: 'spine', offset: [0, -0.1, 0], size: 0.5, halfWidth: 0.5 },
+  fur: { materials: /^Skin/, length: 0.008, density: 520 },
 };
 
 /** "Zebra - Rigged" by Noa Seller — Gallop/Trot/Idle/Eating/Attack 클립. 모델 +z 전방 */
@@ -218,6 +223,8 @@ export const ZEBRA_ASSET: AnimalAssetConfig = {
   bit: [0.4, -0.3, 0.1],
   neckBob: 0.05,
   numberCloth: { bone: 'spine', offset: [0, -0.05, 0], size: 0.5, halfWidth: 0.42 },
+  fur: { materials: /^Zebra_Mat$/, length: 0.012, density: 420 },
+  leanMul: 1.3,
 };
 
 /** "Male Character Base - Rigged" by Braingapps — CMU 골격, A 포즈 */
