@@ -9,6 +9,7 @@ import { ParticleManager } from '../effects/ParticleManager';
 import { AudioManager } from '../audio/AudioManager';
 import { UIManager } from '../ui/UIManager';
 import { updateWind } from '../track/Vegetation';
+import { loadSky } from '../track/Environment';
 import { onAssetProgress } from '../racers/rig/Assets';
 import { Footprints } from '../effects/Footprints';
 import { SkidMarks } from '../effects/SkidMarks';
@@ -150,10 +151,10 @@ export class Game {
 
     // 여름 오후: 따뜻한 낮은 태양, 긴 그림자, 부드러운 안개 (HSV 안개: r=목표 명도, g=목표 채도)
     installHsvFog();
-    // 동화책 톤: 멀수록 밝고 옅어지는 안개(HSV: r=명도 0.96, g=채도 0.18), 밝은 반구광
-    this.scene.fog = new THREE.Fog(new THREE.Color(0.97, 0.22, 0), 320, 2200);
-    this.scene.add(new THREE.HemisphereLight(0xe4f1ff, 0xb6d88c, 1.05));
-    this.sun = new THREE.DirectionalLight(0xffe2b8, 2.3);
+    // 실사 톤: 멀수록 채도가 빠지는 대기 원근(HSV: r=명도 0.8, g=채도 0.16), HDRI 가 주 환경광이라 반구광은 약하게
+    this.scene.fog = new THREE.Fog(new THREE.Color(0.8, 0.16, 0), 200, 2600);
+    this.scene.add(new THREE.HemisphereLight(0xbcd7f5, 0x8c8776, 0.45));
+    this.sun = new THREE.DirectionalLight(0xfff6e8, 2.4);
     this.sun.position.copy(this.sunOffset);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -247,13 +248,22 @@ export class Game {
     void Net.fetchTurn();
   }
 
-  /** 실사 HDRI 하늘: 배경·환경광으로 쓰고, HDRI 의 태양 방향에 DirectionalLight 를 맞춘다 */
-  /** 동화책 월드: 하늘 돔은 RaceTrack 에 있다. 환경광은 그 돔에서 굽고, 로우폴리 풍경을 불러온다 */
+  /** 실사 HDRI 하늘: 배경·환경광으로 쓰고, HDRI 의 태양 방향에 DirectionalLight 를 맞춘다. 실패하면 하늘 돔 유지 */
   private async applySky(): Promise<void> {
-    this.scene.background = null; // 물리 하늘(Sky) 이 배경
-    this.scene.environmentIntensity = 0.55;
-    this.sunOffset.copy(RaceTrack.SUN_DIR).multiplyScalar(130);
-    await this.track.loadRealAssets(RaceTrack.SUN_DIR);
+    try {
+      const sky = await loadSky(true);
+      this.scene.background = sky.texture;
+      this.scene.environment = sky.texture;
+      this.scene.environmentIntensity = 0.55;
+      this.track.sky.visible = false;
+      this.sunOffset.copy(sky.sunDir).multiplyScalar(130);
+      await this.track.loadRealAssets(sky.sunDir);
+    } catch (e) {
+      console.warn('[sky] HDRI 로드 실패 — 하늘 돔 유지', e);
+      this.scene.environmentIntensity = 0.55;
+      this.sunOffset.copy(RaceTrack.SUN_DIR).multiplyScalar(130);
+      await this.track.loadRealAssets(RaceTrack.SUN_DIR);
+    }
   }
 
   start(): void {

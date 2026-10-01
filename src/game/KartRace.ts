@@ -97,7 +97,7 @@ export class KartRace {
   setup(slots: SlotConfig[], owned?: (slot: SlotConfig) => boolean, seed = 1, raceMode: RaceMode = 'item'): void {
     this.slots = slots.slice(0, MAX_SLOTS).map((s, i) => ({ ...s, slot: i, lobby: s.lobby ?? i }));
     this.seed = seed;
-    this.obstacles = generateObstacles(seed, this.track);
+    this.obstacles = generateObstacles(seed, this.track, 0); // 진흙 웅덩이는 뺐다 (실사 흙 주로에서 구멍처럼 보임)
     this.raceMode = raceMode;
     const mySlot = this.slots.findIndex((s) => (owned ? owned(s) : true) && !s.cpu);
     this.items.setup(seed, Math.max(0, mySlot));

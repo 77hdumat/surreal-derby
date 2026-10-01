@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { loadAsset } from '../racers/rig/Assets';
+import type { TrackGeometry } from './TrackGeometry';
 
 /**
  * 실사 배경 모델 (Sketchfab CC-BY, public/models/CREDITS.md)
@@ -269,4 +270,35 @@ export function makeLake(radiusX: number, radiusZ: number, _sunDir: THREE.Vector
   water.userData.noShadow = true;
   water.userData.waterNormals = normals;
   return water;
+}
+
+/**
+ * 자연 맵 실사 배경: 실사 나무(트랙 가까이 큰 것·멀리 가벼운 것), 위성 DEM 산 링.
+ * project() 로 트랙에서의 거리를 재서 트랙·연못 위에는 두지 않는다.
+ */
+export async function loadRealWorld(track: TrackGeometry, avoid: (x: number, z: number) => boolean, rnd: () => number = Math.random): Promise<THREE.Group> {
+  const group = new THREE.Group();
+  const [protos, mountains] = await Promise.all([loadTreePrototypes(), loadMountains()]);
+  const halfW = track.width / 2;
+  const b = track.bounds;
+  const coord = { s: 0, lat: 0 };
+  const light = protos.slice(0, Math.max(1, Math.ceil(protos.length / 2)));
+  let placed = 0;
+  for (let tries = 0; tries < 3000 && placed < 140; tries++) {
+    const x = THREE.MathUtils.lerp(b.minX - 90, b.maxX + 90, rnd());
+    const z = THREE.MathUtils.lerp(b.minZ - 90, b.maxZ + 90, rnd());
+    const lat = Math.abs(track.project(x, z, coord).lat);
+    if (lat < halfW + 10 || lat > 130 || avoid(x, z)) continue;
+    // 가까운 자리는 큰 나무, 먼 자리는 폴리 적은 나무
+    const pool = lat < 45 ? protos : light;
+    const t = cloneTree(pool[Math.floor(rnd() * pool.length)], (lat < 45 ? 10 : 8) + rnd() * 7);
+    t.position.set(x, 0, z);
+    t.rotation.y = rnd() * Math.PI * 2;
+    group.add(t);
+    placed++;
+  }
+  // 먼 산은 원점 기준 링이라 서킷 중심으로 옮긴다
+  mountains.position.set((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2);
+  group.add(mountains);
+  return group;
 }

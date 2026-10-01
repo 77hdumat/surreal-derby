@@ -64,6 +64,37 @@ export function grassMaterial(repeatU: number, repeatV = repeatU, opts: { stripe
   return mat;
 }
 
+/** 경마장 흙 주로 PBR (Poly Haven "Baseball Playground"). 트랙 UV: u = 20m 당 1, v = 폭 0..1 */
+export function dirtMaterial(): THREE.MeshStandardMaterial {
+  const mk = (name: string, srgb: boolean) => {
+    const t = loadTex(`${BASE}/env/${name}`, srgb, 1);
+    t.repeat.set(5, 4); // 약 4m 타일
+    return t;
+  };
+  const arm = mk('dirt_arm.webp', false);
+  const mat = new THREE.MeshStandardMaterial({
+    map: mk('dirt_diff.webp', true),
+    normalMap: mk('dirt_nor.webp', false),
+    aoMap: arm,
+    roughnessMap: arm,
+    color: 0xe6c8a8, // 회갈색 흙을 경마장 흙빛으로 살짝 데운다
+    roughness: 1,
+    metalness: 0,
+  });
+  // 펜스 쪽은 덜 밟혀 어둡고, 중앙 주행선은 밝게 다져진 느낌
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+{
+  float edge = abs(fract(vMapUv.y / 4.0) - 0.5) * 2.0;
+  diffuseColor.rgb *= 1.0 - 0.18 * smoothstep(0.75, 1.0, edge);
+}`,
+    );
+  };
+  return mat;
+}
+
 export function rockMaterial(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     map: loadTex(`${BASE}/env/rock_diff.webp`, true, 40),

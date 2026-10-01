@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { makeSkyDome, loadStorybookWorld, driftClouds, PALETTE, STORY_SUN, toonRamp } from './Storybook';
+import { makeSkyDome, STORY_SUN, toonRamp } from './Storybook';
+import { grassMaterial, dirtMaterial } from './Environment';
+import { loadRealWorld, makeLake } from './SceneAssets';
+import { applyCloudShadow } from './Vegetation';
 
 import { TrackGeometry, trackLayoutById, TRACK_LAYOUTS, type TrackFrame } from './TrackGeometry';
 import { buildCityScape, CITY } from './CityScape';
@@ -14,10 +17,12 @@ export class RaceTrack extends TrackGeometry {
   layoutId = TRACK_LAYOUTS[0].id;
   /** 맵마다 새로 만드는 것: 코스 바닥·펜스·출발선·간판·전광판·연못 */
   private course = new THREE.Group();
-  /** 맵마다 새로 까는 것: 나무·덤불·산·구름 (동화책 에셋) */
+  /** 맵마다 새로 까는 것: 실사 나무·산·잔디 (자연 맵만) */
   private world = new THREE.Group();
   private assetsWanted = false;
-  private groundMat!: THREE.MeshToonMaterial;
+  private ground!: THREE.Mesh;
+  private grassMat!: THREE.MeshStandardMaterial;
+  private cityGroundMat = new THREE.MeshStandardMaterial({ color: CITY.ground, roughness: 1, metalness: 0 });
 
   /** 현재 맵 풍경 테마 */
   get theme(): 'nature' | 'city' {
@@ -29,13 +34,12 @@ export class RaceTrack extends TrackGeometry {
   private screenCtx!: CanvasRenderingContext2D;
   private screenTex!: THREE.CanvasTexture;
   private clouds: THREE.Group[] = [];
-  /** 연못 (동화책 물) */
+  /** 호수 (반사 물) */
   pond?: THREE.Mesh;
   /** 호수/연못 자리 (트랙에서 가장 먼 곳) */
   private lakeSpot = new THREE.Vector3();
   /** 하늘 돔 (Game 이 환경맵을 구울 때 쓴다) */
   sky!: THREE.Object3D;
-  private storyClouds: THREE.Object3D[] = [];
   /** 태양 방향 (정규화) — 조명·하늘·태양 원반 공통 */
   static readonly SUN_DIR = STORY_SUN;
 
@@ -56,7 +60,7 @@ export class RaceTrack extends TrackGeometry {
   /** 코스(맵 의존) 메시를 this.course 에 만든다 */
   private buildCourse(): void {
     const city = this.theme === 'city';
-    this.groundMat.color.set(city ? CITY.ground : PALETTE.ground);
+    this.ground.material = city ? this.cityGroundMat : this.grassMat;
     this.buildTrackSurface();
     if (city) this.buildBarriers();
     else this.buildRails();
@@ -75,11 +79,12 @@ export class RaceTrack extends TrackGeometry {
   }
 
   private buildGround(): void {
-    // 동화책 톤: 텍스처 없는 파스텔 초록
+    // 실사 잔디 PBR: 약 3.2m 타일 + 흘러가는 구름 그림자
     const geo = new THREE.PlaneGeometry(4000, 4000);
-    const mat = new THREE.MeshToonMaterial({ color: PALETTE.ground, gradientMap: toonRamp() });
-    this.groundMat = mat;
-    const m = new THREE.Mesh(geo, mat);
+    this.grassMat = grassMaterial(1250);
+    applyCloudShadow(this.grassMat, 0.3);
+    const m = new THREE.Mesh(geo, this.grassMat);
+    this.ground = m;
     m.rotation.x = -Math.PI / 2;
     m.position.y = -0.05;
     m.receiveShadow = true;
@@ -117,41 +122,11 @@ export class RaceTrack extends TrackGeometry {
     geo.setIndex(indices);
     geo.computeVertexNormals();
     geo.setAttribute('uv2', geo.attributes.uv);
-    // 모래빛 코스 + 가장자리 흰 띠 + 20m 마다 옅은 줄무늬 (캔버스 텍스처 하나)
-    const mesh = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ map: this.theme === 'city' ? RaceTrack.asphaltTexture() : RaceTrack.trackTexture(), gradientMap: toonRamp() }));
+    // 자연: 실사 흙 주로 / 도시: 아스팔트 + 차선 (캔버스 텍스처)
+    const mat = this.theme === 'city' ? new THREE.MeshStandardMaterial({ map: RaceTrack.asphaltTexture(), roughness: 0.9, metalness: 0 }) : dirtMaterial();
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     this.course.add(mesh);
-  }
-
-  /** 캔버스 x = 진행 방향(u, 20m 당 1), y = 폭 방향(v 0..1) */
-  private static trackTexture(): THREE.CanvasTexture {
-    const c = document.createElement('canvas');
-    c.width = 64;
-    c.height = 128;
-    const g = c.getContext('2d')!;
-    const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
-    // 10m 간격 옅은 줄무늬
-    g.fillStyle = hex(PALETTE.track);
-    g.fillRect(0, 0, 64, 128);
-    g.fillStyle = hex(PALETTE.trackStripe);
-    g.fillRect(0, 0, 32, 128);
-    // 가장자리: 진한 흙 테두리 + 빨강·흰 커브 (잔디와 코스 경계가 또렷하게)
-    g.fillStyle = hex(PALETTE.trackEdge);
-    g.fillRect(0, 0, 64, 9);
-    g.fillRect(0, 119, 64, 9);
-    for (let i = 0; i < 8; i++) {
-      g.fillStyle = i % 2 ? '#ffffff' : '#e8483d';
-      g.fillRect(i * 8, 0, 8, 6);
-      g.fillRect(i * 8, 122, 8, 6);
-    }
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.wrapS = THREE.RepeatWrapping;
-    t.wrapT = THREE.ClampToEdgeWrapping;
-    t.magFilter = THREE.NearestFilter;
-    t.minFilter = THREE.LinearMipmapLinearFilter;
-    t.anisotropy = 8;
-    return t;
   }
 
   /** 도시: 푸른 아스팔트 + 흰 가장자리선 + 점선 차선 */
@@ -282,13 +257,14 @@ export class RaceTrack extends TrackGeometry {
   private async loadWorld(): Promise<void> {
     const want = this.layoutId;
     try {
-      const world = await loadStorybookWorld(this, Math.random, this.theme === 'nature');
+      if (this.theme === 'city') return; // 도시 맵은 건물이 배경
+      const lk = this.lakeSpot;
+      const world = await loadRealWorld(this, (x, z) => Math.hypot((x - lk.x) / 1.6, z - lk.z) < 28);
       if (want !== this.layoutId) return; // 로딩 중 맵이 또 바뀜
       this.world.clear();
-      this.world.add(world.group);
-      this.storyClouds = world.clouds;
+      this.world.add(world);
     } catch (e) {
-      console.warn('[storybook] 로드 실패', e);
+      console.warn('[env] 로드 실패', e);
     }
   }
 
@@ -302,7 +278,6 @@ export class RaceTrack extends TrackGeometry {
     this.course.clear();
     this.buildCourse();
     this.world.clear();
-    this.storyClouds = [];
     if (this.assetsWanted) await this.loadWorld();
   }
 
@@ -322,7 +297,11 @@ export class RaceTrack extends TrackGeometry {
 
   /** 구름 표류 */
   updateAmbient(dt: number): void {
-    driftClouds(this.storyClouds, dt, this.bounds.minX, this.bounds.maxX);
+    if (this.pond) {
+      const n = this.pond.userData.waterNormals as THREE.Texture;
+      n.offset.x += dt * 0.02;
+      n.offset.y += dt * 0.013;
+    }
     for (const c of this.clouds) {
       c.position.x += (c.userData.speed as number) * dt;
       if (c.position.x > 800) c.position.x = -800;
@@ -482,20 +461,11 @@ export class RaceTrack extends TrackGeometry {
   }
 
   private buildInfield(): void {
-    // 연못: 트랙에서 가장 먼 안쪽 자리 — 평평한 파스텔 물
+    // 호수: 트랙에서 가장 먼 안쪽 자리 — HDRI 반사 + 흐르는 물결
     this.lakeSpot = this.farthestPoint(50);
-    const pond = new THREE.Mesh(new THREE.CircleGeometry(22, 40), new THREE.MeshStandardMaterial({ color: PALETTE.pond, roughness: 0.35, metalness: 0 }));
-    pond.rotation.x = -Math.PI / 2;
-    pond.position.copy(this.lakeSpot).setY(0.03);
-    pond.scale.set(1.6, 1, 1);
-    pond.userData.noShadow = true;
+    const pond = makeLake(22 * 1.6, 22, RaceTrack.SUN_DIR);
+    pond.position.copy(this.lakeSpot).setY(0.04);
     this.course.add(pond);
-    const rim = new THREE.Mesh(new THREE.RingGeometry(22, 24, 40), new THREE.MeshStandardMaterial({ color: 0xfff3dc, roughness: 1 }));
-    rim.rotation.x = -Math.PI / 2;
-    rim.position.copy(this.lakeSpot).setY(0.02);
-    rim.scale.set(1.6, 1, 1);
-    rim.userData.noShadow = true;
-    this.course.add(rim);
     this.pond = pond;
   }
 

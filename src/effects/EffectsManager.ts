@@ -52,9 +52,9 @@ export class EffectsManager {
     // 컬러 그레이딩 (거리 안개는 재질 셰이더의 HSV 안개가 담당)
     this.grade = makeGradePass();
     // 동화책 톤: 채도 살짝 ↑, 크림색 오버레이, 대비 부드럽게
-    this.grade.uniforms.uVibrance.value = 0.15;
+    this.grade.uniforms.uVibrance.value = 0.05;
     this.grade.uniforms.uContrast.value = 0.08;
-    this.grade.uniforms.uOverlayAmount.value = 0.1;
+    this.grade.uniforms.uOverlayAmount.value = 0.04;
     this.grade.uniforms.uOverlay.value = new THREE.Color('#fff4e0');
     this.composer.addPass(this.grade);
     // 부스트 줌 블러 + 헤이즈 (부스트 중에만 켜진다)
